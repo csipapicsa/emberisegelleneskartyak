@@ -3,6 +3,7 @@
 import pytest
 from server.room import delete_room
 from server import game as game_logic
+from server import main as main_mod
 from tests.helpers import FakeManager, make_room, make_white_cards, make_black_cards
 
 CODE = "PICK"
@@ -159,3 +160,41 @@ async def test_pick3_requires_three_cards(setup_pick2):
     two_ids = {c["id"] for c in player.hand[:2]}
     selected = [c for c in player.hand if c["id"] in two_ids]
     assert len(selected) != pick  # 2 != 3 → server would reject
+
+
+# ── Submission order (real submit_card handler) ─────────────────────────────────
+
+async def test_pick2_preserves_submission_order(setup_pick2, monkeypatch):
+    """The order the player taps cards must survive server-side — for a
+    multi-blank black card the order the whites fill the blanks is meaningful."""
+    room, sids, mgr, black, white = setup_pick2
+    monkeypatch.setattr(main_mod, "manager", mgr)
+    await game_logic.start_game(room, black, white, mgr)
+
+    sid = sids[0]
+    player = room.players[sid]
+    # Select in an order that differs from hand order (index 3 then index 1).
+    first, second = player.hand[3], player.hand[1]
+    await main_mod._handle_message(
+        sid, CODE, {"event": "submit_card", "card_ids": [first["id"], second["id"]]}
+    )
+
+    assert [c["id"] for c in player.submitted_cards] == [first["id"], second["id"]]
+    assert "submission_accepted" in mgr.sent_events(CODE, sid)
+
+
+async def test_pick2_rejects_duplicate_card(setup_pick2, monkeypatch):
+    """Submitting the same card id twice on a pick-2 round must be rejected."""
+    room, sids, mgr, black, white = setup_pick2
+    monkeypatch.setattr(main_mod, "manager", mgr)
+    await game_logic.start_game(room, black, white, mgr)
+
+    sid = sids[0]
+    player = room.players[sid]
+    dup_id = player.hand[0]["id"]
+    await main_mod._handle_message(
+        sid, CODE, {"event": "submit_card", "card_ids": [dup_id, dup_id]}
+    )
+
+    assert player.submitted_cards == []
+    assert "error" in mgr.sent_events(CODE, sid)

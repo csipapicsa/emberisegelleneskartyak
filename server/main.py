@@ -565,10 +565,13 @@ async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
         player = room.players.get(session_id)
         if not player or player.submitted_cards:
             return
-        card_ids = set(msg.get("card_ids", []))
+        card_ids = msg.get("card_ids", [])
         pick = room.current_black.get("pick", 1) if room.current_black else 1
-        selected = [c for c in player.hand if c["id"] in card_ids]
-        if len(selected) != pick:
+        by_id = {c["id"]: c for c in player.hand}
+        # Preserve the player's chosen order — for multi-blank black cards the
+        # order the white cards fill the blanks is meaningful.
+        selected = [by_id[cid] for cid in card_ids if cid in by_id]
+        if len(selected) != pick or len(set(card_ids)) != len(card_ids):
             await manager.send(room_code, session_id, {"event": "error", "message": f"Pontosan {pick} kártyát kell beküldeni."})
             return
         player.submitted_cards = selected

@@ -20,7 +20,7 @@ def get_editions(conn: sqlite3.Connection) -> list[dict]:
 def get_cards_for_editions(conn: sqlite3.Connection, edition_ids: list[int]) -> tuple[list[dict], list[dict]]:
     placeholders = ",".join("?" * len(edition_ids))
     rows = conn.execute(
-        f"SELECT id, text, type, COALESCE(pick, 1) as pick, edition_id FROM cards WHERE edition_id IN ({placeholders}) AND language = 'HUN' AND (pick = 1 OR pick IS NULL)",
+        f"SELECT id, text, type, COALESCE(pick, 1) as pick, edition_id FROM cards WHERE edition_id IN ({placeholders}) AND language = 'HUN'",
         edition_ids,
     ).fetchall()
     black = [dict(r) for r in rows if r["type"] == "Black"]
