@@ -1,0 +1,882 @@
+# server/main.py
+
+from __future__ import annotations
+import asyncio
+import json
+import os
+import random
+import re
+import string
+import time
+from contextlib import asynccontextmanager
+from contextlib import suppress
+
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, HTMLResponse
+
+from server.db import get_conn, get_editions, get_cards_for_editions
+from server.messages_db import get_conn as get_msg_conn, ensure_tables as ensure_msg_tables, \
+    save_message, save_card_idea, add_like, add_dislike, add_comment, get_chat_messages, post_chat_message
+from server.session import create_or_get_session
+from server.room import create_room, get_room, delete_room, Player
+from server import game as game_logic
+from server.voice import generate_turn_credentials, validate_signal, check_ice_rate
+from server.analytics import log_event, get_stats
+
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+
+with open(os.path.join(BASE_DIR, "config.json")) as f:
+    CONFIG = json.load(f)
+
+
+async def _room_cleanup_task() -> None:
+    """Periodically remove stale rooms."""
+    UNSTARTED_TTL  = 10 * 60   # 10 min — lobby with no activity
+    EMPTY_TTL      =  5 * 60   # 5 min  — started but everyone disconnected
+    FINISHED_TTL   =  5 * 60   # 5 min  — finished, scoreboard grace period
+    HARD_LIMIT     = 20 * 60   # 20 min  — absolute maximum regardless of activity
+    CHECK_INTERVAL =  2 * 60   # check every 2 min
+
+    while True:
+        await asyncio.sleep(CHECK_INTERVAL)
+        now = time.time()
+        from server.room import _rooms
+        stale = []
+        for code, room in list(_rooms.items()):
+            inactivity = now - room.last_activity
+            age        = now - room.created_at
+
+            if age > HARD_LIMIT:
+                stale.append(code)
+            elif room.finished:
+                if inactivity > FINISHED_TTL:
+                    stale.append(code)
+            elif not room.started:
+                if inactivity > UNSTARTED_TTL:
+                    stale.append(code)
+            else:
+                all_gone = all(not p.connected for p in room.players.values())
+                if all_gone and inactivity > EMPTY_TTL:
+                    stale.append(code)
+
+        for code in stale:
+            room = get_room(code)
+            if room and not room.started:
+                admin = room.players.get(room.admin_session_id)
+                log_event(
+                    "room_abandoned",
+                    room_code=code,
+                    username=admin.username if admin else None,
+                    player_count=len(room.players),
+                )
+            delete_room(code)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    if os.environ.get("EEK_DISABLE_ROOM_CLEANUP") == "1":
+        yield
+        return
+
+    cleanup_task = asyncio.create_task(_room_cleanup_task())
+    try:
+        yield
+    finally:
+        cleanup_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await cleanup_task
+
+
+app = FastAPI(lifespan=lifespan)
+
+# Ensure messages.db tables exist
+_startup_conn = get_msg_conn()
+ensure_msg_tables(_startup_conn)
+_startup_conn.close()
+
+
+@app.get("/api/chat")
+async def api_get_chat():
+    conn = get_msg_conn()
+    try:
+        return get_chat_messages(conn)
+    finally:
+        conn.close()
+
+
+@app.post("/api/chat")
+async def api_post_chat(body: dict):
+    username = str(body.get("username", "")).strip()[:24]
+    message  = str(body.get("message",  "")).strip()[:500]
+    if not username or not message:
+        raise HTTPException(400, "Név és üzenet megadása kötelező")
+    conn = get_msg_conn()
+    try:
+        post_chat_message(conn, username, message)
+    finally:
+        conn.close()
+    return {"ok": True}
+
+
+# ── WebSocket connection manager ─────────────────────────────────────────────
+
+class ConnectionManager:
+    def __init__(self):
+        # room_code -> session_id -> ws  (room-scoped, no cross-room bleed)
+        self._sockets: dict[str, dict[str, WebSocket]] = {}
+
+    async def connect(self, room_code: str, session_id: str, ws: WebSocket) -> None:
+        await ws.accept()
+        room_sockets = self._sockets.setdefault(room_code, {})
+        prior = room_sockets.get(session_id)
+        if prior is not None and prior is not ws:
+            try:
+                await prior.close(code=4003)
+            except Exception:
+                pass
+        room_sockets[session_id] = ws
+
+    def disconnect(self, room_code: str, session_id: str) -> None:
+        room_sockets = self._sockets.get(room_code)
+        if room_sockets:
+            room_sockets.pop(session_id, None)
+            if not room_sockets:
+                self._sockets.pop(room_code, None)
+
+    def evict_from_all_rooms(self, session_id: str, except_room: str) -> None:
+        """Disconnect a session from every room except the given one."""
+        for code in list(self._sockets.keys()):
+            if code != except_room:
+                self._sockets.get(code, {}).pop(session_id, None)
+
+    async def send(self, room_code: str, session_id: str, data: dict) -> None:
+        ws = self._sockets.get(room_code, {}).get(session_id)
+        if ws:
+            try:
+                await ws.send_json(data)
+            except Exception:
+                pass
+
+    async def broadcast(self, room_code: str, data: dict) -> None:
+        room = get_room(room_code)
+        if not room:
+            return
+        for sid in list(room.players.keys()):
+            await self.send(room_code, sid, data)
+
+
+manager = ConnectionManager()
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _username_taken(room, username: str, exclude_sid: str | None = None) -> bool:
+    """Case-insensitive duplicate-username check among approved players."""
+    norm = username.strip().casefold()
+    if not norm:
+        return False
+    for sid, p in room.players.items():
+        if sid == exclude_sid:
+            continue
+        if p.username.strip().casefold() == norm:
+            return True
+    return False
+
+
+def _generate_room_code() -> str:
+    digits = CONFIG.get("room_code_digits", 4)
+    while True:
+        code = "".join(random.choices(string.digits, k=digits))
+        if not get_room(code):
+            return code
+
+
+def _revealed_submissions_snapshot(room) -> list[dict]:
+    if room.phase != "revealed":
+        return []
+    submissions = getattr(room, "_last_submissions", None)
+    if not submissions:
+        submissions = [
+            {"session_id": sid, "cards": player.submitted_cards}
+            for sid, player in room.players.items()
+            if player.submitted_cards
+        ]
+    return [
+        {"session_id": s["session_id"], "cards": s["cards"]}
+        for s in submissions
+    ]
+
+
+def _room_snapshot(room) -> dict:
+    snapshot = {
+        "event": "room_state",
+        "code": room.code,
+        "started": room.started,
+        "finished": room.finished,
+        "round_num": room.round_num,
+        "round_total": room.round_total,
+        "timer_seconds": room.timer_seconds,
+        "voting_mode": room.voting_mode,
+        "prevent_self_vote": room.prevent_self_vote,
+        "edition_ids": room.edition_ids,
+        "czar": room.czar_session_id,
+        "admin": room.admin_session_id,
+        "phase": room.phase,
+        "players": [
+            {
+                "session_id": sid,
+                "username": p.username,
+                "score": p.score,
+                "connected": p.connected,
+                "is_admin": p.is_admin,
+                "submitted": bool(p.submitted_cards),
+            }
+            for sid, p in room.players.items()
+        ],
+        "pending": [
+            {"session_id": sid, "username": p.username}
+            for sid, p in room.pending.items()
+        ],
+        "black_card": room.current_black,
+    }
+    if room.phase == "revealed":
+        snapshot["submissions"] = _revealed_submissions_snapshot(room)
+    return snapshot
+
+
+# ── HTTP endpoints ────────────────────────────────────────────────────────────
+
+@app.post("/api/session")
+async def api_session(body: dict):
+    sid = create_or_get_session(body.get("session_id"))
+    return {"session_id": sid}
+
+
+async def _close_room_with_notice(code: str, reason: str = "admin_left") -> None:
+    """Broadcast room_closed to all sockets in the room, then drop it."""
+    room = get_room(code)
+    if not room:
+        return
+    await manager.broadcast(code, {"event": "room_closed", "reason": reason})
+    # Force-disconnect each socket so the client navigates away cleanly.
+    room_sockets = manager._sockets.get(code, {})
+    for sid, ws in list(room_sockets.items()):
+        try:
+            await ws.close(code=4002)
+        except Exception:
+            pass
+    manager._sockets.pop(code, None)
+    delete_room(code)
+
+
+async def _close_other_rooms_admined_by(session_id: str, except_code: str | None) -> None:
+    from server.room import _rooms
+    for code, room in list(_rooms.items()):
+        if code == except_code:
+            continue
+        if room.admin_session_id == session_id and not room.finished:
+            await _close_room_with_notice(code, reason="admin_opened_new_room")
+
+
+@app.post("/api/room")
+async def api_create_room(request: Request, body: dict):
+    session_id = body.get("session_id")
+    username = body.get("username", "").strip()
+    if not session_id or not username:
+        raise HTTPException(400, "Session és név megadása kötelező.")
+    await _close_other_rooms_admined_by(session_id, except_code=None)
+    code = _generate_room_code()
+    create_room(code, session_id, username)
+    log_event(
+        "room_created",
+        room_code=code,
+        username=username,
+        ip=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    return {"code": code}
+
+
+@app.get("/api/room/{code}")
+async def api_get_room(code: str, session_id: str | None = None):
+    room = get_room(code)
+    if not room:
+        raise HTTPException(404, "A szoba nem található.")
+    is_player = bool(session_id and session_id in room.players)
+    return {
+        "code": room.code,
+        "started": room.started,
+        "is_player": is_player,
+        "can_join_game": is_player or not room.started,
+        "player_count": len(room.players),
+        "edition_ids": room.edition_ids,
+        "round_total": room.round_total,
+        "timer_seconds": room.timer_seconds,
+        "prevent_self_vote": room.prevent_self_vote,
+    }
+
+
+@app.get("/api/rooms")
+async def api_list_rooms():
+    from server.room import _rooms
+    return [
+        {
+            "code": r.code,
+            "player_count": len(r.players),
+            "player_names": [p.username for p in r.players.values()],
+            "started": r.started,
+            "created_at": r.created_at,
+        }
+        for r in _rooms.values()
+        if not r.finished
+    ]
+
+
+@app.get("/api/editions")
+async def api_editions():
+    conn = get_conn()
+    try:
+        return get_editions(conn)
+    finally:
+        conn.close()
+
+
+@app.get("/api/config")
+async def api_config():
+    return CONFIG
+
+
+@app.get("/api/voice/credentials")
+async def api_voice_credentials(session_id: str = ""):
+    if not _UUID_RE.match(session_id):
+        raise HTTPException(400, "Érvénytelen session.")
+    creds = generate_turn_credentials(session_id)
+    if creds is None:
+        raise HTTPException(503, "A hangkapcsolat nincs beállítva.")
+    return creds
+
+
+_EMAIL_RE = re.compile(r'^[^@\s]{1,64}@[^@\s]{1,255}\.[^@\s]{1,64}$')
+_UUID_RE  = re.compile(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
+CARD_IDEA_MAX_BODY_BYTES = 4096
+
+@app.post("/api/contact")
+async def api_contact(body: dict):
+    name    = str(body.get("name",    "")).strip()[:100]
+    email   = str(body.get("email",   "")).strip()[:200]
+    message = str(body.get("message", "")).strip()[:2000]
+
+    if not name or not email or not message:
+        raise HTTPException(400, "Minden mező kitöltése kötelező")
+    if not _EMAIL_RE.match(email):
+        raise HTTPException(400, "Érvénytelen e-mail cím")
+
+    conn = get_msg_conn()
+    try:
+        save_message(conn, name, email, message)
+    finally:
+        conn.close()
+    return {"ok": True}
+
+
+def _validate_card_idea_payload(body: object) -> tuple[str, str]:
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Érvénytelen kérés")
+
+    raw_card_type = body.get("card_type")
+    raw_text = body.get("text")
+    if not isinstance(raw_card_type, str) or not isinstance(raw_text, str):
+        raise HTTPException(400, "Érvénytelen kérés")
+
+    card_type = raw_card_type.strip().lower()
+    text = raw_text.strip()
+
+    if card_type not in ("white", "black"):
+        raise HTTPException(400, "Érvénytelen kártyatípus")
+    if not text:
+        raise HTTPException(400, "A kártyaszöveg megadása kötelező")
+    return card_type, text
+
+
+@app.post("/api/card-ideas")
+async def api_card_ideas(request: Request):
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > CARD_IDEA_MAX_BODY_BYTES:
+                raise HTTPException(413, "Túl nagy kérés")
+        except ValueError:
+            raise HTTPException(400, "Érvénytelen kérés")
+
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise HTTPException(400, "Érvénytelen JSON")
+
+    card_type, text = _validate_card_idea_payload(body)
+
+    conn = get_msg_conn()
+    try:
+        saved = save_card_idea(conn, card_type, text)
+    finally:
+        conn.close()
+    if not saved:
+        raise HTTPException(400, "A kártyaszöveg megadása kötelező")
+    return {"ok": True}
+
+
+# ── WebSocket ─────────────────────────────────────────────────────────────────
+
+async def _evict_from_other_rooms(session_id: str, current_room_code: str) -> None:
+    """Remove a session from any room it's in other than the one it's joining."""
+    from server.room import _rooms
+    for code, room in list(_rooms.items()):
+        if code == current_room_code:
+            continue
+        if session_id in room.pending:
+            room.pending.pop(session_id, None)
+        if session_id in room.players:
+            await game_logic.handle_disconnect(room, session_id, manager)
+
+
+@app.websocket("/ws/{room_code}")
+async def websocket_endpoint(ws: WebSocket, room_code: str):
+    session_id = ws.query_params.get("session_id")
+    if not session_id:
+        await ws.close(code=4001)
+        return
+
+    manager.evict_from_all_rooms(session_id, room_code)
+    await _evict_from_other_rooms(session_id, room_code)
+
+    room = get_room(room_code)
+
+    # Reconnect path
+    if room and session_id in room.players:
+        player = room.players[session_id]
+        player.connected = True
+        room.last_activity = time.time()
+        await manager.connect(room_code, session_id, ws)
+        await manager.send(room_code, session_id, _room_snapshot(room))
+        if room.started and not room.finished:
+            await manager.send(room_code, session_id, {"event": "hand_update", "hand": player.hand})
+    elif room and not room.started:
+        # New player joining — goes to pending
+        username = ws.query_params.get("username", "").strip() or f"Játékos{len(room.players)+1}"
+        if _username_taken(room, username, exclude_sid=session_id):
+            await ws.accept()
+            await ws.send_json({"event": "username_taken", "username": username})
+            await ws.close(code=4005)
+            return
+        player = Player(session_id=session_id, username=username)
+        room.pending[session_id] = player
+        room.last_activity = time.time()
+        await manager.connect(room_code, session_id, ws)
+        await manager.send(room_code, session_id, {"event": "pending_approval"})
+        await manager.send(room_code, room.admin_session_id, _room_snapshot(room))
+    elif room:
+        await ws.close(code=4006)
+        return
+    else:
+        await ws.close(code=4004)
+        return
+
+    try:
+        async for raw in ws.iter_json():
+            await _handle_message(session_id, room_code, raw)
+    except WebSocketDisconnect:
+        manager.disconnect(room_code, session_id)
+        room = get_room(room_code)
+        if room:
+            await game_logic.handle_disconnect(room, session_id, manager)
+
+
+async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
+    event = msg.get("event")
+    room = get_room(room_code)
+    if not room:
+        return
+    room.last_activity = time.time()
+
+    if event == "approve_player":
+        if session_id != room.admin_session_id:
+            return
+        target = msg.get("session_id")
+        player = room.pending.pop(target, None)
+        if not player:
+            return
+        if len(room.players) >= CONFIG.get("max_room_players", 20):
+            await manager.send(room_code, target, {"event": "error", "message": "A szoba megtelt."})
+            return
+        if _username_taken(room, player.username, exclude_sid=target):
+            await manager.send(room_code, target, {"event": "username_taken", "username": player.username})
+            return
+        room.players[target] = player
+        room.join_order.append(target)
+        log_event("player_joined", room_code=room_code, username=player.username, player_count=len(room.players))
+        await manager.broadcast(room_code, _room_snapshot(room))
+
+    elif event == "deny_player":
+        if session_id != room.admin_session_id:
+            return
+        target = msg.get("session_id")
+        player = room.pending.pop(target, None)
+        if not player:
+            return
+        await manager.send(room_code, target, {"event": "error", "message": "A belépési kérelmet elutasították."})
+        await manager.broadcast(room_code, _room_snapshot(room))
+
+    elif event == "configure_room":
+        if session_id != room.admin_session_id or room.started:
+            return
+        if "edition_ids" in msg:
+            room.edition_ids = msg["edition_ids"]
+        if "round_total" in msg and msg["round_total"] in CONFIG.get("round_options", []):
+            room.round_total = msg["round_total"]
+        if "timer_seconds" in msg and msg["timer_seconds"] in CONFIG.get("timer_options_seconds", []):
+            room.timer_seconds = msg["timer_seconds"]
+        if "voting_mode" in msg and msg["voting_mode"] in ("czar", "vote"):
+            room.voting_mode = msg["voting_mode"]
+        if "prevent_self_vote" in msg and isinstance(msg["prevent_self_vote"], bool):
+            room.prevent_self_vote = msg["prevent_self_vote"]
+        await manager.broadcast(room_code, _room_snapshot(room))
+
+    elif event == "start_game":
+        if session_id != room.admin_session_id or room.started:
+            return
+        if not room.edition_ids:
+            await manager.send(room_code, session_id, {"event": "error", "message": "Válassz legalább egy kártyacsomagot."})
+            return
+        if len(room.players) < 1:
+            await manager.send(room_code, session_id, {"event": "error", "message": "Legalább 1 játékos szükséges."})
+            return
+        conn = get_conn()
+        try:
+            black_cards, white_cards = get_cards_for_editions(conn, room.edition_ids)
+        finally:
+            conn.close()
+        log_event("game_started", room_code=room_code, player_count=len(room.players))
+        await game_logic.start_game(room, black_cards, white_cards, manager)
+
+    elif event == "submit_card":
+        if room.phase != "submitting":
+            return
+        player = room.players.get(session_id)
+        if not player or player.submitted_cards:
+            return
+        card_ids = set(msg.get("card_ids", []))
+        pick = room.current_black.get("pick", 1) if room.current_black else 1
+        selected = [c for c in player.hand if c["id"] in card_ids]
+        if len(selected) != pick:
+            await manager.send(room_code, session_id, {"event": "error", "message": f"Pontosan {pick} kártyát kell beküldeni."})
+            return
+        player.submitted_cards = selected
+        for c in selected:
+            player.hand.remove(c)
+        await manager.send(room_code, session_id, {"event": "hand_update", "hand": player.hand})
+        await manager.send(room_code, session_id, {"event": "submission_accepted"})
+        await manager.broadcast(room_code, {
+            "event": "player_submitted",
+            "session_id": session_id,
+            "username": player.username,
+        })
+        if room.all_submitted():
+            await game_logic.reveal_cards(room, manager)
+
+    elif event == "withdraw_submission":
+        if room.phase != "submitting":
+            return
+        player = room.players.get(session_id)
+        if not player or not player.submitted_cards:
+            return
+        player.hand.extend(player.submitted_cards)
+        player.submitted_cards = []
+        await manager.send(room_code, session_id, {"event": "hand_update", "hand": player.hand})
+        await manager.broadcast(room_code, {
+            "event": "submission_withdrawn",
+            "session_id": session_id,
+            "username": player.username,
+        })
+
+    elif event == "czar_pick":
+        if room.phase != "revealed" or room.voting_mode != "czar" or session_id != room.czar_session_id:
+            return
+        winner_sid = msg.get("winner_session_id")
+        if winner_sid not in room.players:
+            return
+        await game_logic.czar_pick(room, winner_sid, manager)
+
+    elif event == "cast_vote":
+        if room.phase != "revealed" or room.voting_mode != "vote":
+            return
+        winner_sid = msg.get("winner_session_id")
+        if winner_sid not in room.players:
+            return
+        await game_logic.cast_vote(room, session_id, winner_sid, manager)
+
+    elif event == "swap_card":
+        player = room.players.get(session_id)
+        if not player or player.swaps_remaining <= 0 or room.phase not in ("submitting",) or player.submitted_cards:
+            return
+        card_id = msg.get("card_id")
+        old = next((c for c in player.hand if c["id"] == card_id), None)
+        if not old:
+            return
+        if not room.white_deck:
+            from server.deck import reshuffle_into_deck
+            reshuffle_into_deck(room.white_deck, room.discard_pile)
+            room.discard_pile = []
+        if not room.white_deck:
+            await manager.send(room_code, session_id, {"event": "error", "message": "Nincs több cserélhető kártya."})
+            return
+        from server.deck import draw_card
+        new_card = draw_card(room.white_deck)
+        player.hand.remove(old)
+        room.discard_pile.append(old)
+        player.hand.append(new_card)
+        player.swaps_remaining -= 1
+        await manager.send(room_code, session_id, {"event": "hand_update", "hand": player.hand})
+
+    elif event == "request_new_hand":
+        player = room.players.get(session_id)
+        if not player or room.phase != "submitting" or player.submitted_cards:
+            return
+        from server.deck import draw_card, reshuffle_into_deck
+        room.discard_pile.extend(player.hand)
+        player.hand = []
+        if not room.white_deck:
+            reshuffle_into_deck(room.white_deck, room.discard_pile)
+            room.discard_pile = []
+        for _ in range(10):
+            if not room.white_deck:
+                reshuffle_into_deck(room.white_deck, room.discard_pile)
+                room.discard_pile = []
+            card = draw_card(room.white_deck)
+            if card:
+                player.hand.append(card)
+        await manager.send(room_code, session_id, {"event": "hand_update", "hand": player.hand})
+        await manager.send(room_code, session_id, {"event": "new_hand_dealt"})
+
+    elif event == "feedback":
+        card_id = msg.get("card_id")
+        fb_type = msg.get("type")
+        if not card_id or fb_type not in ("like", "dislike", "comment"):
+            return
+        player = room.players.get(session_id)
+        username = player.username if player else "unknown"
+        conn = get_msg_conn()
+        try:
+            if fb_type == "like":
+                add_like(conn, card_id, session_id)
+            elif fb_type == "dislike":
+                add_dislike(conn, card_id, session_id)
+            elif fb_type == "comment":
+                add_comment(conn, card_id, session_id, username, msg.get("comment", ""))
+        finally:
+            conn.close()
+
+    elif event in ("voice_offer", "voice_answer", "voice_ice"):
+        # Only fully approved players may signal
+        if session_id not in room.players:
+            return
+        if event == "voice_ice" and not check_ice_rate(session_id):
+            return
+        if not validate_signal(event, msg):
+            return
+        target = msg.get("to")
+        if target not in room.players:
+            return
+        forward = {"event": event, "from": session_id}
+        if event in ("voice_offer", "voice_answer"):
+            forward["sdp"] = msg["sdp"]
+        else:
+            forward["candidate"]      = msg["candidate"]
+            forward["sdpMid"]         = msg["sdpMid"]
+            forward["sdpMLineIndex"]  = msg["sdpMLineIndex"]
+        await manager.send(room_code, target, forward)
+
+    elif event == "voice_mute_state":
+        if session_id not in room.players:
+            return
+        muted = msg.get("muted")
+        if not isinstance(muted, bool):
+            return
+        await manager.broadcast(room_code, {
+            "event":      "voice_mute_state",
+            "session_id": session_id,
+            "muted":      muted,
+        })
+
+    elif event == "voice_ready":
+        if session_id not in room.players:
+            return
+        for target_sid in list(room.players):
+            if target_sid != session_id:
+                await manager.send(room_code, target_sid, {"event": "voice_ready", "from": session_id})
+
+
+# ── Admin stats ───────────────────────────────────────────────────────────────
+
+@app.get("/admin/stats", response_class=HTMLResponse)
+async def admin_stats(key: str = ""):
+    if key != "***REMOVED***":
+        raise HTTPException(403, "Forbidden")
+    s = get_stats()
+    c = s["counts"]
+
+    rooms_created  = c.get("room_created",  0)
+    games_started  = c.get("game_started",  0)
+    games_ended    = c.get("game_ended",     0)
+    rooms_abandoned = c.get("room_abandoned", 0)
+    completion_pct = round(games_ended / games_started * 100) if games_started else 0
+
+    # Peak hours bar chart data
+    max_cnt = max(s["peak_hours"].values(), default=1)
+    hour_bars = ""
+    for h in range(24):
+        hh = f"{h:02d}"
+        cnt = s["peak_hours"].get(hh, 0)
+        pct = round(cnt / max_cnt * 100) if max_cnt else 0
+        hour_bars += f'<div class="hbar-col"><div class="hbar-fill" style="height:{pct}%"></div><div class="hbar-label">{hh}</div></div>'
+
+    # Daily table rows
+    daily_rows = ""
+    for row in s["daily"]:
+        daily_rows += (
+            f'<tr><td>{row["day"]}</td><td>{row["users"] or 0}</td>'
+            f'<td>{row["rooms"]}</td><td>{row["games"]}</td><td>{row["completed"]}</td></tr>'
+        )
+
+    # Recent events
+    event_labels = {
+        "room_created": "🏠 szoba létrehozva",
+        "player_joined": "👤 játékos csatlakozott",
+        "game_started": "▶ játék indult",
+        "game_ended": "✅ játék végzett",
+        "room_abandoned": "💨 szoba elhagyva",
+    }
+    recent_rows = ""
+    for e in s["recent"]:
+        label = event_labels.get(e["event_type"], e["event_type"])
+        ts    = e["ts"][:16].replace("T", " ")
+        room  = e["room_code"] or "—"
+        user  = e["username"]  or "—"
+        pc    = e["player_count"] if e["player_count"] is not None else "—"
+        recent_rows += f"<tr><td>{ts}</td><td>{label}</td><td>{room}</td><td>{user}</td><td>{pc}</td></tr>"
+
+    html = f"""<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Statisztika</title>
+<style>
+  *,*::before,*::after{{box-sizing:border-box;margin:0;padding:0}}
+  :root{{--bg:#0a0a0a;--card:#2a2a2a;--card2:#3d3d3d;--text:#f5f5f5;--muted:#888;--accent:#e8e8e8;--green:#27ae60;--font:'Segoe UI',system-ui,sans-serif}}
+  body{{background:var(--bg);color:var(--text);font-family:var(--font);padding:24px 16px;max-width:960px;margin:0 auto}}
+  h1{{font-size:1.4rem;font-weight:800;margin-bottom:4px}}
+  .subtitle{{color:var(--muted);font-size:.85rem;margin-bottom:28px}}
+  .section-label{{font-size:.7rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:12px}}
+  .stat-grid{{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:28px}}
+  .stat-card{{background:var(--card);border-radius:12px;padding:18px 16px}}
+  .stat-num{{font-size:2rem;font-weight:800;line-height:1}}
+  .stat-desc{{font-size:.78rem;color:var(--muted);margin-top:6px}}
+  .dau-row{{display:flex;gap:10px;margin-bottom:28px}}
+  .dau-item{{background:var(--card);border-radius:12px;padding:14px 16px;flex:1;text-align:center}}
+  .dau-num{{font-size:1.5rem;font-weight:800}}
+  .dau-label{{font-size:.75rem;color:var(--muted);margin-top:4px}}
+  .chart-wrap{{background:var(--card);border-radius:12px;padding:20px;margin-bottom:28px}}
+  .hbar-grid{{display:flex;align-items:flex-end;gap:3px;height:80px}}
+  .hbar-col{{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%}}
+  .hbar-fill{{width:100%;background:var(--accent);border-radius:3px 3px 0 0;transition:height .3s;min-height:2px}}
+  .hbar-label{{font-size:.55rem;color:var(--muted)}}
+  table{{width:100%;border-collapse:collapse;font-size:.83rem;margin-bottom:28px}}
+  th{{text-align:left;padding:8px 12px;color:var(--muted);font-size:.75rem;font-weight:600;border-bottom:1px solid var(--card2)}}
+  td{{padding:8px 12px;border-bottom:1px solid var(--card)}}
+  tr:last-child td{{border-bottom:none}}
+  .tbl-wrap{{background:var(--card);border-radius:12px;overflow:hidden;margin-bottom:28px}}
+</style>
+</head>
+<body>
+<h1>Statisztika</h1>
+<p class="subtitle">Csak neked — <a href="?key=***REMOVED***" style="color:var(--muted)">frissítés</a></p>
+
+<div class="section-label">Összesített</div>
+<div class="stat-grid">
+  <div class="stat-card"><div class="stat-num">{rooms_created}</div><div class="stat-desc">Szoba létrehozva</div></div>
+  <div class="stat-card"><div class="stat-num">{games_started}</div><div class="stat-desc">Játék elindult</div></div>
+  <div class="stat-card"><div class="stat-num">{games_ended}</div><div class="stat-desc">Játék befejezve</div></div>
+  <div class="stat-card"><div class="stat-num">{completion_pct}%</div><div class="stat-desc">Befejezési arány</div></div>
+  <div class="stat-card"><div class="stat-num">{rooms_abandoned}</div><div class="stat-desc">Szoba elhagyva</div></div>
+</div>
+
+<div class="section-label">Egyedi látogatók (IP alapján)</div>
+<div class="dau-row">
+  <div class="dau-item"><div class="dau-num">{s["dau"]}</div><div class="dau-label">Ma</div></div>
+  <div class="dau-item"><div class="dau-num">{s["wau"]}</div><div class="dau-label">7 nap</div></div>
+  <div class="dau-item"><div class="dau-num">{s["mau"]}</div><div class="dau-label">30 nap</div></div>
+</div>
+
+<div class="section-label">Csúcsidők (utolsó 30 nap, UTC)</div>
+<div class="chart-wrap">
+  <div class="hbar-grid">{hour_bars}</div>
+</div>
+
+<div class="section-label">Napi bontás (utolsó 14 nap)</div>
+<div class="tbl-wrap">
+<table>
+  <thead><tr><th>Dátum</th><th>Látogatók</th><th>Szobák</th><th>Játékok</th><th>Befejezett</th></tr></thead>
+  <tbody>{daily_rows or "<tr><td colspan=5 style='color:var(--muted);text-align:center;padding:20px'>Még nincs adat</td></tr>"}</tbody>
+</table>
+</div>
+
+<div class="section-label">Legutóbbi események</div>
+<div class="tbl-wrap">
+<table>
+  <thead><tr><th>Időpont</th><th>Esemény</th><th>Szoba</th><th>Felhasználó</th><th>Játékosok</th></tr></thead>
+  <tbody>{recent_rows or "<tr><td colspan=5 style='color:var(--muted);text-align:center;padding:20px'>Még nincs adat</td></tr>"}</tbody>
+</table>
+</div>
+</body>
+</html>"""
+    return HTMLResponse(html)
+
+
+# ── Static files ──────────────────────────────────────────────────────────────
+
+app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "static")), name="static")
+
+
+@app.api_route("/robots.txt", methods=["GET", "HEAD"], include_in_schema=False)
+async def robots_txt():
+    return FileResponse(os.path.join(BASE_DIR, "static", "robots.txt"), media_type="text/plain")
+
+
+@app.api_route("/sitemap.xml", methods=["GET", "HEAD"], include_in_schema=False)
+async def sitemap_xml():
+    return FileResponse(os.path.join(BASE_DIR, "static", "sitemap.xml"), media_type="application/xml")
+
+
+_NO_CACHE = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"}
+
+
+@app.api_route("/{full_path:path}", methods=["GET", "HEAD"])
+async def serve_html(full_path: str):
+    mapping = {
+        "": "index.html",
+        "join": "join.html",
+        "create": "create.html",
+        "kartyaotlet": "kartyaotlet.html",
+        "kartyaotlet.html": "kartyaotlet.html",
+    }
+    filename = mapping.get(full_path.strip("/"))
+    if filename:
+        return FileResponse(os.path.join(BASE_DIR, "static", filename), headers=_NO_CACHE)
+
+    # /room/<code> and /game/<code> both serve their respective HTML
+    parts = full_path.strip("/").split("/")
+    if len(parts) == 2 and parts[0] in ("room", "game"):
+        return FileResponse(os.path.join(BASE_DIR, "static", f"{parts[0]}.html"), headers=_NO_CACHE)
+
+    raise HTTPException(404)

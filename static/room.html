@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Váróterem</title>
+  <link rel="stylesheet" href="/static/css/base.css">
+  <style>
+    .room-header { display: flex; align-items: baseline; gap: 12px; }
+    .code-badge {
+      background: var(--grey); border-radius: 8px;
+      padding: 4px 12px; font-size: 1.3rem; font-weight: 800; letter-spacing: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div id="roomNotFound" class="page hidden" style="justify-content:center;align-items:center;text-align:center;gap:24px">
+    <div class="logo">Emberiség Ellenes Kártyák</div>
+    <h1>Ez a szoba nem létezik.</h1>
+    <p style="color:var(--text-muted)">A szoba lejárt vagy sosem létezett.</p>
+    <a href="/" class="btn btn-primary" style="max-width:260px">Vissza a főoldalra</a>
+  </div>
+
+  <div id="gameAlreadyStarted" class="page hidden" style="justify-content:center;align-items:center;text-align:center;gap:24px">
+    <div class="logo">Emberiség Ellenes Kártyák</div>
+    <h1>Itt már elkezdődött a játék.</h1>
+    <p style="color:var(--text-muted)">Kérlek fáradj a főoldalra.</p>
+    <a href="/" class="btn btn-primary" style="max-width:260px">Főoldal</a>
+  </div>
+
+  <div id="pendingScreen" class="page hidden">
+    <div class="logo">Emberiség Ellenes Kártyák</div>
+    <h1>Várakozás...</h1>
+    <p style="color:var(--text-muted)">A szoba adminisztrátora hamarosan enged be. Kérlek várj!</p>
+  </div>
+
+  <div id="mainContent" class="page">
+    <div class="room-header" style="display:flex;align-items:center;gap:12px">
+      <span class="logo">Szoba</span>
+      <span class="code-badge" id="roomCodeDisplay">····</span>
+      <button class="mic-btn hidden" id="micBtn" title="Mikrofon be/ki">🎤</button>
+      <button class="mic-btn hidden" id="speakerBtn" title="Hangszóró be/ki">🔊</button>
+    </div>
+
+    <!-- Players in room -->
+    <div>
+      <h2>Játékosok</h2>
+      <div class="player-list" id="playerList"></div>
+    </div>
+
+    <!-- Pending approvals (admin only) -->
+    <div id="pendingSection" class="hidden">
+      <h2>Belépési kérelmek</h2>
+      <div class="player-list" id="pendingList"></div>
+    </div>
+
+    <!-- Admin panel -->
+    <div id="adminPanel" class="hidden" style="display:flex;flex-direction:column;gap:20px">
+      <div>
+        <h2 style="margin-bottom:10px">Kártyacsomagok</h2>
+        <div class="select-group" id="editionList">
+          <p style="color:var(--text-muted);font-size:.85rem">Betöltés...</p>
+        </div>
+      </div>
+
+      <div>
+        <h2 style="margin-bottom:10px">Körök száma</h2>
+        <div class="seg-control" id="roundSeg">
+          <button data-val="10">10</button>
+          <button data-val="20">20</button>
+          <button data-val="30">30</button>
+          <button data-val="40">40</button>
+          <button data-val="50">50</button>
+        </div>
+      </div>
+
+      <div>
+        <h2 style="margin-bottom:10px">Gondolkodási idő</h2>
+        <div class="seg-control" id="timerSeg">
+          <button data-val="0">∞</button>
+          <button data-val="15">15s</button>
+          <button data-val="30">30s</button>
+          <button data-val="45">45s</button>
+          <button data-val="60">60s</button>
+        </div>
+      </div>
+
+      <div>
+        <h2 style="margin-bottom:10px">Szavazási mód</h2>
+        <div class="seg-control" id="votingSeg">
+          <button data-val="czar">Cár választ</button>
+          <button data-val="vote">Mindenki szavaz</button>
+        </div>
+      </div>
+
+      <div>
+        <h2 style="margin-bottom:10px">Saját kártyára szavazás</h2>
+        <div class="seg-control" id="selfVoteSeg">
+          <button data-val="true">Tiltva</button>
+          <button data-val="false">Engedélyezve</button>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" id="startBtn" disabled>Játék indítása</button>
+    </div>
+
+    <!-- Non-admin waiting message -->
+    <div id="waitingMsg" class="hidden">
+      <p style="color:var(--text-muted);font-size:.9rem;text-align:center;padding:12px 0">
+        Várakozás a játék indítására...
+      </p>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script src="/static/js/session.js"></script>
+  <script src="/static/js/ws.js"></script>
+  <script src="/static/js/voice.js"></script>
+  <script src="/static/js/lobby.js?v=20260605-self-vote"></script>
+  <script>
+    const code = location.pathname.split('/').pop();
+
+    (async () => {
+      const sid      = await getSession();
+      const username = getSavedUsername();
+      if (!username) {
+        location.replace(`/join?code=${encodeURIComponent(code)}`);
+        return;
+      }
+
+      const lobbyStarted = await initLobby(code, sid, username);
+      if (!lobbyStarted) return;
+
+      // Load editions after a tick so socket is set up
+      setTimeout(() => loadEditions([]), 100);
+
+      document.getElementById('startBtn').addEventListener('click', () => {
+        socket.send('start_game');
+      });
+    })();
+  </script>
+</body>
+</html>

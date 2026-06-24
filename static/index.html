@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Emberiség Ellenes Kártyák — Ingyenes Online Kártyajáték Magyarul</title>
+  <meta name="description" content="Játssz barátaiddal az Emberiség Ellenes Kártyák online kártyajátékkal — a Cards Against Humanity ingyenes magyar verziójával. Hozz létre szobát, hívj meg barátokat, és szórakozzatok! Regisztráció nélkül.">
+  <meta name="keywords" content="emberiség ellenes kártyák, kártyajáték online, cards against humanity magyarul, online kártyajáték barátokkal, vicces kártyajáték, magyar kártyajáték, ingyenes kártyajáték">
+  <meta name="author" content="Győri Gergő">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://emberisegelleneskartyak.hu/">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://emberisegelleneskartyak.hu/">
+  <meta property="og:title" content="Emberiség Ellenes Kártyák — Ingyenes Online Kártyajáték Magyarul">
+  <meta property="og:description" content="Játssz barátaiddal az Emberiség Ellenes Kártyák online kártyajátékkal — a Cards Against Humanity ingyenes magyar verziójával. Hozz létre szobát, hívj meg barátokat!">
+  <meta property="og:locale" content="hu_HU">
+  <meta property="og:image" content="https://emberisegelleneskartyak.hu/static/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Emberiség Ellenes Kártyák — online kártyajáték">
+  <meta property="og:site_name" content="Emberiség Ellenes Kártyák">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Emberiség Ellenes Kártyák — Ingyenes Online Kártyajáték Magyarul">
+  <meta name="twitter:description" content="Játssz barátaiddal az Emberiség Ellenes Kártyák online kártyajátékkal — a Cards Against Humanity ingyenes magyar verziójával.">
+  <meta name="twitter:image" content="https://emberisegelleneskartyak.hu/static/og-image.png">
+
+  <link rel="stylesheet" href="/static/css/base.css">
+  <style>
+    /* ── Section 1 ───────────────────────────── */
+    .hero { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 16px; }
+    .actions { display: flex; flex-direction: column; gap: 12px; }
+    .card-preview { display: flex; gap: 10px; }
+    .mini-black, .mini-white {
+      flex: 1; border-radius: 8px; padding: 14px 12px;
+      font-size: .8rem; font-weight: 700; line-height: 1.4;
+    }
+    .mini-black { background: var(--black); color: var(--white); border: 2px solid var(--white); }
+    .mini-white { background: var(--white); color: var(--black); }
+
+    /* ── Section header ─────────────────────── */
+    .section-header {
+      font-size: .7rem;
+      font-weight: 800;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+
+    /* ── News section ───────────────────────── */
+    .news-list { display: flex; flex-direction: column; gap: 12px; flex: 1; overflow-y: auto; }
+    .news-item { font-size: .85rem; line-height: 1.55; color: var(--text); }
+    .news-item-date { color: var(--text-muted); font-size: .75rem; display: block; margin-bottom: 3px; }
+    .news-empty {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      color: var(--text-muted); font-size: .9rem;
+    }
+
+    /* ── Info cards (Section 3) ─────────────── */
+    .info-group { display: flex; flex-direction: column; gap: 2px; }
+    .info-group-label {
+      font-size: .7rem; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      color: var(--text-muted); padding: 0 4px 8px;
+    }
+    .info-card {
+      display: flex; align-items: center; gap: 14px;
+      padding: 15px 16px;
+      background: var(--grey); border-radius: 10px;
+      text-decoration: none; color: var(--white);
+      font-family: var(--font); font-size: 1rem;
+      cursor: pointer; border: none; width: 100%; text-align: left;
+      transition: opacity .15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .info-card:active { opacity: .6; }
+    .info-card-icon { font-size: 1.1rem; width: 26px; text-align: center; flex-shrink: 0; }
+    .info-card-body { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+    .info-card-title { font-size: .95rem; font-weight: 600; }
+    .info-card-sub { font-size: .78rem; color: var(--text-muted); }
+    .info-card-arrow { color: var(--grey2); font-size: 1.2rem; line-height: 1; }
+
+    .support-row { display: grid; grid-template-columns: 1fr 1fr; gap: 2px; }
+    .support-btn {
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+      padding: 16px 12px; background: var(--grey); border-radius: 10px;
+      font-weight: 700; font-size: .9rem; color: var(--white);
+      text-decoration: none; transition: opacity .15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .support-btn:active { opacity: .6; }
+
+    .credits {
+      margin-top: auto; padding-top: 4px;
+      font-size: .78rem; color: var(--text-muted); text-align: center;
+    }
+
+    /* ── Scroll hint ────────────────────────── */
+    .scroll-hint {
+      display: none;
+      flex-direction: column; align-items: center; gap: 3px;
+      margin-top: auto; padding: 4px 0 2px;
+      color: var(--text-muted); font-size: .72rem;
+      pointer-events: none; user-select: none;
+    }
+    .scroll-hint-arrow { animation: arrowbounce .9s infinite alternate ease-in-out; }
+    @keyframes arrowbounce { from { transform: translateY(0); } to { transform: translateY(5px); } }
+
+    .idea-link { margin-top: 2px; }
+
+    /* ── Mobile: scroll snap ────────────────── */
+    @media (max-width: 640px) {
+      body { overflow: hidden; height: 100dvh; }
+
+      .snap-container {
+        height: 100dvh;
+        overflow-y: scroll;
+        scroll-snap-type: y mandatory;
+        -webkit-overflow-scrolling: touch;
+      }
+
+      .snap-section {
+        height: 100dvh;
+        scroll-snap-align: start;
+        scroll-snap-stop: always;
+        overflow: hidden;
+      }
+
+      .snap-section .page {
+        height: 100%;
+        min-height: unset;
+        overflow: hidden;
+      }
+
+      .news-section-inner .page { overflow: hidden; }
+
+      .scroll-hint { display: flex; }
+    }
+
+    /* ── Desktop: sections flow naturally ────── */
+    @media (min-width: 641px) {
+      .snap-section .page { min-height: unset; padding-bottom: 40px; }
+      .snap-section + .snap-section .page {
+        border-top: 1px solid var(--grey2);
+        padding-top: 32px;
+      }
+      .news-list {
+        max-height: 280px;
+        overflow-y: auto;
+        background: var(--grey);
+        border-radius: var(--radius);
+        padding: 14px 16px;
+      }
+    }
+
+    /* ── Chat ───────────────────────────────── */
+    .chat-fab {
+      position: fixed; bottom: 24px; right: 24px;
+      width: 52px; height: 52px; border-radius: 50%; border: none;
+      background: var(--white); color: var(--black);
+      font-size: 1.3rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 16px rgba(0,0,0,.4); z-index: 50;
+      transition: transform .1s;
+    }
+    .chat-fab:active { transform: scale(.92); }
+    .chat-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.6);
+      z-index: 100; display: flex; align-items: flex-end; justify-content: center;
+    }
+    .chat-panel {
+      width: 100%; max-width: 480px;
+      background: var(--grey); border-radius: var(--radius) var(--radius) 0 0;
+      height: 70vh; max-height: 600px;
+      display: flex; flex-direction: column;
+    }
+    .chat-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid var(--grey2); font-weight: 800;
+    }
+    .chat-close-btn { background: none; border: none; color: var(--white); font-size: 1.2rem; cursor: pointer; padding: 4px; }
+    .chat-messages { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+    .chat-msg { background: var(--grey2); border-radius: 8px; padding: 8px 12px; font-size: .85rem; }
+    .chat-msg-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+    .chat-msg-user { font-weight: 700; font-size: .8rem; }
+    .chat-msg-time { color: var(--text-muted); font-size: .72rem; }
+    .chat-msg-text { line-height: 1.4; word-break: break-word; }
+    .chat-input-area { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--grey2); }
+    .chat-input-area .input { padding: 12px 14px; font-size: .9rem; }
+    .chat-send-btn { background: var(--white); color: var(--black); border: none; border-radius: var(--radius); padding: 12px 18px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  </style>
+</head>
+<body>
+
+<div class="snap-container" id="snapContainer">
+
+  <!-- ═══════════════════════════════════════
+       SECTION 1 — Játék
+  ════════════════════════════════════════ -->
+  <div class="snap-section" id="sec1">
+    <div class="page">
+      <div class="logo">Emberiség Ellenes Kártyák</div>
+
+      <div class="card-preview">
+        <div class="mini-black">Anya, mi ez a szag?</div>
+        <div class="mini-white">Öregecske Japán Fickók</div>
+      </div>
+
+      <div class="hero">
+        <div class="field">
+          <label class="label" for="username">Beceneved</label>
+          <input class="input" id="username" type="text" maxlength="24" placeholder="pl. Feri" autocomplete="off">
+        </div>
+        <div class="actions">
+          <button class="btn btn-primary" id="createBtn" disabled>Szoba létrehozása</button>
+          <button class="btn btn-secondary" id="joinBtn" disabled>Csatlakozás szobához</button>
+        </div>
+      </div>
+
+      <a class="btn btn-secondary idea-link" href="/kartyaotlet.html">Ötlet beküldés</a>
+
+      <div class="scroll-hint">
+        <span>Hírek &amp; Infó</span>
+        <span class="scroll-hint-arrow">↓</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       SECTION 2 — Hírek
+  ════════════════════════════════════════ -->
+  <div class="snap-section" id="sec2">
+    <div class="page">
+      <div class="section-header">Hírek</div>
+      <div id="newsList" class="news-list" style="display:none"></div>
+      <div id="newsEmpty" class="news-empty">Betöltés…</div>
+      <div class="scroll-hint">
+        <span>Infó</span>
+        <span class="scroll-hint-arrow">↓</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════
+       SECTION 3 — Infó
+  ════════════════════════════════════════ -->
+  <div class="snap-section" id="sec3">
+    <div class="page">
+      <div class="section-header">Infó</div>
+
+      <div class="info-group">
+        <a href="http://s3.amazonaws.com/cah/CAH_MagyarByAnonymous.pdf" class="info-card" target="_blank">
+          <span class="info-card-icon">📖</span>
+          <span class="info-card-body">
+            <span class="info-card-title">Játékszabály</span>
+            <span class="info-card-sub">PDF letöltés</span>
+          </span>
+          <span class="info-card-arrow">›</span>
+        </a>
+      </div>
+
+      <div class="info-group">
+        <div class="info-group-label">Tetszett? Támogass!</div>
+        <div class="support-row">
+          <a href="https://www.donably.com/gyori-gergo-project" class="support-btn" target="_blank">☕ Donably</a>
+          <a href="https://revolut.me/gergogyori" class="support-btn" target="_blank">💳 Revolut</a>
+        </div>
+      </div>
+
+      <div class="info-group">
+        <button class="info-card" onclick="openContact()">
+          <span class="info-card-icon">✉</span>
+          <span class="info-card-body">
+            <span class="info-card-title">Üzenet küldése</span>
+          </span>
+          <span class="info-card-arrow">›</span>
+        </button>
+        <a href="https://partvalto.hu" class="info-card" target="_blank">
+          <span class="info-card-icon">🃏</span>
+          <span class="info-card-body">
+            <span class="info-card-title">Pártvaltó</span>
+            <span class="info-card-sub">Másik játékom</span>
+          </span>
+          <span class="info-card-arrow">›</span>
+        </a>
+      </div>
+
+      <div class="credits">Készítette Győri Gergő</div>
+    </div>
+  </div>
+
+</div><!-- /snap-container -->
+
+<!-- Chat FAB -->
+<button class="chat-fab" id="chatFab" title="Üzenőfal">💬</button>
+
+<!-- Chat panel -->
+<div class="chat-overlay hidden" id="chatOverlay">
+  <div class="chat-panel">
+    <div class="chat-header">
+      <span>Üzenőfal</span>
+      <button class="chat-close-btn" id="chatClose">✕</button>
+    </div>
+    <div class="chat-messages" id="chatMessages">
+      <div style="color:var(--text-muted);text-align:center;padding:20px">Betöltés...</div>
+    </div>
+    <div class="chat-input-area">
+      <input class="input" id="chatInput" type="text" maxlength="500" placeholder="Üzenet...">
+      <button class="chat-send-btn" id="chatSend">Küld</button>
+    </div>
+  </div>
+</div>
+
+<!-- Contact modal -->
+<div id="contactOverlay" class="overlay hidden">
+  <div class="modal">
+    <h2>Üzenet küldése</h2>
+    <div class="field">
+      <label class="label">Neved</label>
+      <input id="cName" class="input" type="text" placeholder="Teljes neved" maxlength="100">
+    </div>
+    <div class="field">
+      <label class="label">E-mail</label>
+      <input id="cEmail" class="input" type="email" placeholder="email@example.com" maxlength="200">
+    </div>
+    <div class="field">
+      <label class="label">Üzenet</label>
+      <textarea id="cMessage" class="input" rows="4" placeholder="Írj bármit..." maxlength="2000" style="resize:vertical;min-height:90px"></textarea>
+    </div>
+    <div id="cError" class="error-msg"></div>
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeContact()">Mégse</button>
+      <button class="btn btn-primary" onclick="submitContact()">Küldés</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Emberiség Ellenes Kártyák",
+  "url": "https://emberisegelleneskartyak.hu/",
+  "description": "Ingyenes online kártyajáték magyarul — a Cards Against Humanity magyar verziója. Hozz létre szobát, hívj meg barátokat, és szórakozzatok regisztráció nélkül.",
+  "applicationCategory": "GameApplication",
+  "operatingSystem": "Web Browser",
+  "inLanguage": "hu",
+  "isAccessibleForFree": true,
+  "author": { "@type": "Person", "name": "Győri Gergő" },
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "HUF" }
+}
+</script>
+<script src="/static/js/session.js"></script>
+<script>
+  /* ── Username & buttons ─────────────────── */
+  const usernameEl = document.getElementById('username');
+  const createBtn  = document.getElementById('createBtn');
+  const joinBtn    = document.getElementById('joinBtn');
+
+  usernameEl.value = getSavedUsername();
+  _updateBtns();
+
+  usernameEl.addEventListener('input', _updateBtns);
+  usernameEl.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && usernameEl.value.trim()) joinBtn.click();
+  });
+
+  function _updateBtns() {
+    const ok = usernameEl.value.trim().length > 0;
+    createBtn.disabled = !ok;
+    joinBtn.disabled   = !ok;
+  }
+
+  createBtn.addEventListener('click', () => {
+    const u = usernameEl.value.trim();
+    if (!u) return;
+    saveUsername(u);
+    location.href = '/create';
+  });
+
+  joinBtn.addEventListener('click', () => {
+    const u = usernameEl.value.trim();
+    if (!u) return;
+    saveUsername(u);
+    location.href = '/join';
+  });
+
+  /* ── Contact modal ──────────────────────── */
+  function openContact() {
+    document.getElementById('contactOverlay').classList.remove('hidden');
+    document.getElementById('cError').textContent = '';
+  }
+  function closeContact() {
+    document.getElementById('contactOverlay').classList.add('hidden');
+  }
+  async function submitContact() {
+    const name    = document.getElementById('cName').value.trim();
+    const email   = document.getElementById('cEmail').value.trim();
+    const message = document.getElementById('cMessage').value.trim();
+    const errEl   = document.getElementById('cError');
+    errEl.textContent = '';
+    if (!name || !email || !message) {
+      errEl.textContent = 'Minden mező kitöltése kötelező.';
+      return;
+    }
+    try {
+      const res = await fetch('/api/contact', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, message }),
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.detail || 'Hiba történt.'; return; }
+      closeContact();
+      document.getElementById('cName').value = '';
+      document.getElementById('cEmail').value = '';
+      document.getElementById('cMessage').value = '';
+      showToast('Üzenet elküldve! Köszönjük!');
+    } catch {
+      errEl.textContent = 'Kapcsolódási hiba, próbáld újra.';
+    }
+  }
+
+  /* ── News ───────────────────────────────── */
+  async function loadNews() {
+    const list  = document.getElementById('newsList');
+    const empty = document.getElementById('newsEmpty');
+    try {
+      const res   = await fetch('/static/news.json');
+      const items = await res.json();
+      if (!items.length) {
+        empty.textContent = 'Jelenleg nincsenek hírek.';
+        return;
+      }
+      list.style.display = 'flex';
+      empty.style.display = 'none';
+      items.forEach(item => {
+        const [y, mo, d, h] = item.date.split('-');
+        const el = document.createElement('div');
+        el.className = 'news-item';
+        el.innerHTML = `<span class="news-item-date">${y}.${mo}.${d}. ${h}:00</span>${item.message}`;
+        list.appendChild(el);
+      });
+    } catch {
+      empty.textContent = 'Nem sikerült betölteni.';
+    }
+  }
+  loadNews();
+
+  /* ── Chat ───────────────────────────────── */
+  function chatEsc(str) {
+    return String(str)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  function formatTime(iso) {
+    const d = new Date(iso.replace(' ','T') + (iso.includes('T') || iso.endsWith('Z') ? '' : 'Z'));
+    if (isNaN(d)) return '';
+    return d.toLocaleString('hu-HU', { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+  }
+
+  let _chatPoll = null;
+  let _lastMsgId = -1;
+
+  async function loadChatMessages() {
+    const el = document.getElementById('chatMessages');
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+    try {
+      const res = await fetch('/api/chat');
+      if (!res.ok) throw new Error();
+      const msgs = await res.json();
+      if (msgs.length === 0) {
+        el.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:20px">Még nincs üzenet</div>';
+        _lastMsgId = -1;
+        return;
+      }
+      const newest = msgs[msgs.length - 1].id;
+      if (newest === _lastMsgId) return;
+      _lastMsgId = newest;
+      el.innerHTML = msgs.map(m => `
+        <div class="chat-msg">
+          <div class="chat-msg-header">
+            <span class="chat-msg-user">${chatEsc(m.username)}</span>
+            <span class="chat-msg-time">${formatTime(m.created_at)}</span>
+          </div>
+          <div class="chat-msg-text">${chatEsc(m.message)}</div>
+        </div>`).join('');
+      if (atBottom) el.scrollTop = el.scrollHeight;
+    } catch {
+      el.innerHTML = '<div style="color:var(--danger);text-align:center;padding:20px">Hiba a betöltésnél</div>';
+    }
+  }
+
+  function openChat() {
+    _lastMsgId = -1;
+    document.getElementById('chatOverlay').classList.remove('hidden');
+    loadChatMessages();
+    _chatPoll = setInterval(loadChatMessages, 3000);
+  }
+
+  function closeChat() {
+    document.getElementById('chatOverlay').classList.add('hidden');
+    clearInterval(_chatPoll);
+    _chatPoll = null;
+  }
+
+  async function sendChatMessage() {
+    const username = usernameEl.value.trim();
+    const msg = document.getElementById('chatInput').value.trim();
+    if (!username) { showToast('Add meg a neved a becenév mezőben!'); return; }
+    if (!msg) return;
+    const btn = document.getElementById('chatSend');
+    btn.disabled = true;
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, message: msg }),
+      });
+      if (!res.ok) throw new Error();
+      document.getElementById('chatInput').value = '';
+      await loadChatMessages();
+    } catch {
+      showToast('Hiba az üzenet küldésekor!');
+    }
+    btn.disabled = false;
+  }
+
+  document.getElementById('chatFab').addEventListener('click', openChat);
+  document.getElementById('chatClose').addEventListener('click', closeChat);
+  document.getElementById('chatOverlay').addEventListener('click', e => {
+    if (e.target === document.getElementById('chatOverlay')) closeChat();
+  });
+  document.getElementById('chatSend').addEventListener('click', sendChatMessage);
+  document.getElementById('chatInput').addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendChatMessage();
+  });
+
+  /* ── Toast ──────────────────────────────── */
+  function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2800);
+  }
+</script>
+</body>
+</html>

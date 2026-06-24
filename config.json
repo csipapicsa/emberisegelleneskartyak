@@ -1,0 +1,8 @@
+{
+  "card_hold_duration_ms": 2500,
+  "max_room_players": 20,
+  "room_code_digits": 4,
+  "timer_options_seconds": [0, 15, 30, 45, 60],
+  "round_options": [10, 20, 30, 40, 50],
+  "hand_size": 10
+}

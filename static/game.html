@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Játék</title>
+  <link rel="stylesheet" href="/static/css/base.css">
+  <link rel="stylesheet" href="/static/css/cards.css?v=20260617-vote-disabled-gray">
+  <link rel="stylesheet" href="/static/css/game.css">
+</head>
+<body>
+  <div id="roomNotFound" class="page hidden" style="justify-content:center;align-items:center;text-align:center;gap:24px">
+    <div class="logo">Emberiség Ellenes Kártyák</div>
+    <h1>Ez a szoba nem létezik.</h1>
+    <p style="color:var(--text-muted)">Kérlek fáradj a főoldalra.</p>
+    <a href="/" class="btn btn-primary" style="max-width:260px">Főoldal</a>
+  </div>
+
+  <div id="gameAlreadyStarted" class="page hidden" style="justify-content:center;align-items:center;text-align:center;gap:24px">
+    <div class="logo">Emberiség Ellenes Kártyák</div>
+    <h1>Itt már elkezdődött a játék.</h1>
+    <p style="color:var(--text-muted)">Kérlek fáradj a főoldalra.</p>
+    <a href="/" class="btn btn-primary" style="max-width:260px">Főoldal</a>
+  </div>
+
+  <!-- Main game screen -->
+  <div class="game-page">
+
+    <!-- Top bar -->
+    <div class="game-topbar">
+      <span class="room-code" id="roomCodeEl"></span>
+      <span class="round-info" id="roundEl"></span>
+      <span class="timer" id="timerEl"></span>
+      <button class="mic-btn hidden" id="micBtn" title="Mikrofon be/ki">🎤</button>
+      <button class="mic-btn hidden" id="speakerBtn" title="Hangszóró be/ki">🔊</button>
+    </div>
+
+    <!-- Black card -->
+    <div class="black-card-area">
+      <div class="black-card" id="blackCard"></div>
+    </div>
+
+    <!-- Status -->
+    <div class="status-bar" id="statusBar"></div>
+
+    <!-- Middle: revealed cards / waiting -->
+    <div class="game-middle" id="gameMiddle"></div>
+
+    <!-- Czar hint (hidden until reveal) -->
+    <div id="czarHint" class="hidden"></div>
+
+    <!-- Hand area -->
+    <div class="hand-area" id="handArea">
+      <div class="hand-header" id="handToggle">
+        <span>A kezed</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <span id="handCount"></span>
+          <span class="hand-chevron" id="handChevron">▲</span>
+        </span>
+      </div>
+      <div class="hand-body" id="handBody">
+        <div class="hand-container" id="handContainer">
+          <div class="hand-track"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Players panel -->
+  <div class="players-panel" id="playersPanel"></div>
+  <div class="players-panel-overlay" id="panelOverlay" onclick="togglePlayers()"></div>
+
+  <!-- FAB buttons -->
+  <button class="feedback-btn" id="feedbackBtn" title="Visszajelzés">💬</button>
+  <button class="scores-fab" id="scoresFab" title="Pontok">🏆</button>
+
+  <!-- Card confirm modal -->
+  <div class="overlay hidden" id="confirmModal">
+    <div class="modal">
+      <h2>Ezt küldöd be?</h2>
+      <div class="card-white" id="confirmPreview" style="font-size:.9rem"></div>
+      <div id="confirmMultiPreview" style="display:none;flex-direction:column;gap:8px"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" id="confirmNo">Mégsem</button>
+        <button class="btn btn-primary"   id="confirmYes">Igen, beküldöm!</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feedback modal -->
+  <div class="overlay hidden" id="feedbackModal">
+    <div class="modal">
+      <h2>Visszajelzés a kártyáról</h2>
+      <div class="modal-actions" style="flex-wrap:wrap;gap:8px">
+        <button class="btn btn-secondary" onclick="sendFeedback('like')">👍 Tetszik</button>
+        <button class="btn btn-secondary" onclick="sendFeedback('dislike')">👎 Nem tetszik</button>
+      </div>
+      <div class="field">
+        <label class="label" for="feedbackComment">Komment (opcionális)</label>
+        <input class="input" id="feedbackComment" type="text" maxlength="500" placeholder="Írd le a véleményed...">
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary" onclick="document.getElementById('feedbackModal').classList.add('hidden')">Bezár</button>
+        <button class="btn btn-primary" onclick="sendComment()">Küldés</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Winner announcement (3 seconds) -->
+  <div class="winner-overlay hidden" id="winnerOverlay">
+    <div class="winner-box">
+      <div class="winner-label" id="winnerLabel"></div>
+      <div class="winner-cards" id="winnerCards"></div>
+    </div>
+  </div>
+
+  <!-- End screen -->
+  <div class="end-screen hidden" id="endScreen">
+    <h1>Játék vége! 🎉</h1>
+    <div class="end-podium" id="podium"></div>
+    <a href="/" class="btn btn-primary" style="width:100%;max-width:320px">Vissza a főoldalra</a>
+  </div>
+
+  <div id="toast"></div>
+
+  <script src="/static/js/session.js"></script>
+  <script src="/static/js/ws.js"></script>
+  <script src="/static/js/voice.js"></script>
+  <script src="/static/js/hand.js"></script>
+  <script src="/static/js/game.js?v=20260617-czar-self-vote"></script>
+  <script>
+    const code = location.pathname.split('/').pop();
+    (async () => {
+      const sid = await getSession();
+      initGame(code, sid);
+    })();
+
+    // Keep screen on while playing
+    let _wakeLock = null;
+    async function _acquireWakeLock() {
+      if (!('wakeLock' in navigator)) return;
+      try { _wakeLock = await navigator.wakeLock.request('screen'); } catch {}
+    }
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') _acquireWakeLock();
+    });
+    _acquireWakeLock();
+  </script>
+</body>
+</html>

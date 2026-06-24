@@ -1,0 +1,227 @@
+/* ── Hand container ───────────────────────────────────────────────────────── */
+.hand-container {
+  position: relative;
+  height: 180px;
+  overflow: hidden;
+  touch-action: pan-x;
+}
+
+.hand-track {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: flex-end;
+  will-change: transform;
+}
+
+/* ── Individual white cards in hand ───────────────────────────────────────── */
+.hand-card {
+  position: relative;
+  width: 130px;
+  min-height: 160px;
+  background: var(--white);
+  color: var(--black);
+  border-radius: var(--card-radius);
+  padding: 32px 12px 10px;
+  font-size: .8rem;
+  font-weight: 700;
+  line-height: 1.35;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-right: -40px;
+  box-shadow: 2px 4px 12px rgba(0,0,0,.5);
+  transition: transform .2s ease, box-shadow .2s ease, margin-right .2s ease;
+  border: 2px solid transparent;
+  user-select: none;
+}
+
+.hand-card:last-child { margin-right: 0; }
+
+/* Active/highlighted card (lifted) */
+.hand-card.active {
+  transform: translateY(-24px) scale(1.04);
+  box-shadow: 0 12px 28px rgba(0,0,0,.6);
+  z-index: 10;
+  margin-right: 8px;
+}
+
+/* Selected card (locked in) */
+.hand-card.selected {
+  border-color: #27ae60;
+  transform: translateY(-28px) scale(1.05);
+  box-shadow: 0 0 0 3px #27ae60, 0 12px 28px rgba(0,0,0,.6);
+  z-index: 11;
+}
+
+/* Disabled state (after submission) */
+.hand-card.disabled {
+  opacity: 1;
+  cursor: default;
+  pointer-events: none;
+}
+
+.swap-card-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border: 0;
+  border-radius: 5px;
+  background: var(--black);
+  color: var(--white);
+  padding: 4px 7px;
+  font-size: .65rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.swap-card-btn:active {
+  transform: scale(.96);
+}
+
+.hand-card.disabled .swap-card-btn {
+  display: none;
+}
+
+.hand-action-card {
+  background: #2b2b2b;
+  color: var(--white);
+  border-color: rgba(255,255,255,.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: .9rem;
+  padding: 16px 14px;
+}
+
+/* Selection order badge (multi-pick) */
+.hand-card .pick-badge {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  background: var(--black);
+  color: var(--white);
+  border-radius: 50%;
+  width: 22px; height: 22px;
+  font-size: .7rem;
+  font-weight: 800;
+  display: flex; align-items: center; justify-content: center;
+}
+
+/* ── Black card (play area) ───────────────────────────────────────────────── */
+.black-card {
+  background: var(--black);
+  color: var(--white);
+  border: 2px solid var(--white);
+  border-radius: var(--card-radius);
+  padding: 20px;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.5;
+  min-height: 120px;
+  position: relative;
+}
+
+.black-card .pick-label {
+  position: absolute;
+  bottom: 10px;
+  right: 14px;
+  font-size: .7rem;
+  color: rgba(255,255,255,.5);
+  font-weight: 600;
+}
+
+/* Blank underline in black card text */
+.blank { display: inline-block; min-width: 80px; border-bottom: 2px solid var(--white); }
+
+/* ── Revealed submissions ─────────────────────────────────────────────────── */
+.submissions-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.submission-pile {
+  display: flex;
+  flex-direction: column;
+  gap: -8px;
+  cursor: pointer;
+  border-radius: var(--card-radius);
+  border: 2px solid transparent;
+  transition: border-color .15s;
+  padding: 4px;
+}
+
+.submission-pile.winner-pick {
+  border-color: gold;
+}
+
+.submission-pile.vote-disabled {
+  cursor: not-allowed;
+  opacity: .6;
+}
+
+.submission-pile.vote-disabled .sub-card {
+  background: #c8c8c8;
+  color: rgba(0,0,0,.4);
+  box-shadow: none;
+}
+
+.submission-pile .sub-card {
+  background: var(--white);
+  color: var(--black);
+  border-radius: 8px;
+  padding: 14px;
+  font-size: .9rem;
+  font-weight: 700;
+  line-height: 1.4;
+  margin-top: -6px;
+  box-shadow: 0 3px 8px rgba(0,0,0,.3);
+}
+.submission-pile .sub-card:first-child { margin-top: 0; }
+.submission-pile .sub-card.face-down {
+  background: var(--grey2);
+  color: var(--white);
+  display: flex;
+  align-items: center;
+}
+
+/* ── Flip animation ───────────────────────────────────────────────────────── */
+.flip-container { perspective: 800px; }
+.flipper {
+  position: relative;
+  transition: transform .5s;
+  transform-style: preserve-3d;
+}
+.flipper.flipped { transform: rotateY(180deg); }
+.flip-front, .flip-back {
+  position: absolute; inset: 0;
+  backface-visibility: hidden;
+  border-radius: var(--card-radius);
+}
+.flip-back { transform: rotateY(180deg); }
+
+/* ── Timer ────────────────────────────────────────────────────────────────── */
+.timer {
+  font-size: 1.4rem;
+  font-weight: 800;
+  min-width: 48px;
+  text-align: center;
+  transition: color .3s;
+}
+.timer.urgent { color: var(--danger); animation: pulse .6s infinite alternate; }
+@keyframes pulse { from { opacity: 1; } to { opacity: .5; } }
+
+/* ── Score badge ──────────────────────────────────────────────────────────── */
+.score-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px; height: 28px;
+  background: var(--grey2);
+  border-radius: 14px;
+  font-size: .8rem;
+  font-weight: 800;
+  padding: 0 8px;
+}

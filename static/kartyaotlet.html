@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ötlet beküldés | Emberiség Ellenes Kártyák</title>
+  <meta name="robots" content="noindex, follow">
+  <link rel="stylesheet" href="/static/css/base.css">
+  <style>
+    .idea-page { justify-content: center; }
+    .back-link {
+      color: var(--text-muted);
+      font-size: .85rem;
+      font-weight: 700;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      width: fit-content;
+    }
+    .idea-header {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .idea-lead {
+      color: var(--text-muted);
+      font-size: .95rem;
+      line-height: 1.45;
+    }
+    .type-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .type-btn {
+      min-height: 142px;
+      border-radius: 8px;
+      border: 2px solid var(--grey2);
+      padding: 18px 14px;
+      font: inherit;
+      font-weight: 800;
+      font-size: 1.05rem;
+      line-height: 1.25;
+      cursor: pointer;
+      transition: transform .1s, border-color .15s;
+    }
+    .type-btn:active { transform: scale(.97); }
+    .type-btn.active { border-color: var(--success); }
+    .type-btn-white {
+      background: var(--white);
+      color: var(--black);
+    }
+    .type-btn-black {
+      background: var(--black);
+      color: var(--white);
+      border-color: var(--white);
+    }
+    .idea-form {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      background: var(--grey);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+    .idea-type-label {
+      color: var(--text-muted);
+      font-size: .78rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .hint {
+      color: var(--text-muted);
+      font-size: .83rem;
+      line-height: 1.4;
+    }
+    textarea.input {
+      min-height: 150px;
+      resize: vertical;
+      line-height: 1.45;
+    }
+    .form-actions {
+      display: flex;
+      gap: 10px;
+    }
+    .form-actions .btn { flex: 1; }
+    .success-box {
+      background: rgba(39, 174, 96, .18);
+      border: 1px solid var(--success);
+      border-radius: var(--radius);
+      color: var(--white);
+      padding: 12px 14px;
+      font-size: .9rem;
+      line-height: 1.4;
+    }
+    @media (max-width: 380px) {
+      .type-grid { grid-template-columns: 1fr; }
+      .type-btn { min-height: 104px; }
+      .form-actions { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page idea-page">
+    <a class="back-link" href="/">Vissza a főoldalra</a>
+
+    <section class="idea-header">
+      <div class="logo">Ötlet beküldés</div>
+      <p class="idea-lead">Válassz kártyatípust, aztán küldd be az új kártyaszöveget.</p>
+    </section>
+
+    <section class="type-grid" id="typeGrid" aria-label="Kártyatípus választás">
+      <button class="type-btn type-btn-white" type="button" data-type="white">Fehér kártya</button>
+      <button class="type-btn type-btn-black" type="button" data-type="black">Fekete kártya</button>
+    </section>
+
+    <form class="idea-form hidden" id="ideaForm" novalidate>
+      <div class="idea-type-label" id="selectedTypeLabel"></div>
+      <div class="field">
+        <label class="label" for="ideaText">Kártyaszöveg</label>
+        <textarea id="ideaText" class="input" maxlength="360" autocomplete="off" required></textarea>
+      </div>
+      <p class="hint hidden" id="blackHint">Ha helyet akarsz kihagyni a behelyettesítő kártyának, használj sok spacet.</p>
+      <div id="ideaError" class="error-msg"></div>
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="button" id="changeTypeBtn">Másik típus</button>
+        <button class="btn btn-primary" type="submit" id="submitIdeaBtn">Beküldés</button>
+      </div>
+    </form>
+
+    <div class="success-box hidden" id="successBox">Köszi, az ötletet elmentettük.</div>
+  </main>
+
+  <script>
+    const typeButtons = Array.from(document.querySelectorAll('[data-type]'));
+    const typeGrid = document.getElementById('typeGrid');
+    const ideaForm = document.getElementById('ideaForm');
+    const ideaText = document.getElementById('ideaText');
+    const ideaError = document.getElementById('ideaError');
+    const selectedTypeLabel = document.getElementById('selectedTypeLabel');
+    const blackHint = document.getElementById('blackHint');
+    const successBox = document.getElementById('successBox');
+    const submitIdeaBtn = document.getElementById('submitIdeaBtn');
+    let selectedType = '';
+
+    function typeName(type) {
+      return type === 'black' ? 'Fekete kártya' : 'Fehér kártya';
+    }
+
+    function selectType(type) {
+      selectedType = type;
+      typeButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.type === type));
+      selectedTypeLabel.textContent = typeName(type);
+      blackHint.classList.toggle('hidden', type !== 'black');
+      ideaText.maxLength = type === 'black' ? 360 : 280;
+      ideaText.value = '';
+      ideaError.textContent = '';
+      successBox.classList.add('hidden');
+      typeGrid.classList.add('hidden');
+      ideaForm.classList.remove('hidden');
+      ideaText.focus();
+    }
+
+    typeButtons.forEach(btn => {
+      btn.addEventListener('click', () => selectType(btn.dataset.type));
+    });
+
+    document.getElementById('changeTypeBtn').addEventListener('click', () => {
+      selectedType = '';
+      ideaForm.classList.add('hidden');
+      typeGrid.classList.remove('hidden');
+      typeButtons.forEach(btn => btn.classList.remove('active'));
+      ideaError.textContent = '';
+    });
+
+    ideaForm.addEventListener('submit', async event => {
+      event.preventDefault();
+      const text = ideaText.value.trim();
+      ideaError.textContent = '';
+      successBox.classList.add('hidden');
+      if (!selectedType || !text) {
+        ideaError.textContent = 'A kártyaszöveg megadása kötelező.';
+        return;
+      }
+      submitIdeaBtn.disabled = true;
+      try {
+        const res = await fetch('/api/card-ideas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ card_type: selectedType, text }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          ideaError.textContent = data.detail || 'Hiba történt.';
+          return;
+        }
+        ideaText.value = '';
+        successBox.classList.remove('hidden');
+      } catch {
+        ideaError.textContent = 'Kapcsolódási hiba, próbáld újra.';
+      } finally {
+        submitIdeaBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

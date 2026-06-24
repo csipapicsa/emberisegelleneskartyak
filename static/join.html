@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Csatlakozás</title>
+  <link rel="stylesheet" href="/static/css/base.css">
+  <style>
+    .code-input { text-align: center; font-size: 2rem; font-weight: 800; letter-spacing: 12px; }
+    .chat-fab {
+      position: fixed; bottom: 24px; right: 24px;
+      width: 52px; height: 52px; border-radius: 50%; border: none;
+      background: var(--white); color: var(--black);
+      font-size: 1.3rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 4px 16px rgba(0,0,0,.4); z-index: 50;
+      transition: transform .1s;
+    }
+    .chat-fab:active { transform: scale(.92); }
+    .chat-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.6);
+      z-index: 100; display: flex; align-items: flex-end; justify-content: center;
+    }
+    .chat-panel {
+      width: 100%; max-width: 480px;
+      background: var(--grey); border-radius: var(--radius) var(--radius) 0 0;
+      height: 70vh; max-height: 600px;
+      display: flex; flex-direction: column;
+    }
+    .chat-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid var(--grey2);
+      font-weight: 800;
+    }
+    .chat-close-btn { background: none; border: none; color: var(--white); font-size: 1.2rem; cursor: pointer; padding: 4px; }
+    .chat-messages {
+      flex: 1; overflow-y: auto; padding: 12px 16px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .chat-msg { background: var(--grey2); border-radius: 8px; padding: 8px 12px; font-size: .85rem; }
+    .chat-msg-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+    .chat-msg-user { font-weight: 700; font-size: .8rem; }
+    .chat-msg-time { color: var(--text-muted); font-size: .72rem; }
+    .chat-msg-text { line-height: 1.4; word-break: break-word; }
+    .chat-input-area { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--grey2); }
+    .chat-input-area .input { padding: 12px 14px; font-size: .9rem; }
+    .chat-send-btn { background: var(--white); color: var(--black); border: none; border-radius: var(--radius); padding: 12px 18px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+    .room-list { display: flex; flex-direction: column; gap: 8px; }
+    .room-item {
+      position: relative;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 16px; background: var(--grey); border-radius: 10px;
+      cursor: pointer; border: 2px solid transparent; transition: border-color .15s;
+    }
+    .room-item:hover, .room-item:active { border-color: var(--white); }
+    .room-item .room-code-lbl { font-size: 1.2rem; font-weight: 800; letter-spacing: 4px; }
+    .room-item .room-meta { font-size: .8rem; color: var(--text-muted); text-align: right; }
+    .room-item .room-status { font-size: .75rem; font-weight: 600; }
+    .room-item.in-progress { opacity: .55; cursor: default; border-color: transparent !important; }
+    .room-player-count {
+      appearance: none; border: none; background: none; color: inherit;
+      font: inherit; padding: 0; cursor: help; text-decoration: underline dotted;
+      text-underline-offset: 3px;
+    }
+    .room-players-popover {
+      position: absolute;
+      right: 12px;
+      top: calc(100% + 6px);
+      min-width: 180px;
+      max-width: min(260px, calc(100vw - 48px));
+      background: var(--grey2);
+      border: 1px solid rgba(255,255,255,.18);
+      border-radius: 8px;
+      padding: 10px 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,.45);
+      color: var(--white);
+      text-align: left;
+      font-size: .82rem;
+      font-weight: 600;
+      line-height: 1.45;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-4px);
+      transition: opacity .12s, transform .12s;
+      z-index: 20;
+    }
+    .room-players-popover::before {
+      content: '';
+      position: absolute;
+      right: 20px;
+      top: -6px;
+      width: 10px;
+      height: 10px;
+      background: var(--grey2);
+      border-left: 1px solid rgba(255,255,255,.18);
+      border-top: 1px solid rgba(255,255,255,.18);
+      transform: rotate(45deg);
+    }
+    .room-players-title {
+      color: var(--text-muted);
+      font-size: .72rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+      text-transform: uppercase;
+    }
+    .room-item:hover .room-players-popover,
+    .room-item:focus-within .room-players-popover,
+    .room-item.show-players .room-players-popover {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+    .rooms-empty { color: var(--text-muted); font-size: .85rem; text-align: center; padding: 12px; }
+    .section-title { font-size: .85rem; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+    .divider-label {
+      display: flex; align-items: center; gap: 10px;
+      color: var(--text-muted); font-size: .8rem; font-weight: 600;
+    }
+    .divider-label::before, .divider-label::after {
+      content: ''; flex: 1; border-top: 1px solid var(--grey2);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <a href="/" class="logo">← Vissza</a>
+    <h1>Csatlakozás</h1>
+
+    <div class="field">
+      <label class="label" for="username">Beceneved</label>
+      <input class="input" id="username" type="text" maxlength="24" placeholder="pl. Feri" autocomplete="off">
+    </div>
+
+    <!-- Open rooms list -->
+    <div>
+      <div class="section-title">Nyitott szobák</div>
+      <div class="room-list" id="roomList">
+        <div class="rooms-empty">Betöltés...</div>
+      </div>
+    </div>
+
+    <div class="divider-label">vagy add meg a kódot</div>
+
+    <div class="field">
+      <label class="label" for="code">Szobakód</label>
+      <input class="input code-input" id="code" type="text" maxlength="4"
+             placeholder="0000" inputmode="numeric" pattern="[0-9]*" autocomplete="off">
+    </div>
+
+    <div id="error" class="error-msg"></div>
+
+    <button class="btn btn-primary" id="joinBtn">Csatlakozás</button>
+  </div>
+
+  <!-- Chat FAB -->
+  <button class="chat-fab" id="chatFab" title="Üzenőfal">💬</button>
+
+  <!-- Chat panel -->
+  <div class="chat-overlay hidden" id="chatOverlay">
+    <div class="chat-panel">
+      <div class="chat-header">
+        <span>Üzenőfal</span>
+        <button class="chat-close-btn" id="chatClose">✕</button>
+      </div>
+      <div class="chat-messages" id="chatMessages">
+        <div style="color:var(--text-muted);text-align:center;padding:20px">Betöltés...</div>
+      </div>
+      <div class="chat-input-area">
+        <input class="input" id="chatInput" type="text" maxlength="500" placeholder="Üzenet...">
+        <button class="chat-send-btn" id="chatSend">Küld</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script src="/static/js/session.js"></script>
+  <script>
+    const usernameEl = document.getElementById('username');
+    const codeEl     = document.getElementById('code');
+    const errorEl    = document.getElementById('error');
+    const joinBtn    = document.getElementById('joinBtn');
+
+    usernameEl.value = getSavedUsername();
+
+    const params = new URLSearchParams(location.search);
+    if (params.get('code')) codeEl.value = params.get('code');
+
+    function roomAge(createdAt) {
+      const mins = Math.floor((Date.now() / 1000 - createdAt) / 60);
+      if (mins < 1)  return 'most nyílt';
+      if (mins < 60) return `${mins} perce nyílt`;
+      const hrs = Math.floor(mins / 60);
+      return `${hrs} órája nyílt`;
+    }
+
+    // Load open rooms
+    async function loadRooms() {
+      const res   = await fetch('/api/rooms');
+      const rooms = await res.json();
+      const list  = document.getElementById('roomList');
+      if (rooms.length === 0) {
+        list.innerHTML = '<div class="rooms-empty">Nincs nyitott szoba</div>';
+        return;
+      }
+      list.innerHTML = rooms.map(r => {
+        const names = (r.player_names || []).map(chatEsc);
+        const namesHtml = names.length ? names.join('<br>') : 'Még nincs bent senki';
+        const playerLabel = `${r.player_count} játékos`;
+        const playersPopover = `
+          <div class="room-players-popover" id="roomPlayers-${r.code}">
+            <div class="room-players-title">Játékosok</div>
+            <div>${namesHtml}</div>
+          </div>`;
+        if (r.started) {
+          return `
+            <div class="room-item in-progress">
+              <span class="room-code-lbl">${r.code}</span>
+              <span class="room-meta">
+                <span class="room-status" style="color:#f0a500">Játék folyamatban</span><br>
+                <button class="room-player-count" type="button" aria-describedby="roomPlayers-${r.code}" onclick="toggleRoomPlayers(event, '${r.code}')">${playerLabel}</button> · ${roomAge(r.created_at)}
+              </span>
+              ${playersPopover}
+            </div>`;
+        }
+        return `
+          <div class="room-item" onclick="selectRoom('${r.code}')">
+            <span class="room-code-lbl">${r.code}</span>
+            <span class="room-meta">
+              <span class="room-status" style="color:var(--success)">Várakozás</span><br>
+              <button class="room-player-count" type="button" aria-describedby="roomPlayers-${r.code}" onclick="toggleRoomPlayers(event, '${r.code}')">${playerLabel}</button> · ${roomAge(r.created_at)}
+            </span>
+            ${playersPopover}
+          </div>`;
+      }).join('');
+    }
+
+    function toggleRoomPlayers(event, code) {
+      event.preventDefault();
+      event.stopPropagation();
+      const row = event.currentTarget.closest('.room-item');
+      document.querySelectorAll('.room-item.show-players').forEach(el => {
+        if (el !== row) el.classList.remove('show-players');
+      });
+      row?.classList.toggle('show-players');
+    }
+
+    function selectRoom(code) {
+      codeEl.value = code;
+      joinBtn.click();
+    }
+
+    loadRooms();
+    setInterval(loadRooms, 5000); // refresh every 5s
+
+    async function doJoin(code) {
+      const username = usernameEl.value.trim();
+      if (!username)         { errorEl.textContent = 'Add meg a neved!'; return; }
+      if (code.length !== 4) { errorEl.textContent = 'A szobakód 4 számjegy.'; return; }
+
+      joinBtn.disabled = true;
+      errorEl.textContent = '';
+
+      try {
+        const res = await fetch(`/api/room/${code}`);
+        if (res.status === 404) throw new Error('Nem létező szobakód.');
+        const room = await res.json();
+        if (room.started) throw new Error('Ez a játék már elkezdődött.');
+
+        await getSession();
+        saveUsername(username);
+        location.href = `/room/${code}`;
+      } catch (e) {
+        errorEl.textContent = e.message;
+        joinBtn.disabled = false;
+      }
+    }
+
+    joinBtn.addEventListener('click', () => doJoin(codeEl.value.trim()));
+    codeEl.addEventListener('keydown', e => { if (e.key === 'Enter') joinBtn.click(); });
+
+    // ── Chat ──────────────────────────────────────────────────────────────
+    function chatEsc(str) {
+      return String(str)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2800);
+    }
+
+    function formatTime(iso) {
+      // SQLite datetime('now') returns "YYYY-MM-DD HH:MM:SS" — normalize to ISO 8601
+      const d = new Date(iso.replace(' ', 'T') + (iso.includes('T') || iso.endsWith('Z') ? '' : 'Z'));
+      if (isNaN(d)) return '';
+      return d.toLocaleString('hu-HU', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    }
+
+    let _chatPoll = null;
+    let _lastMsgId = -1;
+
+    async function loadChatMessages() {
+      const el = document.getElementById('chatMessages');
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 48;
+      try {
+        const res = await fetch('/api/chat');
+        if (!res.ok) throw new Error();
+        const msgs = await res.json();
+        if (msgs.length === 0) {
+          el.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:20px">Még nincs üzenet</div>';
+          _lastMsgId = -1;
+          return;
+        }
+        const newest = msgs[msgs.length - 1].id;
+        if (newest === _lastMsgId) return; // nothing new — skip re-render
+        _lastMsgId = newest;
+        el.innerHTML = msgs.map(m => `
+          <div class="chat-msg">
+            <div class="chat-msg-header">
+              <span class="chat-msg-user">${chatEsc(m.username)}</span>
+              <span class="chat-msg-time">${formatTime(m.created_at)}</span>
+            </div>
+            <div class="chat-msg-text">${chatEsc(m.message)}</div>
+          </div>`).join('');
+        if (atBottom) el.scrollTop = el.scrollHeight;
+      } catch {
+        el.innerHTML = '<div style="color:var(--danger);text-align:center;padding:20px">Hiba a betöltésnél</div>';
+      }
+    }
+
+    function openChat() {
+      _lastMsgId = -1;
+      document.getElementById('chatOverlay').classList.remove('hidden');
+      loadChatMessages();
+      _chatPoll = setInterval(loadChatMessages, 3000);
+    }
+
+    function closeChat() {
+      document.getElementById('chatOverlay').classList.add('hidden');
+      clearInterval(_chatPoll);
+      _chatPoll = null;
+    }
+
+    async function sendChatMessage() {
+      const username = usernameEl.value.trim();
+      const msg = document.getElementById('chatInput').value.trim();
+      if (!username) { showToast('Add meg a neved a csatlakozás mezőben!'); return; }
+      if (!msg) return;
+      const btn = document.getElementById('chatSend');
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, message: msg }),
+        });
+        if (!res.ok) throw new Error();
+        document.getElementById('chatInput').value = '';
+        await loadChatMessages();
+      } catch {
+        showToast('Hiba az üzenet küldésekor!');
+      }
+      btn.disabled = false;
+    }
+
+    document.getElementById('chatFab').addEventListener('click', openChat);
+    document.getElementById('chatClose').addEventListener('click', closeChat);
+    document.getElementById('chatOverlay').addEventListener('click', e => {
+      if (e.target === document.getElementById('chatOverlay')) closeChat();
+    });
+    document.getElementById('chatSend').addEventListener('click', sendChatMessage);
+    document.getElementById('chatInput').addEventListener('keydown', e => {
+      if (e.key === 'Enter') sendChatMessage();
+    });
+  </script>
+</body>
+</html>

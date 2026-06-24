@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Szoba létrehozása</title>
+  <link rel="stylesheet" href="/static/css/base.css">
+</head>
+<body>
+  <div class="page">
+    <a href="/" class="logo">← Vissza</a>
+    <h1>Szoba létrehozása</h1>
+
+    <div class="field">
+      <label class="label" for="username">Beceneved</label>
+      <input class="input" id="username" type="text" maxlength="24" placeholder="pl. Feri" autocomplete="off">
+    </div>
+
+    <div id="error" class="error-msg"></div>
+
+    <button class="btn btn-primary" id="createBtn">Szoba létrehozása</button>
+  </div>
+
+  <script src="/static/js/session.js"></script>
+  <script>
+    const usernameEl = document.getElementById('username');
+    const errorEl    = document.getElementById('error');
+    const createBtn  = document.getElementById('createBtn');
+
+    usernameEl.value = getSavedUsername();
+
+    createBtn.addEventListener('click', async () => {
+      const username = usernameEl.value.trim();
+      if (!username) { errorEl.textContent = 'Add meg a neved!'; return; }
+
+      createBtn.disabled = true;
+      errorEl.textContent = '';
+
+      try {
+        const sid = await getSession();
+        saveUsername(username);
+
+        const res = await fetch('/api/room', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: sid, username }),
+        });
+
+        if (!res.ok) throw new Error('Hiba a szoba létrehozásakor.');
+        const { code } = await res.json();
+        location.href = `/room/${code}`;
+      } catch (e) {
+        errorEl.textContent = e.message;
+        createBtn.disabled = false;
+      }
+    });
+
+    usernameEl.addEventListener('keydown', e => { if (e.key === 'Enter') createBtn.click(); });
+  </script>
+</body>
+</html>

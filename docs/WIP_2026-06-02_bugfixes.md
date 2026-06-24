@@ -1,0 +1,120 @@
+# WIP — 8 bug fixes session (2026-06-02)
+
+Snapshot taken mid-session because the user is approaching their context limit. Pick this up next session by reading this file first.
+
+## Overview
+
+User requested 8 bug fixes + tests, "act like a senior SW engineer". The follow-up session completed the remaining implementation and test work.
+
+## Status
+
+Completed in follow-up sessions. Current full suite result:
+
+```bash
+timeout 180 venv/bin/pytest -q
+# 142 passed
+```
+
+| # | Fix | Code done | Tests done |
+|---|-----|-----------|------------|
+| 1 | Auto-close prior room when admin opens another | ✅ | ✅ `tests/test_close_prior_room.py` |
+| 2 | One session = one socket per room | ✅ | ✅ `tests/test_connection_manager.py` |
+| 3 | Unique username per room (case-insensitive) | ✅ | ✅ `tests/test_unique_username.py` |
+| 4 | Keep voice channel open after game end (frontend) | ✅ | n/a (no JS test harness) |
+| 5 | Fix voice setup latency (frontend) | ✅ | n/a |
+| 6 | Inactivity kick after one missed round | ✅ | ✅ `tests/test_inactivity_kick.py` |
+| 7 | Restart timer for revealed phase (vote + czar-pick) | ✅ | ✅ `tests/test_voting_timer.py` |
+| 8 | Standalone (1-player) mode | ✅ | ✅ `tests/test_standalone.py` |
+
+Full pytest run: ✅ complete.
+
+## Files changed
+
+### Server
+- [server/main.py](server/main.py)
+  - `ConnectionManager.connect` now closes any prior socket for the same `(room, session)` before storing the new one (Bug 2).
+  - New helpers: `_close_room_with_notice(code, reason)` and `_close_other_rooms_admined_by(session_id, except_code)` (Bug 1).
+  - `api_create_room` calls `_close_other_rooms_admined_by` before creating the new room (Bug 1).
+  - New helper: `_username_taken(room, username, exclude_sid=None)` — case-insensitive (Bug 3).
+  - WS join path checks `_username_taken` before adding to pending; on collision sends `username_taken` event and closes WS with code 4005 (Bug 3).
+  - `approve_player` handler also re-checks collisions (Bug 3 defence in depth).
+  - `start_game` minimum-player check lowered from `< 2` to `< 1` (Bug 8).
+
+- [server/room.py](server/room.py)
+  - `Player` dataclass gained `missed_rounds: int = 0` (Bug 6).
+
+- [server/game.py](server/game.py)
+  - New helpers: `_remove_player(room, sid)` and `_kick_inactive_players(room, manager)` (Bug 6).
+  - `_kick_inactive_players` skips entirely when `len(room.players) <= 1` so a solo player isn't kicked from a standalone session (Bug 6 + Bug 8 interaction).
+  - `_kick_inactive_players` aborts the game (`game_aborted` broadcast, `room.finished = True`) if no players remain.
+  - `reveal_cards` calls `_kick_inactive_players` first, then resets `missed_rounds` for submitters (Bug 6).
+  - `reveal_cards` cancels-and-restarts the timer task when entering `revealed` phase in vote or czar mode (Bug 7).
+  - `skip_revealed_round` skips a revealed/submitting round without points when the czar disconnects, is kicked, or times out.
+  - `start_round` skips disconnected players when assigning the next czar.
+
+### Frontend
+- [static/js/game.js](static/js/game.js)
+  - `onGameEnd` no longer calls `voiceManager?.cleanup()` (Bug 4).
+  - `pagehide` handler now also cleans up the voice manager (so voice still tears down when the player navigates away).
+
+- [static/js/voice.js](static/js/voice.js)
+  - `_handleVoiceReady` now only tears down an existing peer connection if it's in `failed`/`closed`/`disconnected`. `new` and `checking` are left alone so in-flight offer/answer handshakes can complete (Bug 5).
+
+## Tests written
+
+- [tests/test_close_prior_room.py](tests/test_close_prior_room.py) — 4 tests for Bug 1.
+- [tests/test_unique_username.py](tests/test_unique_username.py) — 7 tests for the `_username_taken` helper (Bug 3).
+- [tests/test_inactivity_kick.py](tests/test_inactivity_kick.py) — 6 tests for the kick flow (Bug 6) plus standalone exemption (Bug 8).
+- [tests/test_voting_timer.py](tests/test_voting_timer.py) — tests for fresh vote/czar revealed-phase timers.
+
+## Follow-up session changes
+
+- Added duplicate-socket replacement coverage in [tests/test_connection_manager.py](tests/test_connection_manager.py).
+- Added standalone-mode coverage in [tests/test_standalone.py](tests/test_standalone.py).
+- Wired duplicate-name rejection in [static/js/lobby.js](static/js/lobby.js) and made close code `4005` fatal in [static/js/ws.js](static/js/ws.js), so the newest duplicate-name joiner is forced to choose another name instead of reconnecting forever.
+- Enabled the lobby Start button for one-player rooms in [static/js/lobby.js](static/js/lobby.js).
+- Made the room cleanup task cancellable on FastAPI lifespan shutdown in [server/main.py](server/main.py).
+- Reworked chat endpoint tests in [tests/test_messages.py](tests/test_messages.py) to call endpoint functions directly because `fastapi.testclient.TestClient` hangs in this sandbox even for a minimal app.
+- Updated older czar, multi-pick, and timer tests to match the current rule that all connected players, including the czar, submit cards and idle connected players are kicked.
+- Added [tests/test_submission_change.py](tests/test_submission_change.py) for submission withdrawal and repeated full-hand refresh in the same round.
+- Added czar-disconnect/kicked-czar regressions in [tests/test_disconnect.py](tests/test_disconnect.py) and [tests/test_inactivity_kick.py](tests/test_inactivity_kick.py).
+- Added `/game/<code>` preflight room check and a "Ez a szoba nem létezik" screen for invalid game URLs.
+- Current card-refresh behavior: full-hand refresh can be used repeatedly before submission; per-card swap UI is commented out/dormant.
+
+## Remaining tests
+
+None from the original WIP checklist. Optional future coverage: browser-level test for the duplicate-name prompt/reload flow once a JS/browser test harness exists.
+
+## How to run the suite
+
+```bash
+cd /opt/emberisegellenes_kartyak
+venv/bin/pytest -v
+```
+
+Expected current result: **142 passed**.
+
+## Operational note
+
+After server changes, production must be restarted:
+
+```bash
+sudo systemctl restart emberisegellenes.service
+```
+
+The user has to run this — Claude cannot sudo on this host.
+
+## Design decisions to remember
+
+- **Inactivity threshold**: kick after **1** missed submitting round (the `missed_rounds` field exists for future tunability, but currently triggers on the first miss).
+- **Vote-mode non-voters**: NOT auto-kicked in this iteration. Only submit-phase inactivity triggers a kick. If user wants vote-phase kicks too, add the same sweep at the top of `tally_votes`.
+- **Standalone**: a 1-player room is allowed to start. The solo player acts as both czar and submitter (engine already supports this since "everyone submits"). Inactivity kick is disabled while only one player remains.
+- **Username collision**: case-insensitive, whitespace-trimmed. The pending player gets a `username_taken` event and the WS is closed with code `4005`; `lobby.js` now prompts the latest joiner for another name and reconnects with it.
+- **Czar unavailable**: if the czar disconnects, is kicked, or times out while choosing, the round is skipped without points. Czar rotation skips disconnected players on new rounds.
+- **Hand refresh**: full-hand refresh is repeatable during `submitting` until the player submits. Per-card swap UI is commented out/dormant.
+
+## Resume checklist for the next session
+
+1. Restart production after reviewing the changes: `sudo systemctl restart emberisegellenes.service`.
+2. Smoke-test create/join/start flows in a browser, especially standalone start and duplicate username retry.
+3. Optionally delete or archive this WIP file once you are satisfied.
