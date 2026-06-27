@@ -365,7 +365,8 @@ function onCzarPick(winnerSessionId) {
 function renderBlackCard(card) {
   const el = document.getElementById('blackCard');
   const text = card.text.replace(/_+/g, '<span class="blank"></span>');
-  el.innerHTML = `${text}${card.pick > 1 ? `<span class="pick-label">Húzz ${card.pick}-t</span>` : ''}`;
+  const badge = card.community ? '<span class="community-badge">Ti küldtétek</span>' : '';
+  el.innerHTML = `${text}${card.pick > 1 ? `<span class="pick-label">Húzz ${card.pick}-t</span>` : ''}${badge}`;
 }
 
 function renderSubmissionsViewer(submissions) {

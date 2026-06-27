@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kártyaszavazás – Emberiség Ellenes Kártyák</title>
+  <meta name="robots" content="noindex, follow">
+  <link rel="canonical" href="https://emberisegelleneskartyak.hu/kartyaszavazas">
+
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="manifest" href="/static/site.webmanifest">
+  <meta name="theme-color" content="#000000">
+
+  <link rel="stylesheet" href="/static/css/base.css?v=20260627-community">
+  <style>
+    .vote-page { justify-content: flex-start; }
+    .back-link {
+      color: var(--text-muted);
+      font-size: .85rem;
+      font-weight: 700;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      width: fit-content;
+    }
+    .vote-header { display: flex; flex-direction: column; gap: 8px; }
+    .vote-lead { color: var(--text-muted); font-size: .95rem; line-height: 1.45; }
+    .filter-row { display: flex; gap: 8px; }
+    .filter-btn {
+      flex: 1;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 2px solid var(--grey2);
+      background: var(--grey);
+      color: var(--text-muted);
+      font: inherit;
+      font-weight: 800;
+      font-size: .82rem;
+      cursor: pointer;
+    }
+    .filter-btn.active { border-color: var(--white); color: var(--white); }
+    .idea-list { display: flex; flex-direction: column; gap: 12px; }
+    .idea-card {
+      position: relative;
+      border-radius: var(--card-radius, 12px);
+      padding: 16px 16px 12px;
+      font-weight: 700;
+      line-height: 1.4;
+    }
+    .idea-card.white { background: var(--white); color: var(--black); }
+    .idea-card.black { background: var(--black); color: var(--white); border: 2px solid var(--white); }
+    .idea-text { font-size: .98rem; margin-bottom: 12px; word-break: break-word; }
+    .vote-row { display: flex; gap: 10px; align-items: center; }
+    .vote-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 2px solid currentColor;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      font-weight: 800;
+      font-size: .85rem;
+      cursor: pointer;
+      opacity: .7;
+      transition: opacity .12s, background .12s;
+    }
+    .vote-btn:hover { opacity: 1; }
+    .vote-btn.like.active   { background: rgba(39,174,96,.85);  color: #fff; border-color: transparent; opacity: 1; }
+    .vote-btn.dislike.active{ background: rgba(192,57,43,.85);  color: #fff; border-color: transparent; opacity: 1; }
+    .vote-btn[disabled] { cursor: default; opacity: .5; }
+    .type-tag {
+      position: absolute;
+      top: 10px; right: 12px;
+      font-size: .62rem;
+      font-weight: 800;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      opacity: .45;
+    }
+    .empty, .loading { color: var(--text-muted); text-align: center; padding: 24px 0; }
+  </style>
+</head>
+<body>
+  <main class="page vote-page">
+    <a class="back-link" href="/kartyaotlet">← Ötlet beküldés</a>
+
+    <section class="vote-header">
+      <div class="logo">Kártyaszavazás</div>
+      <p class="vote-lead">A közönség által beküldött kártyaötletek. Szavazz a kedvenceidre – ezek a kártyák a „Ti küldtétek” csomagban játszhatók. Eszközönként egy szavazat kártyánként.</p>
+    </section>
+
+    <section class="filter-row" aria-label="Szűrés típus szerint">
+      <button class="filter-btn active" data-filter="all" type="button">Összes</button>
+      <button class="filter-btn" data-filter="white" type="button">Fehér</button>
+      <button class="filter-btn" data-filter="black" type="button">Fekete</button>
+    </section>
+
+    <div id="ideaList" class="idea-list"><p class="loading">Betöltés…</p></div>
+  </main>
+
+  <script>
+    const listEl = document.getElementById('ideaList');
+    let ideas = [];
+    let filter = 'all';
+
+    function esc(str) {
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function render() {
+      const rows = ideas.filter(i => filter === 'all' || i.card_type === filter);
+      if (rows.length === 0) {
+        listEl.innerHTML = '<p class="empty">Még nincs beküldött kártya ebben a kategóriában.</p>';
+        return;
+      }
+      listEl.innerHTML = rows.map(i => `
+        <div class="idea-card ${i.card_type === 'black' ? 'black' : 'white'}" data-id="${i.id}">
+          <span class="type-tag">${i.card_type === 'black' ? 'Fekete' : 'Fehér'}</span>
+          <div class="idea-text">${esc(i.text)}</div>
+          <div class="vote-row">
+            <button class="vote-btn like ${i.my_vote === 'like' ? 'active' : ''}" data-vote="like">👍 <span>${i.likes}</span></button>
+            <button class="vote-btn dislike ${i.my_vote === 'dislike' ? 'active' : ''}" data-vote="dislike">👎 <span>${i.dislikes}</span></button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function load() {
+      try {
+        const res = await fetch('/api/card-ideas');
+        ideas = await res.json();
+        render();
+      } catch {
+        listEl.innerHTML = '<p class="empty">Nem sikerült betölteni. Frissítsd az oldalt.</p>';
+      }
+    }
+
+    async function castVote(id, vote, buttons) {
+      buttons.forEach(b => b.disabled = true);
+      try {
+        const res = await fetch(`/api/card-ideas/${id}/vote`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vote }),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const idea = ideas.find(i => i.id === id);
+        if (idea) {
+          idea.likes = data.likes;
+          idea.dislikes = data.dislikes;
+          idea.my_vote = data.my_vote;
+        }
+        render();
+      } catch {
+        buttons.forEach(b => b.disabled = false);
+      }
+    }
+
+    listEl.addEventListener('click', e => {
+      const btn = e.target.closest('.vote-btn');
+      if (!btn) return;
+      const card = btn.closest('.idea-card');
+      const id = parseInt(card.dataset.id);
+      castVote(id, btn.dataset.vote, [...card.querySelectorAll('.vote-btn')]);
+    });
+
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        filter = btn.dataset.filter;
+        document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b === btn));
+        render();
+      });
+    });
+
+    load();
+  </script>
+</body>
+</html>

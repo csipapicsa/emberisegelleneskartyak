@@ -58,6 +58,7 @@ class Hand {
         <button class="swap-card-btn" type="button" data-id="${c.id}" title="Kártya cseréje">Csere</button>
         -->
         <span>${esc(c.text)}</span>
+        ${c.community ? '<span class="community-badge">Ti küldtétek</span>' : ''}
       </div>
     `).join('');
     const action = this.action.visible ? `

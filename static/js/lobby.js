@@ -237,9 +237,9 @@ async function loadEditions(currentIds) {
   const selected = currentIds.length > 0 ? currentIds : list.map(e => e.id);
 
   container.innerHTML = list.map(e => `
-    <label class="select-option ${selected.includes(e.id) ? 'selected' : ''}" data-id="${e.id}">
+    <label class="select-option ${selected.includes(e.id) ? 'selected' : ''}" data-id="${e.id}"${e.community ? ' data-community="1"' : ''}>
       <input type="checkbox" ${selected.includes(e.id) ? 'checked' : ''}>
-      ${esc(e.name)}
+      ${esc(e.name)}${e.community ? ' <span class="edition-hint">(csak másik csomaggal)</span>' : ''}
     </label>
   `).join('');
 
@@ -256,6 +256,14 @@ async function loadEditions(currentIds) {
       el.classList.toggle('selected', el.querySelector('input').checked);
     });
   });
+}
+
+// The community "Ti küldtétek" edition can't be played on its own. Returns true
+// when it's selected and no normal edition is — server enforces this too.
+function onlyCommunitySelected() {
+  const checked = [...document.querySelectorAll('#editionList .select-option')]
+    .filter(el => el.querySelector('input').checked);
+  return checked.length > 0 && checked.every(el => el.dataset.community === '1');
 }
 
 function renderConfig(state) {

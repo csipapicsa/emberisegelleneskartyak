@@ -7,6 +7,16 @@ from datetime import datetime, timezone
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "messages.db")
 CARD_IDEA_MAX_LENGTHS = {"white": 280, "black": 360}
 
+# Synthetic "Ti küldtétek" community edition. These cards live in messages.db
+# (card_ideas), not cards.db, so the edition is virtual:
+#   COMMUNITY_EDITION_ID  — sentinel id never stored in cards.db.editions
+#   COMMUNITY_ID_OFFSET   — added to card_ideas.id when building in-game card
+#                           dicts so community ids can't collide with cards.db ids
+COMMUNITY_EDITION_ID = -1
+COMMUNITY_EDITION_NAME = "Ti küldtétek"
+COMMUNITY_ID_OFFSET = 10_000_000
+_CARD_TYPE_TO_GAME = {"black": "Black", "white": "White"}
+
 
 def get_conn() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -60,6 +70,14 @@ def ensure_tables(conn: sqlite3.Connection) -> None:
             "like"     INTEGER NOT NULL DEFAULT 0 CHECK ("like" >= 0),
             dislike    INTEGER NOT NULL DEFAULT 0 CHECK (dislike >= 0),
             created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS card_idea_votes (
+            idea_id    INTEGER NOT NULL,
+            voter_ip   TEXT    NOT NULL,
+            vote       TEXT    NOT NULL CHECK (vote IN ('like', 'dislike')),
+            created_at TEXT    NOT NULL,
+            PRIMARY KEY (idea_id, voter_ip)
         );
     """)
     columns = {row[1] for row in conn.execute("PRAGMA table_info(card_ideas)").fetchall()}
@@ -115,6 +133,107 @@ def save_card_idea(conn: sqlite3.Connection, card_type: str, text: str) -> bool:
     )
     conn.commit()
     return True
+
+
+def get_community_cards(conn: sqlite3.Connection) -> tuple[list[dict], list[dict]]:
+    """Build game-ready card dicts from every submitted card idea.
+
+    Returns (black, white) lists shaped like cards.db rows so they can be mixed
+    into a normal deck: type 'Black'/'White', pick 1, edition_id sentinel,
+    community flag, and an id offset so it can't collide with cards.db ids.
+    """
+    rows = conn.execute("SELECT id, card_type, text FROM card_ideas").fetchall()
+    black, white = [], []
+    for r in rows:
+        card = {
+            "id": r["id"] + COMMUNITY_ID_OFFSET,
+            "text": r["text"],
+            "type": _CARD_TYPE_TO_GAME[r["card_type"]],
+            "pick": 1,
+            "edition_id": COMMUNITY_EDITION_ID,
+            "community": True,
+        }
+        (black if r["card_type"] == "black" else white).append(card)
+    return black, white
+
+
+def list_card_ideas(conn: sqlite3.Connection, voter_ip: str) -> list[dict]:
+    """Every card idea with live like/dislike counts and this IP's own vote."""
+    rows = conn.execute(
+        """
+        SELECT
+            ci.id,
+            ci.card_type,
+            ci.text,
+            ci.created_at,
+            COALESCE(SUM(v.vote = 'like'), 0)    AS likes,
+            COALESCE(SUM(v.vote = 'dislike'), 0) AS dislikes,
+            MAX(CASE WHEN v.voter_ip = ? THEN v.vote END) AS my_vote
+        FROM card_ideas ci
+        LEFT JOIN card_idea_votes v ON v.idea_id = ci.id
+        GROUP BY ci.id
+        ORDER BY likes DESC, ci.id ASC
+        """,
+        (voter_ip,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _refresh_idea_counts(conn: sqlite3.Connection, idea_id: int) -> dict:
+    """Recompute and persist the denormalized like/dislike columns from votes."""
+    row = conn.execute(
+        """
+        SELECT
+            COALESCE(SUM(vote = 'like'), 0)    AS likes,
+            COALESCE(SUM(vote = 'dislike'), 0) AS dislikes
+        FROM card_idea_votes WHERE idea_id = ?
+        """,
+        (idea_id,),
+    ).fetchone()
+    likes, dislikes = row["likes"], row["dislikes"]
+    conn.execute(
+        'UPDATE card_ideas SET "like" = ?, dislike = ? WHERE id = ?',
+        (likes, dislikes, idea_id),
+    )
+    return {"likes": likes, "dislikes": dislikes}
+
+
+def vote_card_idea(conn: sqlite3.Connection, idea_id: int, voter_ip: str, vote: str) -> dict | None:
+    """Cast one vote per IP per card. Toggling the same vote removes it; the
+    opposite vote replaces it. Returns updated counts + my_vote, or None if the
+    idea does not exist."""
+    if vote not in ("like", "dislike"):
+        raise ValueError("invalid vote")
+    if not conn.execute("SELECT 1 FROM card_ideas WHERE id = ?", (idea_id,)).fetchone():
+        return None
+
+    existing = conn.execute(
+        "SELECT vote FROM card_idea_votes WHERE idea_id = ? AND voter_ip = ?",
+        (idea_id, voter_ip),
+    ).fetchone()
+
+    if existing and existing["vote"] == vote:
+        # Same button again → un-vote
+        conn.execute(
+            "DELETE FROM card_idea_votes WHERE idea_id = ? AND voter_ip = ?",
+            (idea_id, voter_ip),
+        )
+        my_vote = None
+    else:
+        now = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            """
+            INSERT INTO card_idea_votes (idea_id, voter_ip, vote, created_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(idea_id, voter_ip) DO UPDATE SET vote = excluded.vote
+            """,
+            (idea_id, voter_ip, vote, now),
+        )
+        my_vote = vote
+
+    counts = _refresh_idea_counts(conn, idea_id)
+    conn.commit()
+    return {"id": idea_id, "my_vote": my_vote, **counts}
 
 
 def add_like(conn: sqlite3.Connection, card_id: int, session_id: str) -> None:

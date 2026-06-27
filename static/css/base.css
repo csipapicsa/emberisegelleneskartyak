@@ -148,6 +148,7 @@ h2 { font-size: 1.1rem; font-weight: 700; color: var(--accent); }
 .select-option.selected { border-color: var(--white); }
 .select-option input[type=checkbox],
 .select-option input[type=radio] { accent-color: var(--white); width: 18px; height: 18px; cursor: pointer; }
+.edition-hint { opacity: .55; font-size: .75rem; font-weight: 400; }
 
 /* Segmented control */
 .seg-control { display: flex; background: var(--grey); border-radius: var(--radius); overflow: hidden; }

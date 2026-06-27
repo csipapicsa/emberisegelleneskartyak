@@ -26,7 +26,7 @@
   <link rel="manifest" href="/static/site.webmanifest">
   <meta name="theme-color" content="#000000">
 
-  <link rel="stylesheet" href="/static/css/base.css">
+  <link rel="stylesheet" href="/static/css/base.css?v=20260627-community">
   <style>
     .room-header { display: flex; align-items: baseline; gap: 12px; }
     .code-badge {
@@ -139,7 +139,7 @@
   <script src="/static/js/session.js"></script>
   <script src="/static/js/ws.js"></script>
   <script src="/static/js/voice.js"></script>
-  <script src="/static/js/lobby.js?v=20260605-self-vote"></script>
+  <script src="/static/js/lobby.js?v=20260627-community"></script>
   <script>
     const code = location.pathname.split('/').pop();
 
@@ -158,6 +158,10 @@
       setTimeout(() => loadEditions([]), 100);
 
       document.getElementById('startBtn').addEventListener('click', () => {
+        if (onlyCommunitySelected()) {
+          showToast("A 'Ti küldtétek' csomag önállóan nem játszható – válassz mellé legalább egy másik csomagot.");
+          return;
+        }
         socket.send('start_game');
       });
     })();

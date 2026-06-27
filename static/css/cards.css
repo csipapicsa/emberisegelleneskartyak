@@ -132,6 +132,20 @@
   font-weight: 600;
 }
 
+/* ── Community ("Ti küldtétek") card badge ────────────────────────────────── */
+.community-badge {
+  position: absolute;
+  bottom: 6px;
+  right: 8px;
+  font-size: .58rem;
+  font-weight: 700;
+  letter-spacing: .02em;
+  opacity: .55;
+  pointer-events: none;
+}
+.black-card .community-badge { color: rgba(255,255,255,.6); }
+.hand-card .community-badge  { color: rgba(0,0,0,.5); }
+
 /* Blank underline in black card text */
 .blank { display: inline-block; min-width: 80px; border-bottom: 2px solid var(--white); }
 

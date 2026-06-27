@@ -17,7 +17,9 @@ from fastapi.responses import FileResponse, HTMLResponse
 
 from server.db import get_conn, get_editions, get_cards_for_editions
 from server.messages_db import get_conn as get_msg_conn, ensure_tables as ensure_msg_tables, \
-    save_message, save_card_idea, add_like, add_dislike, add_comment, get_chat_messages, post_chat_message
+    save_message, save_card_idea, add_like, add_dislike, add_comment, get_chat_messages, post_chat_message, \
+    get_community_cards, list_card_ideas, vote_card_idea, \
+    COMMUNITY_EDITION_ID, COMMUNITY_EDITION_NAME
 from server.session import create_or_get_session
 from server.room import create_room, get_room, delete_room, Player
 from server import game as game_logic
@@ -337,9 +339,12 @@ async def api_list_rooms():
 async def api_editions():
     conn = get_conn()
     try:
-        return get_editions(conn)
+        editions = get_editions(conn)
     finally:
         conn.close()
+    # Append the virtual community edition (cards live in messages.db, not cards.db)
+    editions.append({"id": COMMUNITY_EDITION_ID, "name": COMMUNITY_EDITION_NAME, "community": True})
+    return editions
 
 
 @app.get("/api/config")
@@ -424,6 +429,43 @@ async def api_card_ideas(request: Request):
     if not saved:
         raise HTTPException(400, "A kártyaszöveg megadása kötelező")
     return {"ok": True}
+
+
+def _client_ip(request: Request) -> str:
+    # nginx forwards X-Forwarded-For (and X-Real-IP); take the first hop.
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+@app.get("/api/card-ideas")
+async def api_list_card_ideas(request: Request):
+    conn = get_msg_conn()
+    try:
+        return list_card_ideas(conn, _client_ip(request))
+    finally:
+        conn.close()
+
+
+@app.post("/api/card-ideas/{idea_id}/vote")
+async def api_vote_card_idea(idea_id: int, request: Request):
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise HTTPException(400, "Érvénytelen JSON")
+    vote = body.get("vote") if isinstance(body, dict) else None
+    if vote not in ("like", "dislike"):
+        raise HTTPException(400, "Érvénytelen szavazat")
+
+    conn = get_msg_conn()
+    try:
+        result = vote_card_idea(conn, idea_id, _client_ip(request), vote)
+    finally:
+        conn.close()
+    if result is None:
+        raise HTTPException(404, "Nincs ilyen kártya")
+    return result
 
 
 # ── WebSocket ─────────────────────────────────────────────────────────────────
@@ -548,14 +590,27 @@ async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
         if not room.edition_ids:
             await manager.send(room_code, session_id, {"event": "error", "message": "Válassz legalább egy kártyacsomagot."})
             return
+        real_ids = [e for e in room.edition_ids if e != COMMUNITY_EDITION_ID]
+        include_community = COMMUNITY_EDITION_ID in room.edition_ids
+        if include_community and not real_ids:
+            await manager.send(room_code, session_id, {"event": "error", "message": "A 'Ti küldtétek' csomag önállóan nem játszható – válassz mellé legalább egy másik csomagot."})
+            return
         if len(room.players) < 1:
             await manager.send(room_code, session_id, {"event": "error", "message": "Legalább 1 játékos szükséges."})
             return
         conn = get_conn()
         try:
-            black_cards, white_cards = get_cards_for_editions(conn, room.edition_ids)
+            black_cards, white_cards = get_cards_for_editions(conn, real_ids)
         finally:
             conn.close()
+        if include_community:
+            msg_conn = get_msg_conn()
+            try:
+                c_black, c_white = get_community_cards(msg_conn)
+            finally:
+                msg_conn.close()
+            black_cards += c_black
+            white_cards += c_white
         log_event("game_started", room_code=room_code, player_count=len(room.players))
         await game_logic.start_game(room, black_cards, white_cards, manager)
 
@@ -872,6 +927,8 @@ async def serve_html(full_path: str):
         "create": "create.html",
         "kartyaotlet": "kartyaotlet.html",
         "kartyaotlet.html": "kartyaotlet.html",
+        "kartyaszavazas": "kartyaszavazas.html",
+        "kartyaszavazas.html": "kartyaszavazas.html",
     }
     filename = mapping.get(full_path.strip("/"))
     if filename:
