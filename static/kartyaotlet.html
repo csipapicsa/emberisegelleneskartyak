@@ -77,6 +77,34 @@
       color: var(--white);
       border-color: var(--white);
     }
+    .vote-cta {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      text-align: center;
+      min-height: 142px;
+      border-radius: 12px;
+      padding: 20px 18px;
+      background: linear-gradient(135deg, var(--success) 0%, #1f8b4c 100%);
+      color: #fff;
+      text-decoration: none;
+      cursor: pointer;
+      transition: transform .1s, box-shadow .15s;
+      box-shadow: 0 4px 14px rgba(39,174,96,.35);
+    }
+    .vote-cta:active { transform: scale(.98); }
+    .vote-cta-title {
+      font-weight: 800;
+      font-size: 1.25rem;
+      line-height: 1.25;
+    }
+    .vote-cta-sub {
+      font-weight: 700;
+      font-size: .9rem;
+      opacity: .9;
+    }
     .idea-form {
       display: flex;
       flex-direction: column;
@@ -130,13 +158,17 @@
     <section class="idea-header">
       <div class="logo">Ötlet beküldés</div>
       <p class="idea-lead">Válassz kártyatípust, aztán küldd be az új kártyaszöveget.</p>
-      <a class="back-link" href="/kartyaszavazas">Szavazz a beküldött kártyákra →</a>
     </section>
 
     <section class="type-grid" id="typeGrid" aria-label="Kártyatípus választás">
       <button class="type-btn type-btn-white" type="button" data-type="white">Fehér kártya (válasz) </button>
       <button class="type-btn type-btn-black" type="button" data-type="black">Fekete kártya (kérdés) </button>
     </section>
+
+    <a class="vote-cta" href="/kartyaszavazas">
+      <span class="vote-cta-title">Szavazz a beküldött kártyákra</span>
+      <span class="vote-cta-sub">Lájkold vagy dislájkold a közönség ötleteit →</span>
+    </a>
 
     <form class="idea-form hidden" id="ideaForm" novalidate>
       <div class="idea-type-label" id="selectedTypeLabel"></div>
