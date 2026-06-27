@@ -187,6 +187,7 @@ def test_room_state_restores_revealed_vote_table():
 
         const actionCalls = [];
         const disabledCalls = [];
+        const pickCountCalls = [];
         const context = {
           console,
           encodeURIComponent,
@@ -206,6 +207,7 @@ def test_room_state_restores_revealed_vote_table():
           location: { replace() {} },
           actionCalls,
           disabledCalls,
+          pickCountCalls,
         };
 
         vm.createContext(context);
@@ -215,6 +217,7 @@ def test_room_state_restores_revealed_vote_table():
           hand = {
             setAction(visible, label) { actionCalls.push({ visible, label }); },
             setDisabled(value) { disabledCalls.push(value); },
+            setPickCount(n) { pickCountCalls.push(n); },
           };
           onRoomState({
             event: 'room_state',
@@ -250,6 +253,92 @@ def test_room_state_restores_revealed_vote_table():
         assert.strictEqual(elements.get('statusBar').textContent, 'Szavazz a kedvenced kártyájára!');
         assert.strictEqual(actionCalls.at(-1).visible, false);
         assert.strictEqual(disabledCalls.at(-1), true);
+        assert.strictEqual(pickCountCalls.at(-1), 1);
+        """
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_room_state_restores_multi_pick_count():
+    # First round of a game arrives via the room_state snapshot (the fresh
+    # socket greeting), not a round_start event. onRoomState must still tell the
+    # hand how many cards a multi-blank black card needs, otherwise the hand
+    # keeps its default pickCount of 1 and submits a single card for a pick-2
+    # black card — which the server rejects.
+    result = run_node(
+        """
+        const assert = require('assert');
+        const fs = require('fs');
+        const vm = require('vm');
+
+        const elements = new Map();
+        function element(id) {
+          if (!elements.has(id)) {
+            elements.set(id, {
+              id,
+              style: {},
+              classList: { add() {}, remove() {}, toggle() {} },
+              addEventListener() {},
+              querySelectorAll() { return []; },
+              querySelector() { return null; },
+              getBoundingClientRect() { return { left: 0, top: 0 }; },
+              textContent: '',
+              innerHTML: '',
+            });
+          }
+          return elements.get(id);
+        }
+
+        const pickCountCalls = [];
+        const context = {
+          console,
+          encodeURIComponent,
+          setTimeout,
+          clearTimeout,
+          localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
+          window: { innerWidth: 480, innerHeight: 800, addEventListener() {} },
+          document: {
+            getElementById: element,
+            querySelector() { return element('query'); },
+            querySelectorAll() { return []; },
+          },
+          location: { replace() {} },
+          pickCountCalls,
+        };
+
+        vm.createContext(context);
+        vm.runInContext(fs.readFileSync('static/js/game.js', 'utf8'), context);
+        vm.runInContext(`
+          mySessionId = 'sid_1';
+          hand = {
+            setAction() {},
+            setDisabled() {},
+            setPickCount(n) { pickCountCalls.push(n); },
+          };
+          onRoomState({
+            event: 'room_state',
+            code: '1234',
+            started: true,
+            finished: false,
+            round_num: 1,
+            round_total: 10,
+            timer_seconds: 30,
+            voting_mode: 'czar',
+            prevent_self_vote: true,
+            czar: 'sid_0',
+            admin: 'sid_0',
+            phase: 'submitting',
+            black_card: { id: 100, text: 'black _ _', pick: 2 },
+            players: [
+              { session_id: 'sid_1', username: 'One', score: 0, connected: true, submitted: false },
+              { session_id: 'sid_2', username: 'Two', score: 0, connected: true, submitted: false },
+            ],
+            pending: [],
+          });
+        `, context);
+
+        assert.strictEqual(pickCountCalls.at(-1), 2);
         """
     )
 

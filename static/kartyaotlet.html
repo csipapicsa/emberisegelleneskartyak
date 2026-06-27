@@ -3,8 +3,31 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ötlet beküldés | Emberiség Ellenes Kártyák</title>
+  <title>Ötlet beküldés – Emberiség Ellenes Kártyák</title>
   <meta name="robots" content="noindex, follow">
+  <link rel="canonical" href="https://emberisegelleneskartyak.hu/kartyaotlet">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://emberisegelleneskartyak.hu/kartyaotlet">
+  <meta property="og:title" content="Kártyaötlet beküldése – Emberiség Ellenes Kártyák">
+  <meta property="og:description" content="Küldj be saját kártyaötletet az Emberiség Ellenes Kártyák játékhoz! A legjobb ötletek bekerülhetnek a játékba.">
+  <meta property="og:image" content="https://emberisegelleneskartyak.hu/static/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="Emberiség Ellenes Kártyák">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Kártyaötlet beküldése – Emberiség Ellenes Kártyák">
+  <meta name="twitter:description" content="Küldj be saját kártyaötletet az Emberiség Ellenes Kártyák játékhoz!">
+  <meta name="twitter:image" content="https://emberisegelleneskartyak.hu/static/og-image.png">
+
+  <!-- Icons & Manifest -->
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="manifest" href="/static/site.webmanifest">
+  <meta name="theme-color" content="#000000">
+
   <link rel="stylesheet" href="/static/css/base.css">
   <style>
     .idea-page { justify-content: center; }
@@ -110,8 +133,8 @@
     </section>
 
     <section class="type-grid" id="typeGrid" aria-label="Kártyatípus választás">
-      <button class="type-btn type-btn-white" type="button" data-type="white">Fehér kártya</button>
-      <button class="type-btn type-btn-black" type="button" data-type="black">Fekete kártya</button>
+      <button class="type-btn type-btn-white" type="button" data-type="white">Fehér kártya (válasz) </button>
+      <button class="type-btn type-btn-black" type="button" data-type="black">Fekete kártya (kérdés) </button>
     </section>
 
     <form class="idea-form hidden" id="ideaForm" novalidate>
@@ -128,7 +151,7 @@
       </div>
     </form>
 
-    <div class="success-box hidden" id="successBox">Köszi, az ötletet elmentettük.</div>
+    <div class="success-box hidden" id="successBox">Köszi</div>
   </main>
 
   <script>

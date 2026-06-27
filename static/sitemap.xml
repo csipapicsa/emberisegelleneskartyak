@@ -4,6 +4,18 @@
     <loc>https://emberisegelleneskartyak.hu/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
-    <lastmod>2026-04-21</lastmod>
+    <lastmod>2026-06-25</lastmod>
+  </url>
+  <url>
+    <loc>https://emberisegelleneskartyak.hu/create</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <lastmod>2026-06-25</lastmod>
+  </url>
+  <url>
+    <loc>https://emberisegelleneskartyak.hu/join</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+    <lastmod>2026-06-25</lastmod>
   </url>
 </urlset>

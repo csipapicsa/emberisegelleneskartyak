@@ -1,7 +1,15 @@
 [ 
   {
+    "date": "2026-06-27-16",
+    "message": "Negyedik kiadás kártyái javítva."
+  },
+  {
+    "date": "2026-06-25-22",
+    "message": "Két választásos fekete kártyánál volt bug, javítva. Első körben befagyott a játék ha kettőt kellett játszani."
+  },
+  {
     "date": "2026-06-25-16",
-    "message": "Kártya ötleteiteket várom sok szeretettel"
+    "message": "Kártya ötleteiteket várom sok szeretettel, és már lehet rakni több kártyát is."
   },
   {
     "date": "2026-06-17-21",

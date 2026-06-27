@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Emberiség Ellenes Kártyák — Ingyenes Online Kártyajáték Magyarul</title>
   <meta name="description" content="Játssz barátaiddal az Emberiség Ellenes Kártyák online kártyajátékkal — a Cards Against Humanity ingyenes magyar verziójával. Hozz létre szobát, hívj meg barátokat, és szórakozzatok! Regisztráció nélkül.">
-  <meta name="keywords" content="emberiség ellenes kártyák, kártyajáték online, cards against humanity magyarul, online kártyajáték barátokkal, vicces kártyajáték, magyar kártyajáték, ingyenes kártyajáték">
   <meta name="author" content="Győri Gergő">
   <meta name="robots" content="index, follow">
   <link rel="canonical" href="https://emberisegelleneskartyak.hu/">
@@ -27,6 +26,11 @@
   <meta name="twitter:title" content="Emberiség Ellenes Kártyák — Ingyenes Online Kártyajáték Magyarul">
   <meta name="twitter:description" content="Játssz barátaiddal az Emberiség Ellenes Kártyák online kártyajátékkal — a Cards Against Humanity ingyenes magyar verziójával.">
   <meta name="twitter:image" content="https://emberisegelleneskartyak.hu/static/og-image.png">
+
+  <!-- Icons & Manifest -->
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="manifest" href="/static/site.webmanifest">
+  <meta name="theme-color" content="#000000">
 
   <link rel="stylesheet" href="/static/css/base.css">
   <style>
@@ -202,7 +206,7 @@
   ════════════════════════════════════════ -->
   <div class="snap-section" id="sec1">
     <div class="page">
-      <div class="logo">Emberiség Ellenes Kártyák</div>
+      <h1 class="logo">Emberiség Ellenes Kártyák</h1>
 
       <div class="card-preview">
         <div class="mini-black">Anya, mi ez a szag?</div>
@@ -341,19 +345,41 @@
 <div id="toast"></div>
 
 <script type="application/ld+json">
-{
-  "@context": "https://schema.org",
-  "@type": "WebApplication",
-  "name": "Emberiség Ellenes Kártyák",
-  "url": "https://emberisegelleneskartyak.hu/",
-  "description": "Ingyenes online kártyajáték magyarul — a Cards Against Humanity magyar verziója. Hozz létre szobát, hívj meg barátokat, és szórakozzatok regisztráció nélkül.",
-  "applicationCategory": "GameApplication",
-  "operatingSystem": "Web Browser",
-  "inLanguage": "hu",
-  "isAccessibleForFree": true,
-  "author": { "@type": "Person", "name": "Győri Gergő" },
-  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "HUF" }
-}
+[
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Emberiség Ellenes Kártyák",
+    "url": "https://emberisegelleneskartyak.hu/",
+    "description": "Ingyenes online kártyajáték magyarul — a Cards Against Humanity magyar verziója. Hozz létre szobát, hívj meg barátokat, és szórakozzatok regisztráció nélkül.",
+    "applicationCategory": "GameApplication",
+    "operatingSystem": "Web Browser",
+    "inLanguage": "hu",
+    "isAccessibleForFree": true,
+    "author": { "@type": "Person", "name": "Győri Gergő" },
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "HUF" }
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "Emberiség Ellenes Kártyák",
+    "url": "https://emberisegelleneskartyak.hu/",
+    "inLanguage": "hu",
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": "https://emberisegelleneskartyak.hu/join?code={search_term_string}",
+      "query-input": "required name=search_term_string"
+    }
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "Emberiség Ellenes Kártyák",
+    "url": "https://emberisegelleneskartyak.hu/",
+    "logo": "https://emberisegelleneskartyak.hu/static/og-image.png",
+    "founder": { "@type": "Person", "name": "Győri Gergő" }
+  }
+]
 </script>
 <script src="/static/js/session.js"></script>
 <script>

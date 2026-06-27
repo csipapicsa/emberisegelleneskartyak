@@ -1,0 +1,11 @@
+{
+  "name": "Emberiség Ellenes Kártyák",
+  "short_name": "EEK",
+  "description": "Ingyenes online kártyajáték magyarul — Cards Against Humanity magyar verziója",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "lang": "hu",
+  "icons": []
+}

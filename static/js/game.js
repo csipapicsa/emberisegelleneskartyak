@@ -143,6 +143,7 @@ function onRoomState(state) {
         player_count: (state.players || []).length,
       });
     }
+    hand.setPickCount(state.black_card.pick || 1);
     hand.setDisabled(hasSubmitted || state.phase !== 'submitting');
     showNewHandBtn(state.phase === 'submitting' && !hasSubmitted);
   }

@@ -3,7 +3,29 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>Játék</title>
+  <title>Játék – Emberiség Ellenes Kártyák</title>
+  <meta name="robots" content="noindex, follow">
+
+  <!-- Open Graph (for sharing game links) -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Játssz az Emberiség Ellenes Kártyák online játékkal!">
+  <meta property="og:description" content="Online kártyajáték barátokkal — a Cards Against Humanity ingyenes magyar verziója. Regisztráció nélkül.">
+  <meta property="og:image" content="https://emberisegelleneskartyak.hu/static/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:site_name" content="Emberiség Ellenes Kártyák">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Játssz az Emberiség Ellenes Kártyák online játékkal!">
+  <meta name="twitter:description" content="Online kártyajáték barátokkal — a Cards Against Humanity ingyenes magyar verziója. Regisztráció nélkül.">
+  <meta name="twitter:image" content="https://emberisegelleneskartyak.hu/static/og-image.png">
+
+  <!-- Icons & Manifest -->
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="manifest" href="/static/site.webmanifest">
+  <meta name="theme-color" content="#000000">
+
   <link rel="stylesheet" href="/static/css/base.css">
   <link rel="stylesheet" href="/static/css/cards.css?v=20260617-vote-disabled-gray">
   <link rel="stylesheet" href="/static/css/game.css">
@@ -127,7 +149,7 @@
   <script src="/static/js/ws.js"></script>
   <script src="/static/js/voice.js"></script>
   <script src="/static/js/hand.js"></script>
-  <script src="/static/js/game.js?v=20260617-czar-self-vote"></script>
+  <script src="/static/js/game.js?v=20260624-multipick-firstround"></script>
   <script>
     const code = location.pathname.split('/').pop();
     (async () => {
