@@ -76,6 +76,8 @@ def json_request(payload, headers=None) -> Request:
 def test_community_cards_convert_type_and_metadata(db):
     save_card_idea(db, "black", "Mi a baj?")
     save_card_idea(db, "white", "Egy fehér válasz.")
+    db.execute("UPDATE card_ideas SET approved = 1")
+    db.commit()
     black, white = get_community_cards(db)
     assert len(black) == 1 and len(white) == 1
     b = black[0]
@@ -89,6 +91,8 @@ def test_community_cards_convert_type_and_metadata(db):
 def test_community_card_ids_are_offset(db):
     save_card_idea(db, "white", "Eltolt azonosító.")
     idea_id = db.execute("SELECT id FROM card_ideas").fetchone()[0]
+    db.execute("UPDATE card_ideas SET approved = 1 WHERE id = ?", (idea_id,))
+    db.commit()
     _, white = get_community_cards(db)
     assert white[0]["id"] == idea_id + COMMUNITY_ID_OFFSET
     assert white[0]["id"] >= COMMUNITY_ID_OFFSET
@@ -97,6 +101,24 @@ def test_community_card_ids_are_offset(db):
 def test_community_cards_empty_when_no_ideas(db):
     black, white = get_community_cards(db)
     assert black == [] and white == []
+
+
+def test_community_cards_exclude_unapproved(db):
+    save_card_idea(db, "black", "Jóváhagyatlan ötlet.")
+    black, white = get_community_cards(db)
+    assert black == [] and white == []
+
+
+def test_community_cards_use_number_of_white_cards_as_pick(db):
+    save_card_idea(db, "black", "Két üres hely ____ és ____.")
+    idea_id = db.execute("SELECT id FROM card_ideas").fetchone()[0]
+    db.execute(
+        "UPDATE card_ideas SET approved = 1, number_of_white_cards = 2 WHERE id = ?",
+        (idea_id,),
+    )
+    db.commit()
+    black, _ = get_community_cards(db)
+    assert black[0]["pick"] == 2
 
 
 # ── list_card_ideas ───────────────────────────────────────────────────────────

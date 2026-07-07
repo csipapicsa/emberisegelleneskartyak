@@ -84,7 +84,7 @@ def test_ensure_tables_creates_card_ideas_table_with_vote_counters(db):
     ).fetchall()}
     columns = {r[1] for r in db.execute("PRAGMA table_info(card_ideas)").fetchall()}
     assert "card_ideas" in tables
-    assert {"like", "dislike"}.issubset(columns)
+    assert {"like", "dislike", "approved", "seen_by_admin", "number_of_white_cards"}.issubset(columns)
 
 
 def test_post_and_retrieve_message(db):

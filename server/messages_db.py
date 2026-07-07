@@ -64,12 +64,15 @@ def ensure_tables(conn: sqlite3.Connection) -> None:
         );
 
         CREATE TABLE IF NOT EXISTS card_ideas (
-            id         INTEGER PRIMARY KEY AUTOINCREMENT,
-            card_type  TEXT NOT NULL CHECK (card_type IN ('white', 'black')),
-            text       TEXT NOT NULL,
-            "like"     INTEGER NOT NULL DEFAULT 0 CHECK ("like" >= 0),
-            dislike    INTEGER NOT NULL DEFAULT 0 CHECK (dislike >= 0),
-            created_at TEXT NOT NULL
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            card_type             TEXT NOT NULL CHECK (card_type IN ('white', 'black')),
+            text                  TEXT NOT NULL,
+            "like"                INTEGER NOT NULL DEFAULT 0 CHECK ("like" >= 0),
+            dislike               INTEGER NOT NULL DEFAULT 0 CHECK (dislike >= 0),
+            approved              INTEGER NOT NULL DEFAULT 0,
+            seen_by_admin         INTEGER NOT NULL DEFAULT 0,
+            number_of_white_cards INTEGER NOT NULL DEFAULT 1,
+            created_at            TEXT NOT NULL
         );
 
         CREATE TABLE IF NOT EXISTS card_idea_votes (
@@ -85,6 +88,12 @@ def ensure_tables(conn: sqlite3.Connection) -> None:
         conn.execute('ALTER TABLE card_ideas ADD COLUMN "like" INTEGER NOT NULL DEFAULT 0 CHECK ("like" >= 0)')
     if "dislike" not in columns:
         conn.execute("ALTER TABLE card_ideas ADD COLUMN dislike INTEGER NOT NULL DEFAULT 0 CHECK (dislike >= 0)")
+    if "approved" not in columns:
+        conn.execute("ALTER TABLE card_ideas ADD COLUMN approved INTEGER NOT NULL DEFAULT 0")
+    if "seen_by_admin" not in columns:
+        conn.execute("ALTER TABLE card_ideas ADD COLUMN seen_by_admin INTEGER NOT NULL DEFAULT 0")
+    if "number_of_white_cards" not in columns:
+        conn.execute("ALTER TABLE card_ideas ADD COLUMN number_of_white_cards INTEGER NOT NULL DEFAULT 1")
     conn.commit()
 
 
@@ -136,20 +145,24 @@ def save_card_idea(conn: sqlite3.Connection, card_type: str, text: str) -> bool:
 
 
 def get_community_cards(conn: sqlite3.Connection) -> tuple[list[dict], list[dict]]:
-    """Build game-ready card dicts from every submitted card idea.
+    """Build game-ready card dicts from every approved card idea.
 
     Returns (black, white) lists shaped like cards.db rows so they can be mixed
-    into a normal deck: type 'Black'/'White', pick 1, edition_id sentinel,
-    community flag, and an id offset so it can't collide with cards.db ids.
+    into a normal deck: type 'Black'/'White', pick (black cards only, from
+    number_of_white_cards), edition_id sentinel, community flag, and an id
+    offset so it can't collide with cards.db ids. Only approved==1 rows are
+    included so unreviewed submissions never show up in-game.
     """
-    rows = conn.execute("SELECT id, card_type, text FROM card_ideas").fetchall()
+    rows = conn.execute(
+        "SELECT id, card_type, text, number_of_white_cards FROM card_ideas WHERE approved = 1"
+    ).fetchall()
     black, white = [], []
     for r in rows:
         card = {
             "id": r["id"] + COMMUNITY_ID_OFFSET,
             "text": r["text"],
             "type": _CARD_TYPE_TO_GAME[r["card_type"]],
-            "pick": 1,
+            "pick": r["number_of_white_cards"],
             "edition_id": COMMUNITY_EDITION_ID,
             "community": True,
         }
