@@ -77,8 +77,11 @@ class Hand {
       const c          = this.cards[i];
       const isSelected = this.selected.includes(c.id);
       const isActive   = i === this._activeIdx;
+      const next       = this.cards[i + 1];
+      const precedesSelected = !isSelected && next && this.selected.includes(next.id);
       el.className = 'hand-card'
         + (isSelected ? ' selected' : isActive ? ' active' : '')
+        + (precedesSelected ? ' before-selected' : '')
         + (this.disabled || this.submitted ? ' disabled' : '');
 
       const badge = el.querySelector('.pick-badge');
@@ -117,7 +120,7 @@ class Hand {
       e.preventDefault();
       this._onMove(e.touches[0].clientX);
     }, { passive: false });
-    el.addEventListener('touchend', e => this._onEnd(e.changedTouches[0].clientX));
+    el.addEventListener('touchend', e => this._onEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY));
     el.addEventListener('touchcancel', () => { this._dragging = false; });
 
     el.addEventListener('mousedown', e => {
@@ -125,7 +128,7 @@ class Hand {
       this._onStart(e.clientX);
     });
     window.addEventListener('mousemove', e => { if (this._dragging) this._onMove(e.clientX); });
-    window.addEventListener('mouseup',   e => { if (this._dragging) this._onEnd(e.clientX); });
+    window.addEventListener('mouseup',   e => { if (this._dragging) this._onEnd(e.clientX, e.clientY); });
 
     // Egyenkénti kártyacsere későbbi használatra:
     // this.track.addEventListener('click', e => {
@@ -172,7 +175,7 @@ class Hand {
     }
   }
 
-  _onEnd(x) {
+  _onEnd(x, y) {
     if (!this._dragging) return;
     this._dragging = false;
 
@@ -189,8 +192,12 @@ class Hand {
       return;
     }
 
-    // Tap
-    const idx = this._idxAtX(x);
+    // Tap — resolve against whatever card is actually rendered under the
+    // finger, not fixed-step math. Selected/before-selected cards shift
+    // their own margin for visual breathing room, which the fixed-step
+    // formula (_idxAtX, still used for the cheap in-drag preview) has no way
+    // to know about, so it can't be trusted for the real tap decision.
+    const idx = this._idxAtPoint(x, y);
     if (idx < 0 || idx >= this._itemCount()) return;
 
     if (this._isActionIdx(idx)) {
@@ -214,13 +221,27 @@ class Hand {
     }, this.holdDuration);
   }
 
-  // Calculate card index from client X using math (no getBoundingClientRect in hot path)
+  // Calculate card index from client X using math (no getBoundingClientRect in hot path).
+  // Cheap approximation used only for the live "which card is under the
+  // finger" preview while actively dragging — a frame or two of imprecision
+  // there is harmless since it's not the final decision.
   _idxAtX(clientX) {
     const trackRect = this.track.getBoundingClientRect();
     const localX    = clientX - trackRect.left;
     if (localX < 0 || !this._itemCount()) return -1;
     const idx = Math.floor(localX / this._CARD_STEP);
     return Math.min(Math.max(0, idx), this._itemCount() - 1);
+  }
+
+  // Resolve a tap against the real rendered card at that point (one call per
+  // gesture end, so a layout hit-test here is cheap) — correct regardless of
+  // any per-card margin/transform changes from selection state.
+  _idxAtPoint(clientX, clientY) {
+    const el = document.elementFromPoint(clientX, clientY)?.closest('.hand-card');
+    if (!el) return -1;
+    if (el.dataset.action !== undefined) return this.cards.length;
+    const idx = parseInt(el.dataset.idx, 10);
+    return Number.isNaN(idx) ? -1 : idx;
   }
 
   _confirmCard(idx) {

@@ -27,8 +27,9 @@
   <meta name="theme-color" content="#000000">
 
   <link rel="stylesheet" href="/static/css/base.css?v=20260627-community">
-  <link rel="stylesheet" href="/static/css/cards.css?v=20260627-community">
+  <link rel="stylesheet" href="/static/css/cards.css?v=20260707-selectfix2">
   <link rel="stylesheet" href="/static/css/game.css">
+  <link rel="stylesheet" href="/static/css/chat.css?v=20260707-chat2">
 </head>
 <body>
   <div id="roomNotFound" class="page hidden" style="justify-content:center;align-items:center;text-align:center;gap:24px">
@@ -93,7 +94,7 @@
   <div class="players-panel-overlay" id="panelOverlay" onclick="togglePlayers()"></div>
 
   <!-- FAB buttons -->
-  <button class="feedback-btn" id="feedbackBtn" title="Visszajelzés">💬</button>
+  <button class="chat-btn" id="chatBtn" title="Chat">💬</button>
   <button class="scores-fab" id="scoresFab" title="Pontok">🏆</button>
 
   <!-- Card confirm modal -->
@@ -109,21 +110,17 @@
     </div>
   </div>
 
-  <!-- Feedback modal -->
-  <div class="overlay hidden" id="feedbackModal">
-    <div class="modal">
-      <h2>Visszajelzés a kártyáról</h2>
-      <div class="modal-actions" style="flex-wrap:wrap;gap:8px">
-        <button class="btn btn-secondary" onclick="sendFeedback('like')">👍 Tetszik</button>
-        <button class="btn btn-secondary" onclick="sendFeedback('dislike')">👎 Nem tetszik</button>
+  <!-- Chat modal -->
+  <div class="overlay hidden" id="chatModal">
+    <div class="modal chat-modal">
+      <div class="chat-modal-header">
+        <h2>Chat</h2>
+        <button class="chat-close-btn" id="chatCloseBtn">✕</button>
       </div>
-      <div class="field">
-        <label class="label" for="feedbackComment">Komment (opcionális)</label>
-        <input class="input" id="feedbackComment" type="text" maxlength="500" placeholder="Írd le a véleményed...">
-      </div>
-      <div class="modal-actions">
-        <button class="btn btn-secondary" onclick="document.getElementById('feedbackModal').classList.add('hidden')">Bezár</button>
-        <button class="btn btn-primary" onclick="sendComment()">Küldés</button>
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="chat-input-row">
+        <input class="input" id="chatInput" type="text" maxlength="500" placeholder="Írj üzenetet...">
+        <button class="btn btn-primary" id="chatSendBtn">Küldés</button>
       </div>
     </div>
   </div>
@@ -148,8 +145,9 @@
   <script src="/static/js/session.js"></script>
   <script src="/static/js/ws.js"></script>
   <script src="/static/js/voice.js"></script>
-  <script src="/static/js/hand.js?v=20260627-community"></script>
-  <script src="/static/js/game.js?v=20260627-community"></script>
+  <script src="/static/js/chat.js?v=20260707-backtrap"></script>
+  <script src="/static/js/hand.js?v=20260707-taphit"></script>
+  <script src="/static/js/game.js?v=20260707-chat"></script>
   <script>
     const code = location.pathname.split('/').pop();
     (async () => {

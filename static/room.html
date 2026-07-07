@@ -27,6 +27,7 @@
   <meta name="theme-color" content="#000000">
 
   <link rel="stylesheet" href="/static/css/base.css?v=20260627-community">
+  <link rel="stylesheet" href="/static/css/chat.css?v=20260707-chat2">
   <style>
     .room-header { display: flex; align-items: baseline; gap: 12px; }
     .code-badge {
@@ -136,10 +137,27 @@
 
   <div id="toast"></div>
 
+  <!-- Chat -->
+  <button class="chat-btn" id="chatBtn" title="Chat">💬</button>
+  <div class="overlay hidden" id="chatModal">
+    <div class="modal chat-modal">
+      <div class="chat-modal-header">
+        <h2>Chat</h2>
+        <button class="chat-close-btn" id="chatCloseBtn">✕</button>
+      </div>
+      <div class="chat-messages" id="chatMessages"></div>
+      <div class="chat-input-row">
+        <input class="input" id="chatInput" type="text" maxlength="500" placeholder="Írj üzenetet...">
+        <button class="btn btn-primary" id="chatSendBtn">Küldés</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/static/js/session.js"></script>
   <script src="/static/js/ws.js"></script>
   <script src="/static/js/voice.js"></script>
-  <script src="/static/js/lobby.js?v=20260627-community"></script>
+  <script src="/static/js/chat.js?v=20260707-backtrap"></script>
+  <script src="/static/js/lobby.js?v=20260707-chat"></script>
   <script>
     const code = location.pathname.split('/').pop();
 

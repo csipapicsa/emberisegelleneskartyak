@@ -157,24 +157,6 @@
   cursor: pointer;
 }
 
-/* Feedback button */
-.feedback-btn {
-  position: fixed;
-  right: 12px; bottom: 24px;
-  width: 44px; height: 44px;
-  border-radius: 22px;
-  background: var(--grey2);
-  border: none;
-  color: var(--white);
-  font-size: 1.1rem;
-  cursor: grab;
-  display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 2px 8px rgba(0,0,0,.4);
-  z-index: 20;
-  touch-action: none;
-  user-select: none;
-}
-
 /* Winner announcement overlay */
 .winner-overlay {
   position: fixed; inset: 0;

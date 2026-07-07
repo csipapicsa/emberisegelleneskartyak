@@ -54,6 +54,9 @@ class FakeManager:
     async def broadcast(self, room_code: str, data: dict) -> None:
         self._broadcasts[room_code].append(data)
 
+    async def broadcast_all(self, room_code: str, data: dict) -> None:
+        self._broadcasts[room_code].append(data)
+
     # ── Query helpers ─────────────────────────────────────────────────────────
 
     def broadcasts(self, room_code: str) -> list[dict]:

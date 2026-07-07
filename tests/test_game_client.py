@@ -64,6 +64,7 @@ def test_request_new_hand_keeps_action_visible():
         };
 
         vm.createContext(context);
+        vm.runInContext(fs.readFileSync('static/js/chat.js', 'utf8'), context);
         vm.runInContext(fs.readFileSync('static/js/game.js', 'utf8'), context);
         vm.runInContext(`
           hand = { setAction(visible, label) { actionCalls.push({ visible, label }); } };
@@ -131,6 +132,7 @@ def test_vote_renderer_disables_own_submission_when_self_vote_prevented():
         };
 
         vm.createContext(context);
+        vm.runInContext(fs.readFileSync('static/js/chat.js', 'utf8'), context);
         vm.runInContext(fs.readFileSync('static/js/game.js', 'utf8'), context);
         vm.runInContext(`
           mySessionId = 'sid_1';
@@ -211,6 +213,7 @@ def test_room_state_restores_revealed_vote_table():
         };
 
         vm.createContext(context);
+        vm.runInContext(fs.readFileSync('static/js/chat.js', 'utf8'), context);
         vm.runInContext(fs.readFileSync('static/js/game.js', 'utf8'), context);
         vm.runInContext(`
           mySessionId = 'sid_1';
@@ -308,6 +311,7 @@ def test_room_state_restores_multi_pick_count():
         };
 
         vm.createContext(context);
+        vm.runInContext(fs.readFileSync('static/js/chat.js', 'utf8'), context);
         vm.runInContext(fs.readFileSync('static/js/game.js', 'utf8'), context);
         vm.runInContext(`
           mySessionId = 'sid_1';

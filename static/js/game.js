@@ -83,6 +83,8 @@ async function initGame(code, sid) {
 
   socket.connect();
 
+  initChat(socket);
+
   voiceManager = new VoiceManager(socket, sid);
 
   // Show buttons immediately for every player — state from localStorage
@@ -171,7 +173,6 @@ function onRoundStart(msg) {
   hand.setDisabled(false);
 
   setTimer(msg.timer_seconds);
-  hideFeedbackBtn();
   document.getElementById('winnerOverlay').classList.add('hidden');
   showNewHandBtn(true);
 }
@@ -321,10 +322,9 @@ function hideGameShell() {
   document.getElementById('playersPanel')?.classList.remove('open');
   const panelOverlay = document.getElementById('panelOverlay');
   if (panelOverlay) panelOverlay.style.display = 'none';
-  document.getElementById('feedbackBtn')?.classList.add('hidden');
+  hideChatUi();
   document.getElementById('scoresFab')?.classList.add('hidden');
   document.getElementById('confirmModal')?.classList.add('hidden');
-  document.getElementById('feedbackModal')?.classList.add('hidden');
   document.getElementById('winnerOverlay')?.classList.add('hidden');
   voiceManager?.cleanup();
 }
@@ -489,91 +489,9 @@ function getWinnerCardId(winnerSid) {
   return sub ? sub.cards[0]?.id : null;
 }
 
-// ── Feedback ──────────────────────────────────────────────────────────────────
-
-function showFeedbackBtn()  { /* always visible during game */ }
-function hideFeedbackBtn()  { /* always visible during game */ }
-
-function makeDraggableFab(btnId, storeKey, defaultX, defaultY, onTap) {
-  const btn = document.getElementById(btnId);
-  const SIZE = 44;
-
-  function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
-  function applyPos(x, y) {
-    btn.style.left = x + 'px'; btn.style.top = y + 'px';
-    btn.style.right = ''; btn.style.bottom = '';
-  }
-
-  try {
-    const saved = JSON.parse(localStorage.getItem(storeKey));
-    // Validate saved position is actually on-screen (guards against stale/wrong-screen values)
-    if (saved && typeof saved.x === 'number'
-        && saved.x >= SIZE && saved.x <= window.innerWidth - SIZE
-        && saved.y >= 0 && saved.y <= window.innerHeight - SIZE) {
-      applyPos(saved.x, saved.y);
-    } else {
-      localStorage.removeItem(storeKey);
-      applyPos(defaultX(), defaultY());
-    }
-  } catch { applyPos(defaultX(), defaultY()); }
-
-  let dragging = false, startX, startY, origX, origY, moved;
-
-  function onStart(cx, cy) {
-    dragging = true; moved = false;
-    startX = cx; startY = cy;
-    origX = btn.getBoundingClientRect().left;
-    origY = btn.getBoundingClientRect().top;
-    btn.style.cursor = 'grabbing';
-  }
-  function onMove(cx, cy) {
-    if (!dragging) return;
-    const dx = cx - startX, dy = cy - startY;
-    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
-    applyPos(clamp(origX + dx, 0, window.innerWidth - SIZE), clamp(origY + dy, 0, window.innerHeight - SIZE));
-  }
-  function onEnd() {
-    if (!dragging) return;
-    dragging = false; btn.style.cursor = 'grab';
-    try { localStorage.setItem(storeKey, JSON.stringify({ x: parseFloat(btn.style.left), y: parseFloat(btn.style.top) })); } catch {}
-    if (!moved) onTap();
-  }
-
-  btn.addEventListener('mousedown', e => { e.preventDefault(); onStart(e.clientX, e.clientY); });
-  window.addEventListener('mousemove', e => onMove(e.clientX, e.clientY));
-  window.addEventListener('mouseup', onEnd);
-  btn.addEventListener('touchstart', e => { e.preventDefault(); onStart(e.touches[0].clientX, e.touches[0].clientY); }, { passive: false });
-  window.addEventListener('touchmove', e => { if (dragging) { e.preventDefault(); onMove(e.touches[0].clientX, e.touches[0].clientY); } }, { passive: false });
-  window.addEventListener('touchend', onEnd);
-}
-
-makeDraggableFab('feedbackBtn', 'fabPos',
-  () => window.innerWidth - 56, () => window.innerHeight - 280,
-  openFeedback);
-
 makeDraggableFab('scoresFab', 'scoresPos',
   () => window.innerWidth - 56, () => window.innerHeight - 220,
   togglePlayers);
-
-function openFeedback() {
-  document.getElementById('feedbackModal').classList.remove('hidden');
-}
-
-function sendFeedback(type) {
-  if (!currentBlack) return;
-  socket.send('feedback', { card_id: currentBlack.id, type });
-  document.getElementById('feedbackModal').classList.add('hidden');
-  showToast('Köszönjük a visszajelzést!');
-}
-
-function sendComment() {
-  const text = document.getElementById('feedbackComment').value.trim();
-  if (!text || !currentBlack) return;
-  socket.send('feedback', { card_id: currentBlack.id, type: 'comment', comment: text });
-  document.getElementById('feedbackComment').value = '';
-  document.getElementById('feedbackModal').classList.add('hidden');
-  showToast('Komment elküldve!');
-}
 
 // ── Players panel toggle ──────────────────────────────────────────────────────
 

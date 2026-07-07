@@ -17,9 +17,10 @@ from fastapi.responses import FileResponse, HTMLResponse
 
 from server.db import get_conn, get_editions, get_cards_for_editions
 from server.messages_db import get_conn as get_msg_conn, ensure_tables as ensure_msg_tables, \
-    save_message, save_card_idea, add_like, add_dislike, add_comment, get_chat_messages, post_chat_message, \
+    save_message, save_card_idea, get_chat_messages, post_chat_message, \
     get_community_cards, list_card_ideas, vote_card_idea, \
     COMMUNITY_EDITION_ID, COMMUNITY_EDITION_NAME
+from server import chat_db
 from server.session import create_or_get_session
 from server.room import create_room, get_room, delete_room, Player
 from server import game as game_logic
@@ -30,6 +31,17 @@ BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
 with open(os.path.join(BASE_DIR, "config.json")) as f:
     CONFIG = json.load(f)
+
+
+def _delete_room_and_chat(code: str) -> None:
+    """Drop the in-memory room and its chat history together — chat is only
+    ever meant to outlive the room it belongs to, never longer."""
+    delete_room(code)
+    conn = chat_db.get_conn()
+    try:
+        chat_db.delete_room_messages(conn, code)
+    finally:
+        conn.close()
 
 
 async def _room_cleanup_task() -> None:
@@ -72,7 +84,7 @@ async def _room_cleanup_task() -> None:
                     username=admin.username if admin else None,
                     player_count=len(room.players),
                 )
-            delete_room(code)
+            _delete_room_and_chat(code)
 
 
 @asynccontextmanager
@@ -96,6 +108,14 @@ app = FastAPI(lifespan=lifespan)
 _startup_conn = get_msg_conn()
 ensure_msg_tables(_startup_conn)
 _startup_conn.close()
+
+# Ensure chat.db tables exist. Room chat is scoped to in-memory rooms, which
+# are all gone on process start, so any leftover rows are orphaned — wipe them.
+_chat_startup_conn = chat_db.get_conn()
+chat_db.ensure_tables(_chat_startup_conn)
+_chat_startup_conn.execute("DELETE FROM room_chat_messages")
+_chat_startup_conn.commit()
+_chat_startup_conn.close()
 
 
 @app.get("/api/chat")
@@ -167,6 +187,15 @@ class ConnectionManager:
         for sid in list(room.players.keys()):
             await self.send(room_code, sid, data)
 
+    async def broadcast_all(self, room_code: str, data: dict) -> None:
+        """Send to every connected socket in the room, including players still
+        waiting on admin approval — used for chat, which isn't gated on that."""
+        for ws in list(self._sockets.get(room_code, {}).values()):
+            try:
+                await ws.send_json(data)
+            except Exception:
+                pass
+
 
 manager = ConnectionManager()
 
@@ -184,6 +213,22 @@ def _username_taken(room, username: str, exclude_sid: str | None = None) -> bool
         if p.username.strip().casefold() == norm:
             return True
     return False
+
+
+async def _send_chat_history(room_code: str, session_id: str) -> None:
+    conn = chat_db.get_conn()
+    try:
+        history = chat_db.get_messages(conn, room_code)
+    finally:
+        conn.close()
+    await manager.send(room_code, session_id, {"event": "chat_history", "messages": history})
+
+
+def _chat_username(room, session_id: str) -> str | None:
+    """Username for a chat sender — approved players and players still
+    waiting on admin approval can both write, so check both."""
+    player = room.players.get(session_id) or room.pending.get(session_id)
+    return player.username if player else None
 
 
 def _generate_room_code() -> str:
@@ -269,7 +314,7 @@ async def _close_room_with_notice(code: str, reason: str = "admin_left") -> None
         except Exception:
             pass
     manager._sockets.pop(code, None)
-    delete_room(code)
+    _delete_room_and_chat(code)
 
 
 async def _close_other_rooms_admined_by(session_id: str, except_code: str | None) -> None:
@@ -524,6 +569,8 @@ async def websocket_endpoint(ws: WebSocket, room_code: str):
         await ws.close(code=4004)
         return
 
+    await _send_chat_history(room_code, session_id)
+
     try:
         async for raw in ws.iter_json():
             await _handle_message(session_id, room_code, raw)
@@ -716,23 +763,18 @@ async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
         await manager.send(room_code, session_id, {"event": "hand_update", "hand": player.hand})
         await manager.send(room_code, session_id, {"event": "new_hand_dealt"})
 
-    elif event == "feedback":
-        card_id = msg.get("card_id")
-        fb_type = msg.get("type")
-        if not card_id or fb_type not in ("like", "dislike", "comment"):
+    elif event == "chat_send":
+        text = msg.get("message")
+        username = _chat_username(room, session_id)
+        if not username or not isinstance(text, str) or not text.strip():
             return
-        player = room.players.get(session_id)
-        username = player.username if player else "unknown"
-        conn = get_msg_conn()
+        conn = chat_db.get_conn()
         try:
-            if fb_type == "like":
-                add_like(conn, card_id, session_id)
-            elif fb_type == "dislike":
-                add_dislike(conn, card_id, session_id)
-            elif fb_type == "comment":
-                add_comment(conn, card_id, session_id, username, msg.get("comment", ""))
+            chat_msg = chat_db.post_message(conn, room.code, username, text)
         finally:
             conn.close()
+        if chat_msg:
+            await manager.broadcast_all(room.code, {"event": "chat_message", **chat_msg})
 
     elif event in ("voice_offer", "voice_answer", "voice_ice"):
         # Only fully approved players may signal

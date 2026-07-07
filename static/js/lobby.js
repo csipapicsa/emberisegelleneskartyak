@@ -33,6 +33,7 @@ async function initLobby(code, sid, uname) {
     .on('error',          msg => showToast(msg.message));
 
   socket.connect(uname);
+  initChat(socket);
   setupSegControls();
 
   window.addEventListener('pagehide', () => { socket.close(); });
@@ -284,6 +285,7 @@ function showRoomNotFound() {
   document.getElementById('mainContent').classList.add('hidden');
   document.getElementById('gameAlreadyStarted')?.classList.add('hidden');
   document.getElementById('roomNotFound').classList.remove('hidden');
+  hideChatUi();
 }
 
 function showGameAlreadyStarted() {
@@ -292,6 +294,7 @@ function showGameAlreadyStarted() {
   document.getElementById('roomNotFound')?.classList.add('hidden');
   document.getElementById('gameAlreadyStarted')?.classList.remove('hidden');
   voiceManager?.cleanup();
+  hideChatUi();
 }
 
 function approve(sid) { socket.send('approve_player', { session_id: sid }); }

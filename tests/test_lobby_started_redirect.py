@@ -32,10 +32,12 @@ def test_lobby_redirects_started_room_state_to_game_page():
         function element(id) {
           if (!elements.has(id)) {
             elements.set(id, {
+              style: {},
               classList: { add() {}, remove() {}, toggle() {} },
               addEventListener() {},
               querySelectorAll() { return []; },
               querySelector() { return { checked: false }; },
+              getBoundingClientRect() { return { left: 0, top: 0 }; },
               innerHTML: '',
               textContent: '',
               disabled: false,
@@ -49,6 +51,7 @@ def test_lobby_redirects_started_room_state_to_game_page():
           encodeURIComponent,
           setTimeout,
           clearTimeout,
+          localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
           GameSocket: function(code, sid) {
             createdSocket = new FakeSocket(code, sid);
             return createdSocket;
@@ -62,7 +65,7 @@ def test_lobby_redirects_started_room_state_to_game_page():
               toggleSpeaker() { return false; },
             };
           },
-          window: { addEventListener() {} },
+          window: { innerWidth: 480, innerHeight: 800, addEventListener() {} },
           document: { getElementById: element },
           location: {
             replaced: null,
@@ -77,6 +80,7 @@ def test_lobby_redirects_started_room_state_to_game_page():
         };
 
         vm.createContext(context);
+        vm.runInContext(fs.readFileSync('static/js/chat.js', 'utf8'), context);
         vm.runInContext(fs.readFileSync('static/js/lobby.js', 'utf8'), context);
 
         (async () => {
