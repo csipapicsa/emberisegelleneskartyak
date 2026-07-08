@@ -79,10 +79,17 @@
       cursor: pointer; border: 2px solid transparent; transition: border-color .15s;
     }
     .room-item:hover, .room-item:active { border-color: var(--white); }
+    .room-item:hover, .room-item:focus-within, .room-item.show-players { z-index: 1; }
     .room-item .room-code-lbl { font-size: 1.2rem; font-weight: 800; letter-spacing: 4px; }
     .room-item .room-meta { font-size: .8rem; color: var(--text-muted); text-align: right; }
     .room-item .room-status { font-size: .75rem; font-weight: 600; }
-    .room-item.in-progress { opacity: .55; cursor: default; border-color: transparent !important; }
+    /* Dim only the card's own text, not the whole .room-item — opacity on the
+       item itself would create a stacking context that traps the popover
+       below it, letting the next room card paint over the popover instead of
+       the other way around. */
+    .room-item.in-progress { cursor: default; border-color: transparent !important; }
+    .room-item.in-progress > .room-code-lbl,
+    .room-item.in-progress > .room-meta { opacity: .55; }
     .room-player-count {
       appearance: none; border: none; background: none; color: inherit;
       font: inherit; padding: 0; cursor: help; text-decoration: underline dotted;
@@ -104,10 +111,10 @@
       font-size: .82rem;
       font-weight: 600;
       line-height: 1.45;
-      opacity: 0;
+      visibility: hidden;
       pointer-events: none;
       transform: translateY(-4px);
-      transition: opacity .12s, transform .12s;
+      transition: transform .12s;
       z-index: 20;
     }
     .room-players-popover::before {
@@ -132,11 +139,12 @@
     .room-item:hover .room-players-popover,
     .room-item:focus-within .room-players-popover,
     .room-item.show-players .room-players-popover {
-      opacity: 1;
+      visibility: visible;
       pointer-events: auto;
       transform: translateY(0);
     }
     .rooms-empty { color: var(--text-muted); font-size: .85rem; text-align: center; padding: 12px; }
+    .rooms-empty-hint { margin-top: 6px; font-size: .78rem; opacity: .75; }
     .section-title { font-size: .85rem; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
     .divider-label {
       display: flex; align-items: center; gap: 10px;
@@ -220,13 +228,146 @@
       return `${hrs} órája nyílt`;
     }
 
+    // ── Free room attention alert ────────────────────────────────────────
+    // Beeps + flashes the tab title/favicon while this tab is backgrounded
+    // AND at least one joinable (not-yet-started) room exists, so a user
+    // waiting on /join notices without having to keep glancing at it. Turns
+    // off again as soon as either condition stops holding — no point
+    // flashing "a room is open" once it isn't anymore.
+    const _originalTitle       = document.title;
+    const _originalFaviconHref = document.querySelector('link[rel="icon"]')?.href || null;
+    let _badgeFaviconHref = null;
+    let _alertTimer        = null;
+    let _audioCtx          = null;
+
+    function isPageActive() {
+      // document.hasFocus() also depends on OS-level window focus, which is
+      // flaky (stays false even right after clicking the tab, in some
+      // browser/OS combos) — document.hidden alone is reliable and fires
+      // the instant this tab is selected, which is what actually matters.
+      return !document.hidden;
+    }
+
+    function playChime() {
+      try {
+        _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+        if (_audioCtx.state === 'suspended') _audioCtx.resume();
+        [660, 990].forEach((freq, i) => {
+          const t0   = _audioCtx.currentTime + i * 0.12;
+          const osc  = _audioCtx.createOscillator();
+          const gain = _audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0.0001, t0);
+          gain.gain.exponentialRampToValueAtTime(0.25, t0 + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.22);
+          osc.connect(gain).connect(_audioCtx.destination);
+          osc.start(t0);
+          osc.stop(t0 + 0.25);
+        });
+      } catch {} // autoplay blocked (no prior user interaction) — flashing still runs
+    }
+
+    function buildBadgeFavicon(baseHref) {
+      return new Promise(resolve => {
+        if (!baseHref) { resolve(null); return; }
+        const img = new Image();
+        img.onload = () => {
+          const size = 64;
+          const canvas = document.createElement('canvas');
+          canvas.width = canvas.height = size;
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, size, size);
+          ctx.beginPath();
+          ctx.arc(size - 13, 13, 12, 0, Math.PI * 2);
+          ctx.fillStyle = '#e33';
+          ctx.fill();
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = '#000';
+          ctx.stroke();
+          resolve(canvas.toDataURL('image/png'));
+        };
+        img.onerror = () => resolve(null);
+        img.src = baseHref;
+      });
+    }
+
+    function setFavicon(href) {
+      if (!href) return;
+      // Cloning (rather than mutating .href in place) forces a repaint of
+      // the tab icon in browsers that otherwise ignore a bare href change.
+      const old  = document.querySelector('link[rel="icon"]');
+      const link = old ? old.cloneNode() : document.createElement('link');
+      link.rel  = 'icon';
+      link.href = href;
+      if (old) old.replaceWith(link); else document.head.appendChild(link);
+    }
+
+    // Visual flashing only — no sound here. Kept idempotent and separate
+    // from the chime so that glancing at the tab and looking away again
+    // (which restarts the flashing) doesn't replay the sound too.
+    async function startFlashing() {
+      if (_alertTimer) return; // already flashing
+      if (!_badgeFaviconHref) _badgeFaviconHref = await buildBadgeFavicon(_originalFaviconHref);
+      if (_alertTimer) return; // stopped again while the favicon was loading
+      let showBadge = true;
+      _alertTimer = setInterval(() => {
+        document.title = showBadge ? '🔴 Új szoba nyílt!' : _originalTitle;
+        setFavicon(showBadge ? _badgeFaviconHref : _originalFaviconHref);
+        showBadge = !showBadge;
+      }, 1000);
+    }
+
+    function stopRoomAlert() {
+      if (!_alertTimer) return;
+      clearInterval(_alertTimer);
+      _alertTimer = null;
+      document.title = _originalTitle;
+      setFavicon(_originalFaviconHref);
+    }
+
+    window.addEventListener('focus', stopRoomAlert);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) stopRoomAlert(); });
+
+    // Re-evaluated on every /api/rooms poll — flashing always mirrors "is
+    // there a joinable room right now". The chime is separate: it fires
+    // once per continuous stretch of "a free room exists", not every time
+    // flashing (re)starts, so tabbing back to check and away again doesn't
+    // re-chime for a room you've already been alerted about.
+    let _chimedForFreeRoom = false;
+
+    function checkFreeRoomAlert(waitingCodes) {
+      const hasFreeRoom = waitingCodes.length > 0;
+      if (!hasFreeRoom) {
+        _chimedForFreeRoom = false;
+        stopRoomAlert();
+        return;
+      }
+      if (isPageActive()) {
+        stopRoomAlert();
+        return;
+      }
+      if (!_chimedForFreeRoom) {
+        playChime();
+        _chimedForFreeRoom = true;
+      }
+      startFlashing();
+    }
+
     // Load open rooms
     async function loadRooms() {
       const res   = await fetch('/api/rooms');
       const rooms = await res.json();
       const list  = document.getElementById('roomList');
+
+      checkFreeRoomAlert(rooms.filter(r => !r.started).map(r => r.code));
+
       if (rooms.length === 0) {
-        list.innerHTML = '<div class="rooms-empty">Nincs nyitott szoba</div>';
+        list.innerHTML = `
+          <div class="rooms-empty">
+            Nincs nyitott szoba
+            <div class="rooms-empty-hint">Hagyd nyitva ezt az oldalt – ha nyílik egy szoba, az oldal értesít.</div>
+          </div>`;
         return;
       }
       list.innerHTML = rooms.map(r => {

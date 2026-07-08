@@ -3,6 +3,7 @@
 from __future__ import annotations
 import asyncio
 import json
+import logging
 import os
 import random
 import re
@@ -11,7 +12,7 @@ import time
 from contextlib import asynccontextmanager
 from contextlib import suppress
 
-from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, Request, WebSocket, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 
@@ -27,6 +28,8 @@ from server import game as game_logic
 from server.voice import generate_turn_credentials, validate_signal, check_ice_rate
 from server.analytics import log_event, get_stats
 
+logger = logging.getLogger(__name__)
+
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
 with open(os.path.join(BASE_DIR, "config.json")) as f:
@@ -35,13 +38,17 @@ with open(os.path.join(BASE_DIR, "config.json")) as f:
 
 def _delete_room_and_chat(code: str) -> None:
     """Drop the in-memory room and its chat history together — chat is only
-    ever meant to outlive the room it belongs to, never longer."""
+    ever meant to outlive the room it belongs to, never longer. Chat storage
+    is a side concern: if it's unavailable, the room still has to go."""
     delete_room(code)
-    conn = chat_db.get_conn()
     try:
-        chat_db.delete_room_messages(conn, code)
-    finally:
-        conn.close()
+        conn = chat_db.get_conn()
+        try:
+            chat_db.delete_room_messages(conn, code)
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("failed to purge chat history for room %s", code)
 
 
 async def _room_cleanup_task() -> None:
@@ -67,7 +74,9 @@ async def _room_cleanup_task() -> None:
                 if inactivity > FINISHED_TTL:
                     stale.append(code)
             elif not room.started:
-                if inactivity > UNSTARTED_TTL:
+                all_gone = all(not p.connected for p in room.players.values())
+                ttl = EMPTY_TTL if all_gone else UNSTARTED_TTL
+                if inactivity > ttl:
                     stale.append(code)
             else:
                 all_gone = all(not p.connected for p in room.players.values())
@@ -75,16 +84,19 @@ async def _room_cleanup_task() -> None:
                     stale.append(code)
 
         for code in stale:
-            room = get_room(code)
-            if room and not room.started:
-                admin = room.players.get(room.admin_session_id)
-                log_event(
-                    "room_abandoned",
-                    room_code=code,
-                    username=admin.username if admin else None,
-                    player_count=len(room.players),
-                )
-            _delete_room_and_chat(code)
+            try:
+                room = get_room(code)
+                if room and not room.started:
+                    admin = room.players.get(room.admin_session_id)
+                    log_event(
+                        "room_abandoned",
+                        room_code=code,
+                        username=admin.username if admin else None,
+                        player_count=len(room.players),
+                    )
+                _delete_room_and_chat(code)
+            except Exception:
+                logger.exception("room cleanup failed for room %s; continuing", code)
 
 
 @asynccontextmanager
@@ -111,11 +123,17 @@ _startup_conn.close()
 
 # Ensure chat.db tables exist. Room chat is scoped to in-memory rooms, which
 # are all gone on process start, so any leftover rows are orphaned — wipe them.
-_chat_startup_conn = chat_db.get_conn()
-chat_db.ensure_tables(_chat_startup_conn)
-_chat_startup_conn.execute("DELETE FROM room_chat_messages")
-_chat_startup_conn.commit()
-_chat_startup_conn.close()
+# Chat is a side feature: if its storage is broken, the game must still boot.
+try:
+    _chat_startup_conn = chat_db.get_conn()
+    try:
+        chat_db.ensure_tables(_chat_startup_conn)
+        _chat_startup_conn.execute("DELETE FROM room_chat_messages")
+        _chat_startup_conn.commit()
+    finally:
+        _chat_startup_conn.close()
+except Exception:
+    logger.exception("chat.db unavailable at startup; chat will be degraded")
 
 
 @app.get("/api/chat")
@@ -216,11 +234,18 @@ def _username_taken(room, username: str, exclude_sid: str | None = None) -> bool
 
 
 async def _send_chat_history(room_code: str, session_id: str) -> None:
-    conn = chat_db.get_conn()
+    """Send chat history to a joining/reconnecting player. Chat is a side
+    feature layered on top of the game: if its storage is unavailable, the
+    player must still be able to join and play, just without history."""
+    history: list[dict] = []
     try:
-        history = chat_db.get_messages(conn, room_code)
-    finally:
-        conn.close()
+        conn = chat_db.get_conn()
+        try:
+            history = chat_db.get_messages(conn, room_code)
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("failed to load chat history for room %s", room_code)
     await manager.send(room_code, session_id, {"event": "chat_history", "messages": history})
 
 
@@ -376,7 +401,9 @@ async def api_list_rooms():
             "created_at": r.created_at,
         }
         for r in _rooms.values()
-        if not r.finished
+        # An unstarted lobby with nobody connected has no admin left to
+        # approve a new joiner into — don't advertise it as joinable.
+        if not r.finished and (r.started or any(p.connected for p in r.players.values()))
     ]
 
 
@@ -388,7 +415,18 @@ async def api_editions():
     finally:
         conn.close()
     # Append the virtual community edition (cards live in messages.db, not cards.db)
-    editions.append({"id": COMMUNITY_EDITION_ID, "name": COMMUNITY_EDITION_NAME, "community": True})
+    msg_conn = get_msg_conn()
+    try:
+        c_black, c_white = get_community_cards(msg_conn)
+    finally:
+        msg_conn.close()
+    editions.append({
+        "id": COMMUNITY_EDITION_ID,
+        "name": COMMUNITY_EDITION_NAME,
+        "community": True,
+        "black_count": len(c_black),
+        "white_count": len(c_white),
+    })
     return editions
 
 
@@ -572,9 +610,13 @@ async def websocket_endpoint(ws: WebSocket, room_code: str):
     await _send_chat_history(room_code, session_id)
 
     try:
+        # ws.iter_json() catches WebSocketDisconnect internally and just ends
+        # the loop — it never reaches an `except` around this loop. `finally`
+        # guarantees the cleanup below runs on every exit path, disconnect or
+        # otherwise.
         async for raw in ws.iter_json():
             await _handle_message(session_id, room_code, raw)
-    except WebSocketDisconnect:
+    finally:
         manager.disconnect(room_code, session_id)
         room = get_room(room_code)
         if room:
@@ -613,7 +655,7 @@ async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
         player = room.pending.pop(target, None)
         if not player:
             return
-        await manager.send(room_code, target, {"event": "error", "message": "A belépési kérelmet elutasították."})
+        await manager.send(room_code, target, {"event": "denied", "message": "A belépési kérelmet elutasították."})
         await manager.broadcast(room_code, _room_snapshot(room))
 
     elif event == "configure_room":
@@ -633,6 +675,9 @@ async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
 
     elif event == "start_game":
         if session_id != room.admin_session_id or room.started:
+            return
+        if room.pending:
+            await manager.send(room_code, session_id, {"event": "error", "message": "Előbb bírálj el minden belépési kérelmet."})
             return
         if not room.edition_ids:
             await manager.send(room_code, session_id, {"event": "error", "message": "Válassz legalább egy kártyacsomagot."})
@@ -768,11 +813,15 @@ async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
         username = _chat_username(room, session_id)
         if not username or not isinstance(text, str) or not text.strip():
             return
-        conn = chat_db.get_conn()
         try:
-            chat_msg = chat_db.post_message(conn, room.code, username, text)
-        finally:
-            conn.close()
+            conn = chat_db.get_conn()
+            try:
+                chat_msg = chat_db.post_message(conn, room.code, username, text)
+            finally:
+                conn.close()
+        except Exception:
+            logger.exception("failed to store chat message for room %s", room.code)
+            return
         if chat_msg:
             await manager.broadcast_all(room.code, {"event": "chat_message", **chat_msg})
 

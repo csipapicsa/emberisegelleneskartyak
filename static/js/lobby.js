@@ -23,6 +23,7 @@ async function initLobby(code, sid, uname) {
     .on('pending_approval', onPendingApproval)
     .on('game_started',   () => { location.href = `/game/${code}`; })
     .on('room_closed',    onRoomClosed)
+    .on('denied',         onDenied)
     .on('username_taken', onUsernameTaken)
     .on('fatal_close',    ({ code: c }) => {
       if (c === 4002) onRoomClosed({});
@@ -136,7 +137,9 @@ function onRoomState(state) {
     document.getElementById('waitingMsg').classList.add('hidden');
     renderEditions(state.edition_ids);
     renderConfig(state);
-    document.getElementById('startBtn').disabled = state.players.length < 1;
+    const hasPending = state.pending.length > 0;
+    document.getElementById('startBtn').disabled = state.players.length < 1 || hasPending;
+    document.getElementById('pendingBlockHint').classList.toggle('hidden', !hasPending);
   } else {
     document.getElementById('adminPanel').classList.add('hidden');
     document.getElementById('waitingMsg').classList.remove('hidden');
@@ -153,6 +156,11 @@ function onPendingApproval() {
 function onRoomClosed() {
   showToast('A szobát bezárták.');
   setTimeout(() => location.replace('/join'), 1200);
+}
+
+function onDenied(msg) {
+  showToast(msg.message || 'A belépési kérelmet elutasították.');
+  setTimeout(redirectToJoin, 1200);
 }
 
 function onUsernameTaken(msg) {
@@ -240,7 +248,7 @@ async function loadEditions(currentIds) {
   container.innerHTML = list.map(e => `
     <label class="select-option ${selected.includes(e.id) ? 'selected' : ''}" data-id="${e.id}"${e.community ? ' data-community="1"' : ''}>
       <input type="checkbox" ${selected.includes(e.id) ? 'checked' : ''}>
-      ${esc(e.name)}${e.community ? ' <span class="edition-hint">(csak másik csomaggal)</span>' : ''}
+      ${esc(e.name)}${e.community ? ` <span class="edition-hint">(csak másik csomaggal &middot; ${e.black_count} fekete, ${e.white_count} fehér)</span>` : ''}
     </label>
   `).join('');
 

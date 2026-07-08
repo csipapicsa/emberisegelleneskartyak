@@ -124,6 +124,9 @@
         </div>
       </div>
 
+      <p id="pendingBlockHint" class="hidden" style="color:var(--text-muted);font-size:.85rem;text-align:center">
+        Bírálj el minden belépési kérelmet, mielőtt elindítod a játékot.
+      </p>
       <button class="btn btn-primary" id="startBtn" disabled>Játék indítása</button>
     </div>
 
@@ -157,7 +160,7 @@
   <script src="/static/js/ws.js"></script>
   <script src="/static/js/voice.js"></script>
   <script src="/static/js/chat.js?v=20260707-backtrap"></script>
-  <script src="/static/js/lobby.js?v=20260707-chat"></script>
+  <script src="/static/js/lobby.js?v=20260708-denyredirect"></script>
   <script>
     const code = location.pathname.split('/').pop();
 

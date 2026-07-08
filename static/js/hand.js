@@ -22,7 +22,7 @@ class Hand {
     this._pendingOffset   = 0;
     this._rafId           = null;
 
-    this._CARD_STEP = 90; // 130px card width - 40px overlap
+    this._CARD_STEP = 90; // approximate step, only used to bound horizontal drag/scroll range
 
     this._bindEvents();
   }
@@ -118,7 +118,7 @@ class Hand {
     }, { passive: true });
     el.addEventListener('touchmove',  e => {
       e.preventDefault();
-      this._onMove(e.touches[0].clientX);
+      this._onMove(e.touches[0].clientX, e.touches[0].clientY);
     }, { passive: false });
     el.addEventListener('touchend', e => this._onEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY));
     el.addEventListener('touchcancel', () => { this._dragging = false; });
@@ -127,7 +127,7 @@ class Hand {
       if (e.target.closest('.swap-card-btn')) return;
       this._onStart(e.clientX);
     });
-    window.addEventListener('mousemove', e => { if (this._dragging) this._onMove(e.clientX); });
+    window.addEventListener('mousemove', e => { if (this._dragging) this._onMove(e.clientX, e.clientY); });
     window.addEventListener('mouseup',   e => { if (this._dragging) this._onEnd(e.clientX, e.clientY); });
 
     // Egyenkénti kártyacsere későbbi használatra:
@@ -150,7 +150,7 @@ class Hand {
     if (this._rafId) { cancelAnimationFrame(this._rafId); this._rafId = null; }
   }
 
-  _onMove(x) {
+  _onMove(x, y) {
     if (!this._dragging) return;
     const dx = x - this._dragStartX;
     if (Math.abs(dx) > 4) this._moved = true;
@@ -165,8 +165,11 @@ class Hand {
         this._offset  = this._pendingOffset;
         this._applyOffset();
 
-        // Only update active card highlight, no full rebuild
-        const idx = this._idxAtX(x);
+        // Only update active card highlight, no full rebuild. Real hit-test
+        // (not fixed-step math) — the fan's actual per-card width/step varies
+        // with padding/border and with which neighbours are selected/active,
+        // so any fixed-step estimate drifts a card off once selections exist.
+        const idx = this._idxAtPoint(x, y);
         if (idx !== this._activeIdx) {
           this._activeIdx = idx;
           this._updateClasses();
@@ -193,10 +196,9 @@ class Hand {
     }
 
     // Tap — resolve against whatever card is actually rendered under the
-    // finger, not fixed-step math. Selected/before-selected cards shift
-    // their own margin for visual breathing room, which the fixed-step
-    // formula (_idxAtX, still used for the cheap in-drag preview) has no way
-    // to know about, so it can't be trusted for the real tap decision.
+    // finger, not fixed-step math (selected/before-selected cards shift
+    // their own margin for visual breathing room, which a fixed-step
+    // formula has no way to know about).
     const idx = this._idxAtPoint(x, y);
     if (idx < 0 || idx >= this._itemCount()) return;
 
@@ -221,21 +223,10 @@ class Hand {
     }, this.holdDuration);
   }
 
-  // Calculate card index from client X using math (no getBoundingClientRect in hot path).
-  // Cheap approximation used only for the live "which card is under the
-  // finger" preview while actively dragging — a frame or two of imprecision
-  // there is harmless since it's not the final decision.
-  _idxAtX(clientX) {
-    const trackRect = this.track.getBoundingClientRect();
-    const localX    = clientX - trackRect.left;
-    if (localX < 0 || !this._itemCount()) return -1;
-    const idx = Math.floor(localX / this._CARD_STEP);
-    return Math.min(Math.max(0, idx), this._itemCount() - 1);
-  }
-
-  // Resolve a tap against the real rendered card at that point (one call per
-  // gesture end, so a layout hit-test here is cheap) — correct regardless of
-  // any per-card margin/transform changes from selection state.
+  // Resolve a point against the real rendered card there — used both for the
+  // live in-drag preview (per animation frame) and the final tap decision.
+  // A hit-test is cheap enough for both; a fixed-step estimate isn't safe
+  // once padding/border/selection state make per-card width/spacing vary.
   _idxAtPoint(clientX, clientY) {
     const el = document.elementFromPoint(clientX, clientY)?.closest('.hand-card');
     if (!el) return -1;
