@@ -15,7 +15,7 @@ valósághű, könnyen elérhető adatkezelési tájékoztató kiadása.
    - Az analitikai események megőrzési ideje 90 nap; induláskor a régi,
      szükségtelen azonosító mezők törlődnek.
 2. **Üzemeltetői konfiguráció** — telepítés előtt kötelező.
-   - A szerveren jöjjön létre a `/etc/emberisegellenes/privacy.env` fájl a
+- A szerveren jöjjön létre a `/etc/emberisegellenes/privacy.env` fájl a
      `privacy.env.example` alapján, erős, titkos
      `EEK_PRIVACY_HMAC_SECRET` értékkel.
    - Ezt a titkot nem szabad commitolni, e-mailben küldeni vagy a nyilvános
@@ -23,7 +23,7 @@ valósághű, könnyen elérhető adatkezelési tájékoztató kiadása.
    - A meglévő nyers-IP-s szavazatok indításkor ebből képzett HMAC-ra
      migrálódnak. Titok nélkül a szolgáltatás szándékosan nem indul el, így
      nem marad észrevétlenül nyers IP-t tároló régi séma.
-3. **Nyilvános adatkezelési tájékoztató** — a következő implementációs lépés.
+3. **Nyilvános adatkezelési tájékoztató** — folyamatban.
    - Külön `/adatkezeles` oldal és lábléc-link minden nyilvános oldalon.
    - A szövegben külön cél/jogalap/megőrzés a játékmenetre, chatre,
      kapcsolatfelvételre, kártyaötletre, szavazásra és belső statisztikára.
@@ -36,19 +36,26 @@ valósághű, könnyen elérhető adatkezelési tájékoztató kiadása.
    - Nginx hozzáférési/hibanaplók tényleges megőrzési idejének rögzítése.
    - Hozzáférési jogosultságok, mentések és törlési folyamat ellenőrzése.
 
-## A tájékoztató kiadásához még szükséges döntések
+## Eldöntött alapértékek
 
-- az adatkezelő teljes neve és kapcsolati e-mail-címe;
-- tárhelyszolgáltató, mentési szolgáltató és — ha használatban van —
-  TURN/hangszolgáltató neve és adatfeldolgozói szerepe;
-- a kapcsolatfelvételi üzenetek és kártyaötletek pontos megőrzési ideje;
-- az nginx access/error logok tényleges megőrzési ideje;
-- van-e kiskorúaknak szóló használat vagy harmadik országbeli szolgáltató.
+- Adatkezelői kapcsolat: `gergo.gyori.project@gmail.com`.
+- Tárhelyszolgáltató/adatfeldolgozó: Contabo.
+- Kapcsolatfelvételi üzenetek: 12 hónap.
+- Nyilvános üzenőfal: 30 nap; szobán belüli chat: a szoba megszűnéséig.
+- Kártyaötletek: a játékkészlet tartalmaként korlátlan ideig megmaradnak;
+  a beküldő személyéhez nem kapcsoljuk őket.
+- Kártyaötlet-szavazati HMAC: 5 év.
+- Nginx access- és error-logok: 14 nap; a hozzá tartozó logrotate-minta
+  `nginx_emberisegellenes.logrotate` néven szerepel a projektben.
 
 ## Kiadási ellenőrzőlista
 
 - [ ] A titkos HMAC-konfiguráció létrehozva a szerveren.
-- [ ] A systemd unit és nginx konfiguráció ellenőrizve, majd újratöltve.
+- [ ] A `systemd/emberisegellenes.service.d/privacy.conf` drop-in bemásolva
+  `/etc/systemd/system/emberisegellenes.service.d/privacy.conf` alá; ez nem
+  írja felül a meglévő TURN_SECRET-et.
+- [ ] A systemd és nginx konfiguráció ellenőrizve, majd újratöltve.
+- [ ] A logrotate-minta bemásolva `/etc/logrotate.d/emberisegellenes` alá.
 - [ ] Adatkezelési tájékoztatóban minden fenti döntés kitöltve.
 - [ ] A tájékoztató linkje elérhető a főoldalról, kapcsolatfelvételnél és
   kártyaötlet/szavazás oldalról.

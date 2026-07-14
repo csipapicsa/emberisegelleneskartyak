@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Adatkezelési tájékoztató – Emberiség Ellenes Kártyák</title>
+  <meta name="robots" content="noindex, follow">
+  <link rel="canonical" href="https://emberisegelleneskartyak.hu/adatkezeles">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/css/base.css">
+  <style>
+    .privacy-page { max-width: 760px; justify-content: flex-start; gap: 18px; }
+    .back-link { color: var(--text-muted); font-size: .85rem; font-weight: 700; text-decoration: underline; text-underline-offset: 3px; width: fit-content; }
+    .privacy-card { background: var(--grey); border-radius: var(--radius); padding: 18px; }
+    .privacy-card h2 { font-size: 1.05rem; margin: 0 0 9px; }
+    .privacy-card p, .privacy-card li { color: var(--text-muted); font-size: .92rem; line-height: 1.55; }
+    .privacy-card p { margin: 0; }
+    .privacy-card ul { margin: 8px 0 0; padding-left: 20px; }
+    .privacy-card strong { color: var(--white); }
+    .updated { color: var(--text-muted); font-size: .8rem; }
+  </style>
+</head>
+<body>
+  <main class="page privacy-page">
+    <a class="back-link" href="/">← Vissza a főoldalra</a>
+    <header>
+      <div class="logo">Adatkezelési tájékoztató</div>
+      <p class="updated">Hatályos: 2026. július 14.</p>
+    </header>
+
+    <section class="privacy-card">
+      <h2>Ki kezeli az adatokat?</h2>
+      <p><strong>Adatkezelő:</strong> Győri Gergő<br><strong>Kapcsolat:</strong> <a href="mailto:gergo.gyori.project@gmail.com">gergo.gyori.project@gmail.com</a></p>
+    </section>
+
+    <section class="privacy-card">
+      <h2>Miért és meddig kezelünk adatokat?</h2>
+      <ul>
+        <li><strong>Játék működtetése:</strong> játékosnév, technikai session-azonosító, szobakód és játékon belüli állapot. Ezek a játék és a visszacsatlakozás működéséhez kellenek; a szobában kezelt állapot legfeljebb a szoba élettartamáig marad meg.</li>
+        <li><strong>Szobachat:</strong> név és üzenet. A szoba lezárásakor törlődik; szerverindításkor a bent maradt szobachat is törlődik.</li>
+        <li><strong>Nyilvános üzenőfal:</strong> becenév, üzenet és időpont. Legfeljebb 30 napig őrizzük meg.</li>
+        <li><strong>Kapcsolatfelvétel:</strong> név, e-mail-cím és üzenet, hogy válaszolni tudjunk. Megőrzési idő: 12 hónap.</li>
+        <li><strong>Kártyaötlet:</strong> a beküldött kártyaszöveg és időpont a moderálás és a közösségi kártyakészlet működtetése érdekében. A kártyaszövegeket a játékkészlet részeként korlátlan ideig megőrizzük. Kérjük, ne írj a kártyaötletbe személyes adatot.</li>
+        <li><strong>Kártyaszavazás:</strong> az IP-címből szerveroldali titokkal képzett, csak erre a célra használható HMAC-azonosító. Ez akadályozza meg az ismételt szavazatokat; 5 év után törlődik. Nyers IP-címet ehhez nem tárolunk.</li>
+        <li><strong>Belső statisztika:</strong> eseménytípus, időpont, játékoslétszám és az IP-címből képzett, kizárólag statisztikára használható HMAC-azonosító. Cél: a játék használatának és stabilitásának megértése. Megőrzési idő: 90 nap.</li>
+        <li><strong>Biztonsági naplók:</strong> a webszerver hozzáférési- és hibanaplói IP-címet és technikai kérésadatokat tartalmazhatnak a hibakeresés és visszaélések elleni védelem céljából. Megőrzési idő: 14 nap.</li>
+      </ul>
+    </section>
+
+    <section class="privacy-card">
+      <h2>Jogalap és helyi tárolás</h2>
+      <p>A fenti adatkezelések jogalapja a játék biztosításához, a kapcsolatfelvétel kezeléséhez, a visszaélések megelőzéséhez és a szolgáltatás fejlesztéséhez fűződő jogos érdek, illetve ahol ez alkalmazható, az általad kifejezetten kért szolgáltatás teljesítése. Nem használunk reklámcélú vagy külső analitikai követőkódot.</p>
+      <p style="margin-top:10px">A böngészőben nem használunk klasszikus sütiket. A játék működéséhez a <code>localStorage</code>-ban session-azonosító, becenév és néhány felületi/hangbeállítás maradhat. Ezeket a böngésződ adatainak törlésével bármikor eltávolíthatod.</p>
+    </section>
+
+    <section class="privacy-card">
+      <h2>Címzettek és hangfunkció</h2>
+      <p>A tárhelyszolgáltató a <strong>Contabo</strong>, amely a szerver üzemeltetéséhez szükséges adatfeldolgozó. A hangfunkció WebRTC-alapú; használatakor a résztvevők hálózati kapcsolati adatai, így adott esetben IP-címe is érintett lehet. A kapcsolathoz saját TURN (coturn) szolgáltatást használunk. Harmadik fél reklám- vagy analitikai szolgáltatónak nem adunk át adatot.</p>
+    </section>
+
+    <section class="privacy-card">
+      <h2>Jogok és panasz</h2>
+      <p>Kérheted a rád vonatkozó adatokhoz való hozzáférést, azok helyesbítését, törlését vagy kezelésük korlátozását. Jogos érdeken alapuló adatkezelés ellen tiltakozhatsz. Írj a fenti e-mail-címre; érdemben legfeljebb egy hónapon belül válaszolunk. Panaszt a <a href="https://www.naih.hu/erintetti-jogok" target="_blank" rel="noopener">Nemzeti Adatvédelmi és Információszabadság Hatóságnál</a> is tehetsz.</p>
+    </section>
+  </main>
+</body>
+</html>

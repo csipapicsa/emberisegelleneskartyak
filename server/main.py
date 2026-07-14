@@ -21,7 +21,7 @@ from server.db import get_conn, get_editions, get_cards_for_editions
 from server import edition_display
 from server.messages_db import get_conn as get_msg_conn, ensure_tables as ensure_msg_tables, \
     save_message, save_card_idea, get_chat_messages, post_chat_message, \
-    get_community_cards, list_card_ideas, vote_card_idea, \
+    get_community_cards, list_card_ideas, vote_card_idea, purge_expired_data, \
     COMMUNITY_EDITION_ID, COMMUNITY_EDITION_NAME
 from server import chat_db
 from server.session import create_or_get_session
@@ -107,6 +107,8 @@ async def lifespan(app: FastAPI):
     startup_conn = get_msg_conn()
     try:
         ensure_msg_tables(startup_conn, migrate_legacy_votes=True)
+        purge_expired_data(startup_conn)
+        startup_conn.commit()
     finally:
         startup_conn.close()
     from server.analytics import init_analytics
@@ -1083,6 +1085,8 @@ async def serve_html(full_path: str):
         "kartyaotlet.html": "kartyaotlet.html",
         "kartyaszavazas": "kartyaszavazas.html",
         "kartyaszavazas.html": "kartyaszavazas.html",
+        "adatkezeles": "adatkezeles.html",
+        "adatkezeles.html": "adatkezeles.html",
     }
     filename = mapping.get(full_path.strip("/"))
     if filename:

@@ -6,8 +6,7 @@ After=network.target
 Type=simple
 User=adminuser_developer
 WorkingDirectory=/opt/emberisegellenes_kartyak
-EnvironmentFile=/etc/emberisegellenes/privacy.env
-ExecStart=/opt/emberisegellenes_kartyak/venv/bin/uvicorn server.main:app --host 127.0.0.1 --port 8010 --proxy-headers --forwarded-allow-ips=127.0.0.1
+ExecStart=/opt/emberisegellenes_kartyak/venv/bin/uvicorn server.main:app --host 127.0.0.1 --port 8010
 Restart=always
 RestartSec=5
 

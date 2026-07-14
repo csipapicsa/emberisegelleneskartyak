@@ -126,6 +126,20 @@ def test_empty_username_not_saved(db):
     assert get_chat_messages(db) == []
 
 
+def test_purge_expired_data_removes_old_contact_messages(db):
+    from server.messages_db import purge_expired_data
+    db.execute(
+        """INSERT INTO messages (name, email, message, created_at)
+           VALUES ('Régi', 'regi@example.com', 'régi üzenet', '2020-01-01T00:00:00+00:00')"""
+    )
+    db.execute(
+        """INSERT INTO messages (name, email, message, created_at)
+           VALUES ('Új', 'uj@example.com', 'új üzenet', datetime('now'))"""
+    )
+    purge_expired_data(db)
+    assert [row[0] for row in db.execute("SELECT name FROM messages").fetchall()] == ["Új"]
+
+
 def test_whitespace_only_not_saved(db):
     from server.messages_db import post_chat_message, get_chat_messages
     post_chat_message(db, "   ", "   ")

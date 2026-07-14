@@ -8,6 +8,8 @@ from server.privacy import PrivacyConfigurationError, pseudonymize_ip
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "messages.db")
 CARD_IDEA_MAX_LENGTHS = {"white": 280, "black": 360}
+CONTACT_RETENTION_DAYS = 365
+VOTE_RETENTION_DAYS = 5 * 365
 
 # Synthetic "Ti küldtétek" community edition. These cards live in messages.db
 # (card_ideas), not cards.db, so the edition is virtual:
@@ -144,12 +146,25 @@ def _migrate_legacy_vote_ips(conn: sqlite3.Connection, *, enabled: bool) -> None
 
 
 def save_message(conn: sqlite3.Connection, name: str, email: str, message: str) -> None:
+    purge_expired_data(conn)
     now = datetime.now(timezone.utc).isoformat()
     conn.execute(
         "INSERT INTO messages (name, email, message, created_at) VALUES (?, ?, ?, ?)",
         (name, email, message, now),
     )
     conn.commit()
+
+
+def purge_expired_data(conn: sqlite3.Connection) -> None:
+    """Apply the published retention periods to persistent user submissions."""
+    conn.execute(
+        "DELETE FROM messages WHERE datetime(created_at) < datetime('now', ?)",
+        (f"-{CONTACT_RETENTION_DAYS} days",),
+    )
+    conn.execute(
+        "DELETE FROM card_idea_votes WHERE datetime(created_at) < datetime('now', ?)",
+        (f"-{VOTE_RETENTION_DAYS} days",),
+    )
 
 
 def _strip_unsafe_controls(value: str) -> str:

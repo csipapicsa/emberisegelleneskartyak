@@ -24,7 +24,7 @@ def test_privacy_migration_removes_unneeded_legacy_event_fields(tmp_path, monkey
     con = sqlite3.connect(db_path)
     assert con.execute(
         "SELECT room_code, username, ip_hash, user_agent FROM events"
-    ).fetchone() == (None, None, None, None)
+    ).fetchone() == (None, None, "legacy", None)
     con.close()
 
 
