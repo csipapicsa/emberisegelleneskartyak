@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Emberiség Ellenes Kártyák database backup
+
+[Timer]
+OnCalendar=*-*-* 03:05:00
+Persistent=true
+Unit=emberisegellenes-db-backup.service
+
+[Install]
+WantedBy=timers.target

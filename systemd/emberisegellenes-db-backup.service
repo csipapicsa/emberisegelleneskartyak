@@ -1,0 +1,8 @@
+[Unit]
+Description=Back up Emberiség Ellenes Kártyák SQLite databases
+
+[Service]
+Type=oneshot
+User=adminuser_developer
+WorkingDirectory=/opt/emberisegellenes_kartyak
+ExecStart=/usr/bin/python3 /opt/emberisegellenes_kartyak/scripts/backup_databases.py

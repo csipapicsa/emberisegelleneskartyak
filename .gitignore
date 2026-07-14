@@ -11,6 +11,7 @@ chat.db
 *.db-journal
 *.db-wal
 *.db-shm
+backups/
 
 # OS / editor
 .DS_Store
