@@ -79,6 +79,12 @@
       text-transform: uppercase;
       opacity: .45;
     }
+    .idea-status {
+      font-size: .72rem;
+      font-weight: 700;
+      opacity: .6;
+      margin-top: 8px;
+    }
     .empty, .loading { color: var(--text-muted); text-align: center; padding: 24px 0; }
   </style>
 </head>
@@ -109,6 +115,12 @@
       return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
+    function statusText(i) {
+      if (i.approved) return '✅ Jóváhagyva – játszható a „Ti küldtétek” csomagban';
+      if (i.seen_by_admin) return '👀 Megnézve, egyelőre nem került be a játékba';
+      return '⏳ Elbírálás alatt';
+    }
+
     function render() {
       const rows = ideas.filter(i => filter === 'all' || i.card_type === filter);
       if (rows.length === 0) {
@@ -123,6 +135,7 @@
             <button class="vote-btn like ${i.my_vote === 'like' ? 'active' : ''}" data-vote="like">👍 <span>${i.likes}</span></button>
             <button class="vote-btn dislike ${i.my_vote === 'dislike' ? 'active' : ''}" data-vote="dislike">👎 <span>${i.dislikes}</span></button>
           </div>
+          <div class="idea-status">${statusText(i)}</div>
         </div>
       `).join('');
     }

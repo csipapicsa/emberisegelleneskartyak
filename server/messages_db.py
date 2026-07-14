@@ -171,7 +171,8 @@ def get_community_cards(conn: sqlite3.Connection) -> tuple[list[dict], list[dict
 
 
 def list_card_ideas(conn: sqlite3.Connection, voter_ip: str) -> list[dict]:
-    """Every card idea with live like/dislike counts and this IP's own vote."""
+    """Every card idea with live like/dislike counts, this IP's own vote, and
+    moderation status, newest submission first."""
     rows = conn.execute(
         """
         SELECT
@@ -179,13 +180,15 @@ def list_card_ideas(conn: sqlite3.Connection, voter_ip: str) -> list[dict]:
             ci.card_type,
             ci.text,
             ci.created_at,
+            ci.approved,
+            ci.seen_by_admin,
             COALESCE(SUM(v.vote = 'like'), 0)    AS likes,
             COALESCE(SUM(v.vote = 'dislike'), 0) AS dislikes,
             MAX(CASE WHEN v.voter_ip = ? THEN v.vote END) AS my_vote
         FROM card_ideas ci
         LEFT JOIN card_idea_votes v ON v.idea_id = ci.id
         GROUP BY ci.id
-        ORDER BY likes DESC, ci.id ASC
+        ORDER BY ci.created_at DESC, ci.id DESC
         """,
         (voter_ip,),
     ).fetchall()

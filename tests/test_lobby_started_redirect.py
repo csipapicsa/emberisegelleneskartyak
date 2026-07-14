@@ -114,46 +114,105 @@ def test_lobby_redirects_started_room_state_to_game_page():
     assert result.returncode == 0, result.stderr
 
 
-def test_lobby_redirects_missing_room_to_join_with_code():
-    script = textwrap.dedent(
-        """
+def _lobby_context_prelude(fetch_body: str) -> str:
+    """Shared vm context setup for tests exercising ensureLobbyAccess()'s 404
+    branch. `fetch_body` is a JS expression string for the fake fetch's json()
+    resolution."""
+    return textwrap.dedent(
+        f"""
         const assert = require('assert');
         const fs = require('fs');
         const vm = require('vm');
 
         let socketCreated = false;
 
-        const context = {
+        const elements = new Map();
+        function element(id) {{
+          if (!elements.has(id)) {{
+            elements.set(id, {{
+              style: {{}},
+              classList: {{ add() {{}}, remove() {{}}, toggle() {{}} }},
+              addEventListener() {{}},
+              querySelectorAll() {{ return []; }},
+              querySelector() {{ return {{ checked: false }}; }},
+              innerHTML: '',
+              textContent: '',
+              href: '',
+            }});
+          }}
+          return elements.get(id);
+        }}
+
+        const context = {{
           console,
           encodeURIComponent,
           setTimeout,
           clearTimeout,
-          GameSocket: function() {
+          GameSocket: function() {{
             socketCreated = true;
-            return { on() { return this; }, connect() {}, close() {}, send() {} };
-          },
-          window: { addEventListener() {} },
-          document: { getElementById: () => ({
-            classList: { add() {}, remove() {}, toggle() {} },
-            addEventListener() {},
-            querySelectorAll() { return []; },
-            querySelector() { return { checked: false }; },
-          }) },
-          location: {
+            return {{ on() {{ return this; }}, connect() {{}}, close() {{}}, send() {{}} }};
+          }},
+          window: {{ addEventListener() {{}} }},
+          document: {{ getElementById: element }},
+          location: {{
             replaced: null,
-            replace(url) { this.replaced = url; },
-          },
-          fetch: async () => ({ ok: false, status: 404 }),
-        };
+            replace(url) {{ this.replaced = url; }},
+          }},
+          fetch: async () => ({{
+            ok: false,
+            status: 404,
+            json: async () => ({fetch_body}),
+          }}),
+        }};
 
         vm.createContext(context);
+        vm.runInContext(fs.readFileSync('static/js/chat.js', 'utf8'), context);
         vm.runInContext(fs.readFileSync('static/js/lobby.js', 'utf8'), context);
+        """
+    )
 
+
+def test_lobby_redirects_missing_room_to_join_with_code():
+    script = _lobby_context_prelude("{}") + textwrap.dedent(
+        """
         (async () => {
           const started = await context.initLobby('1000', 'sid', 'Admin');
           assert.strictEqual(started, false);
           assert.strictEqual(socketCreated, false);
           assert.strictEqual(context.location.replaced, '/join?code=1000');
+        })().catch(err => {
+          console.error(err);
+          process.exit(1);
+        });
+        """
+    )
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=".",
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_lobby_shows_room_replaced_screen_when_admin_opened_new_room():
+    """A tab still loading the old room learns its admin already opened a new
+    one (via /api/room 404 detail) and shows the replacement screen with the
+    new room's code/link instead of silently redirecting to /join."""
+    script = _lobby_context_prelude(
+        "{ detail: { reason: 'admin_opened_new_room', new_code: '2222' } }"
+    ) + textwrap.dedent(
+        """
+        (async () => {
+          const started = await context.initLobby('1000', 'sid', 'Admin');
+          assert.strictEqual(started, false);
+          assert.strictEqual(socketCreated, false);
+          assert.strictEqual(context.location.replaced, null);
+          assert.strictEqual(elements.get('roomReplacedCode').textContent, '2222');
+          assert.strictEqual(elements.get('roomReplacedLink').href, '/room/2222');
         })().catch(err => {
           console.error(err);
           process.exit(1);

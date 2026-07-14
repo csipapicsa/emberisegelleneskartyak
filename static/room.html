@@ -51,6 +51,14 @@
     <a href="/" class="btn btn-primary" style="max-width:260px">Főoldal</a>
   </div>
 
+  <div id="roomReplaced" class="page hidden" style="justify-content:center;align-items:center;text-align:center;gap:24px">
+    <div class="logo">Emberiség Ellenes Kártyák</div>
+    <h1>Ezt a szobát bezártad.</h1>
+    <p style="color:var(--text-muted)">Úgy tűnik, egy másik lapon vagy eszközön már létrehoztál egy szobát, ezért ez itt automatikusan bezárult (egy adminisztrátor egyszerre csak egy szobát vezethet). Az új szoba kódja: <strong id="roomReplacedCode">····</strong></p>
+    <a href="#" id="roomReplacedLink" class="btn btn-primary" style="max-width:260px">Ugrás az új szobához</a>
+    <a href="/" style="color:var(--text-muted);font-size:.85rem">Vissza a főoldalra</a>
+  </div>
+
   <div id="pendingScreen" class="page hidden">
     <div class="logo">Emberiség Ellenes Kártyák</div>
     <h1>Várakozás...</h1>
@@ -160,7 +168,7 @@
   <script src="/static/js/ws.js"></script>
   <script src="/static/js/voice.js"></script>
   <script src="/static/js/chat.js?v=20260707-backtrap"></script>
-  <script src="/static/js/lobby.js?v=20260708-denyredirect"></script>
+  <script src="/static/js/lobby.js?v=20260711-roomreplaced"></script>
   <script>
     const code = location.pathname.split('/').pop();
 

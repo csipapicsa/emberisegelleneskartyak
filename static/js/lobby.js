@@ -8,6 +8,7 @@ let isAdmin = false;
 let roomState = null;
 let voiceManager = null;
 let usernameChangeRequested = false;
+let roomReplacedHandled = false;
 
 async function initLobby(code, sid, uname) {
   currentRoomCode = code;
@@ -23,11 +24,12 @@ async function initLobby(code, sid, uname) {
     .on('pending_approval', onPendingApproval)
     .on('game_started',   () => { location.href = `/game/${code}`; })
     .on('room_closed',    onRoomClosed)
+    .on('room_replaced',  onRoomReplaced)
     .on('denied',         onDenied)
     .on('username_taken', onUsernameTaken)
     .on('fatal_close',    ({ code: c }) => {
       if (c === 4002) onRoomClosed({});
-      if (c === 4004) redirectToJoin();
+      if (c === 4004 && !roomReplacedHandled) redirectToJoin();
       if (c === 4005 && !usernameChangeRequested) onUsernameTaken({});
       if (c === 4006) showGameAlreadyStarted();
     })
@@ -48,7 +50,13 @@ async function ensureLobbyAccess() {
   try {
     const res = await fetch(`/api/room/${encodeURIComponent(currentRoomCode)}?session_id=${encodeURIComponent(mySessionId)}`);
     if (res.status === 404) {
-      redirectToJoin();
+      const body = await res.json().catch(() => null);
+      const newCode = body?.detail?.reason === 'admin_opened_new_room' ? body.detail.new_code : null;
+      if (newCode) {
+        onRoomReplaced({ new_code: newCode });
+      } else {
+        redirectToJoin();
+      }
       return false;
     }
     if (!res.ok) return true;
@@ -158,6 +166,12 @@ function onRoomClosed() {
   setTimeout(() => location.replace('/join'), 1200);
 }
 
+function onRoomReplaced(msg) {
+  roomReplacedHandled = true;
+  socket?.close();
+  showRoomReplaced(msg.new_code);
+}
+
 function onDenied(msg) {
   showToast(msg.message || 'A belépési kérelmet elutasították.');
   setTimeout(redirectToJoin, 1200);
@@ -242,8 +256,10 @@ async function loadEditions(currentIds) {
   const container = document.getElementById('editionList');
   container._loaded = true;
 
-  // Default: select all editions if none are configured yet
-  const selected = currentIds.length > 0 ? currentIds : list.map(e => e.id);
+  // Default: select every edition except Bōks if none are configured yet.
+  const selected = currentIds.length > 0
+    ? currentIds
+    : list.filter(e => e.name !== 'Bōks').map(e => e.id);
 
   container.innerHTML = list.map(e => `
     <label class="select-option ${selected.includes(e.id) ? 'selected' : ''}" data-id="${e.id}"${e.community ? ' data-community="1"' : ''}>
@@ -301,6 +317,18 @@ function showGameAlreadyStarted() {
   document.getElementById('mainContent').classList.add('hidden');
   document.getElementById('roomNotFound')?.classList.add('hidden');
   document.getElementById('gameAlreadyStarted')?.classList.remove('hidden');
+  voiceManager?.cleanup();
+  hideChatUi();
+}
+
+function showRoomReplaced(newCode) {
+  document.getElementById('pendingScreen').classList.add('hidden');
+  document.getElementById('mainContent').classList.add('hidden');
+  document.getElementById('roomNotFound')?.classList.add('hidden');
+  document.getElementById('gameAlreadyStarted')?.classList.add('hidden');
+  document.getElementById('roomReplacedCode').textContent = newCode;
+  document.getElementById('roomReplacedLink').href = `/room/${encodeURIComponent(newCode)}`;
+  document.getElementById('roomReplaced').classList.remove('hidden');
   voiceManager?.cleanup();
   hideChatUi();
 }

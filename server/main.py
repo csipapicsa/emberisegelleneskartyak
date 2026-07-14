@@ -17,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 
 from server.db import get_conn, get_editions, get_cards_for_editions
+from server import edition_display
 from server.messages_db import get_conn as get_msg_conn, ensure_tables as ensure_msg_tables, \
     save_message, save_card_idea, get_chat_messages, post_chat_message, \
     get_community_cards, list_card_ideas, vote_card_idea, \
@@ -342,12 +343,40 @@ async def _close_room_with_notice(code: str, reason: str = "admin_left") -> None
     _delete_room_and_chat(code)
 
 
-async def _close_other_rooms_admined_by(session_id: str, except_code: str | None) -> None:
+# Remembers, briefly, which new room a just-closed room's admin moved to.
+# Lets a tab that was still loading the *old* room (e.g. a second tab that
+# lost the "create room" race) show a specific "you already opened a room
+# elsewhere" message with a link to the new code, instead of a bare
+# room-not-found bounce to /join. Keyed by the closed room's code.
+_ADMIN_REDIRECT_TTL_SECONDS = 120
+_admin_room_redirects: dict[str, tuple[str, float]] = {}
+
+
+def _record_admin_redirect(old_code: str, new_code: str) -> None:
+    _admin_room_redirects[old_code] = (new_code, time.time() + _ADMIN_REDIRECT_TTL_SECONDS)
+
+
+def _get_admin_redirect(old_code: str) -> str | None:
+    entry = _admin_room_redirects.get(old_code)
+    if not entry:
+        return None
+    new_code, expires_at = entry
+    if time.time() > expires_at:
+        _admin_room_redirects.pop(old_code, None)
+        return None
+    return new_code
+
+
+async def _close_other_rooms_admined_by(
+    session_id: str, except_code: str | None, new_code: str | None = None
+) -> None:
     from server.room import _rooms
     for code, room in list(_rooms.items()):
         if code == except_code:
             continue
         if room.admin_session_id == session_id and not room.finished:
+            if new_code:
+                _record_admin_redirect(code, new_code)
             await _close_room_with_notice(code, reason="admin_opened_new_room")
 
 
@@ -357,8 +386,8 @@ async def api_create_room(request: Request, body: dict):
     username = body.get("username", "").strip()
     if not session_id or not username:
         raise HTTPException(400, "Session és név megadása kötelező.")
-    await _close_other_rooms_admined_by(session_id, except_code=None)
     code = _generate_room_code()
+    await _close_other_rooms_admined_by(session_id, except_code=None, new_code=code)
     create_room(code, session_id, username)
     log_event(
         "room_created",
@@ -374,6 +403,9 @@ async def api_create_room(request: Request, body: dict):
 async def api_get_room(code: str, session_id: str | None = None):
     room = get_room(code)
     if not room:
+        new_code = _get_admin_redirect(code)
+        if new_code:
+            raise HTTPException(404, detail={"reason": "admin_opened_new_room", "new_code": new_code})
         raise HTTPException(404, "A szoba nem található.")
     is_player = bool(session_id and session_id in room.players)
     return {
@@ -427,6 +459,9 @@ async def api_editions():
         "black_count": len(c_black),
         "white_count": len(c_white),
     })
+    editions.sort(key=lambda e: edition_display.sort_key(e["name"]))
+    for e in editions:
+        e["name"] = edition_display.label_for(e["name"])
     return editions
 
 
@@ -604,6 +639,10 @@ async def websocket_endpoint(ws: WebSocket, room_code: str):
         await ws.close(code=4006)
         return
     else:
+        new_code = _get_admin_redirect(room_code)
+        if new_code:
+            await ws.accept()
+            await ws.send_json({"event": "room_replaced", "new_code": new_code})
         await ws.close(code=4004)
         return
 
