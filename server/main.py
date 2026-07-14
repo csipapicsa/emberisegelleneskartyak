@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import asyncio
+import ipaddress
 import json
 import logging
 import os
@@ -28,6 +29,7 @@ from server.room import create_room, get_room, delete_room, Player
 from server import game as game_logic
 from server.voice import generate_turn_credentials, validate_signal, check_ice_rate
 from server.analytics import log_event, get_stats
+from server.privacy import PrivacyConfigurationError, pseudonymize_ip
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +104,14 @@ async def _room_cleanup_task() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    startup_conn = get_msg_conn()
+    try:
+        ensure_msg_tables(startup_conn, migrate_legacy_votes=True)
+    finally:
+        startup_conn.close()
+    from server.analytics import init_analytics
+    init_analytics(migrate_privacy=True)
+
     if os.environ.get("EEK_DISABLE_ROOM_CLEANUP") == "1":
         yield
         return
@@ -116,11 +126,6 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-
-# Ensure messages.db tables exist
-_startup_conn = get_msg_conn()
-ensure_msg_tables(_startup_conn)
-_startup_conn.close()
 
 # Ensure chat.db tables exist. Room chat is scoped to in-memory rooms, which
 # are all gone on process start, so any leftover rows are orphaned — wipe them.
@@ -393,7 +398,7 @@ async def api_create_room(request: Request, body: dict):
         "room_created",
         room_code=code,
         username=username,
-        ip=request.client.host if request.client else None,
+        ip=_client_ip(request),
         user_agent=request.headers.get("user-agent"),
     )
     return {"code": code}
@@ -549,19 +554,31 @@ async def api_card_ideas(request: Request):
     return {"ok": True}
 
 
-def _client_ip(request: Request) -> str:
-    # nginx forwards X-Forwarded-For (and X-Real-IP); take the first hop.
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        return xff.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+def _client_ip(request: Request) -> str | None:
+    """Read the client IP from nginx's single, sanitised forwarding header."""
+    candidate = request.headers.get("x-real-ip")
+    if not candidate and request.client:
+        candidate = request.client.host
+    if not candidate:
+        return None
+    try:
+        return str(ipaddress.ip_address(candidate.strip()))
+    except ValueError:
+        return None
 
 
 @app.get("/api/card-ideas")
 async def api_list_card_ideas(request: Request):
+    voter_hash = None
+    ip = _client_ip(request)
+    if ip:
+        try:
+            voter_hash = pseudonymize_ip(ip, "card-idea-vote")
+        except PrivacyConfigurationError:
+            logger.error("Card-idea vote identity unavailable: privacy HMAC secret is not configured.")
     conn = get_msg_conn()
     try:
-        return list_card_ideas(conn, _client_ip(request))
+        return list_card_ideas(conn, voter_hash)
     finally:
         conn.close()
 
@@ -576,9 +593,18 @@ async def api_vote_card_idea(idea_id: int, request: Request):
     if vote not in ("like", "dislike"):
         raise HTTPException(400, "Érvénytelen szavazat")
 
+    ip = _client_ip(request)
+    if not ip:
+        raise HTTPException(400, "A szavazáshoz nem azonosítható a kapcsolat.")
+    try:
+        voter_hash = pseudonymize_ip(ip, "card-idea-vote")
+    except PrivacyConfigurationError as exc:
+        logger.exception("Card-idea voting is unavailable: privacy HMAC secret is not configured.")
+        raise HTTPException(503, "A szavazás átmenetileg nem elérhető.") from exc
+
     conn = get_msg_conn()
     try:
-        result = vote_card_idea(conn, idea_id, _client_ip(request), vote)
+        result = vote_card_idea(conn, idea_id, voter_hash, vote)
     finally:
         conn.close()
     if result is None:
@@ -948,10 +974,8 @@ async def admin_stats(key: str = ""):
     for e in s["recent"]:
         label = event_labels.get(e["event_type"], e["event_type"])
         ts    = e["ts"][:16].replace("T", " ")
-        room  = e["room_code"] or "—"
-        user  = e["username"]  or "—"
         pc    = e["player_count"] if e["player_count"] is not None else "—"
-        recent_rows += f"<tr><td>{ts}</td><td>{label}</td><td>{room}</td><td>{user}</td><td>{pc}</td></tr>"
+        recent_rows += f"<tr><td>{ts}</td><td>{label}</td><td>{pc}</td></tr>"
 
     html = f"""<!DOCTYPE html>
 <html lang="hu">
@@ -1022,7 +1046,7 @@ async def admin_stats(key: str = ""):
 <div class="section-label">Legutóbbi események</div>
 <div class="tbl-wrap">
 <table>
-  <thead><tr><th>Időpont</th><th>Esemény</th><th>Szoba</th><th>Felhasználó</th><th>Játékosok</th></tr></thead>
+  <thead><tr><th>Időpont</th><th>Esemény</th><th>Játékosok</th></tr></thead>
   <tbody>{recent_rows or "<tr><td colspan=5 style='color:var(--muted);text-align:center;padding:20px'>Még nincs adat</td></tr>"}</tbody>
 </table>
 </div>

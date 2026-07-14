@@ -1,12 +1,16 @@
 from __future__ import annotations
-import hashlib
 import json
+import logging
 import os
 import sqlite3
 from datetime import datetime
 from pathlib import Path
 
+from server.privacy import PrivacyConfigurationError, pseudonymize_ip
+
 DB_PATH = Path(__file__).parent.parent / "analytics.db"
+RETENTION_DAYS = 90
+logger = logging.getLogger(__name__)
 
 _BOT_PATTERNS = [
     "bot", "crawler", "spider", "crawl", "slurp",
@@ -17,7 +21,7 @@ _BOT_PATTERNS = [
 ]
 
 
-def _init() -> None:
+def init_analytics(*, migrate_privacy: bool = False) -> None:
     con = sqlite3.connect(DB_PATH)
     con.executescript("""
         CREATE TABLE IF NOT EXISTS events (
@@ -33,16 +37,28 @@ def _init() -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_ts   ON events(ts);
         CREATE INDEX IF NOT EXISTS idx_type ON events(event_type);
+        CREATE TABLE IF NOT EXISTS analytics_meta (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
     """)
+    if migrate_privacy:
+        version = con.execute(
+            "SELECT value FROM analytics_meta WHERE key = 'privacy_schema_version'"
+        ).fetchone()
+        if not version or version[0] != "2":
+            # Historical event rows contain fields no longer needed for the
+            # aggregate dashboard.  Delete them instead of carrying legacy
+            # pseudonyms or player identifiers forward indefinitely.
+            con.execute(
+                "UPDATE events SET room_code = NULL, username = NULL, ip_hash = NULL, user_agent = NULL"
+            )
+            con.execute(
+                "INSERT OR REPLACE INTO analytics_meta (key, value) VALUES ('privacy_schema_version', '2')"
+            )
+        con.execute("DELETE FROM events WHERE ts < datetime('now', ?)", (f"-{RETENTION_DAYS} days",))
     con.commit()
     con.close()
-
-
-_init()
-
-
-def _hash_ip(ip: str) -> str:
-    return hashlib.sha256(ip.encode()).hexdigest()[:16]
 
 
 def _is_bot(ua: str) -> bool:
@@ -64,6 +80,13 @@ def log_event(
         return
     if user_agent and _is_bot(user_agent):
         return
+    visitor_hash = None
+    if ip:
+        try:
+            visitor_hash = pseudonymize_ip(ip, "internal-statistics")
+        except PrivacyConfigurationError:
+            logger.warning("IP-based unique-visitor counting is disabled: privacy HMAC secret is not configured.")
+    init_analytics()
     con = sqlite3.connect(DB_PATH)
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     con.execute(
@@ -73,19 +96,21 @@ def log_event(
         (
             event_type,
             ts,
-            room_code,
-            username,
-            _hash_ip(ip) if ip else None,
+            None,
+            None,
+            visitor_hash,
             player_count,
-            (user_agent or "")[:200] or None,
+            None,
             json.dumps(extra) if extra else None,
         ),
     )
+    con.execute("DELETE FROM events WHERE ts < datetime('now', ?)", (f"-{RETENTION_DAYS} days",))
     con.commit()
     con.close()
 
 
 def get_stats() -> dict:
+    init_analytics()
     con = sqlite3.connect(DB_PATH)
     con.row_factory = sqlite3.Row
 

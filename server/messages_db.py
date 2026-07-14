@@ -4,6 +4,8 @@ import html
 import os
 from datetime import datetime, timezone
 
+from server.privacy import PrivacyConfigurationError, pseudonymize_ip
+
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "messages.db")
 CARD_IDEA_MAX_LENGTHS = {"white": 280, "black": 360}
 
@@ -25,7 +27,7 @@ def get_conn() -> sqlite3.Connection:
     return conn
 
 
-def ensure_tables(conn: sqlite3.Connection) -> None:
+def ensure_tables(conn: sqlite3.Connection, *, migrate_legacy_votes: bool = False) -> None:
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS messages (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,10 +79,10 @@ def ensure_tables(conn: sqlite3.Connection) -> None:
 
         CREATE TABLE IF NOT EXISTS card_idea_votes (
             idea_id    INTEGER NOT NULL,
-            voter_ip   TEXT    NOT NULL,
+            voter_hash TEXT    NOT NULL,
             vote       TEXT    NOT NULL CHECK (vote IN ('like', 'dislike')),
             created_at TEXT    NOT NULL,
-            PRIMARY KEY (idea_id, voter_ip)
+            PRIMARY KEY (idea_id, voter_hash)
         );
     """)
     columns = {row[1] for row in conn.execute("PRAGMA table_info(card_ideas)").fetchall()}
@@ -94,7 +96,51 @@ def ensure_tables(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE card_ideas ADD COLUMN seen_by_admin INTEGER NOT NULL DEFAULT 0")
     if "number_of_white_cards" not in columns:
         conn.execute("ALTER TABLE card_ideas ADD COLUMN number_of_white_cards INTEGER NOT NULL DEFAULT 1")
+    _migrate_legacy_vote_ips(conn, enabled=migrate_legacy_votes)
     conn.commit()
+
+
+def _migrate_legacy_vote_ips(conn: sqlite3.Connection, *, enabled: bool) -> None:
+    """Replace the legacy raw-IP voting table with purpose-bound HMACs.
+
+    This is intentionally opt-in so importing the application during tests
+    cannot alter the production runtime database.  The real application calls
+    it during its lifespan startup.
+    """
+    vote_columns = {
+        row[1] for row in conn.execute("PRAGMA table_info(card_idea_votes)").fetchall()
+    }
+    if "voter_ip" not in vote_columns:
+        return
+    if not enabled:
+        return
+
+    conn.execute("""
+        CREATE TABLE card_idea_votes_hmac (
+            idea_id    INTEGER NOT NULL,
+            voter_hash TEXT    NOT NULL,
+            vote       TEXT    NOT NULL CHECK (vote IN ('like', 'dislike')),
+            created_at TEXT    NOT NULL,
+            PRIMARY KEY (idea_id, voter_hash)
+        )
+    """)
+    rows = conn.execute(
+        "SELECT idea_id, voter_ip, vote, created_at FROM card_idea_votes"
+    ).fetchall()
+    try:
+        conn.executemany(
+            """INSERT INTO card_idea_votes_hmac (idea_id, voter_hash, vote, created_at)
+               VALUES (?, ?, ?, ?)""",
+            [
+                (idea_id, pseudonymize_ip(voter_ip, "card-idea-vote"), vote, created_at)
+                for idea_id, voter_ip, vote, created_at in rows
+            ],
+        )
+    except PrivacyConfigurationError:
+        conn.execute("DROP TABLE card_idea_votes_hmac")
+        raise
+    conn.execute("DROP TABLE card_idea_votes")
+    conn.execute("ALTER TABLE card_idea_votes_hmac RENAME TO card_idea_votes")
 
 
 def save_message(conn: sqlite3.Connection, name: str, email: str, message: str) -> None:
@@ -170,7 +216,7 @@ def get_community_cards(conn: sqlite3.Connection) -> tuple[list[dict], list[dict
     return black, white
 
 
-def list_card_ideas(conn: sqlite3.Connection, voter_ip: str) -> list[dict]:
+def list_card_ideas(conn: sqlite3.Connection, voter_hash: str | None) -> list[dict]:
     """Every card idea with live like/dislike counts, this IP's own vote, and
     moderation status, newest submission first."""
     rows = conn.execute(
@@ -184,13 +230,13 @@ def list_card_ideas(conn: sqlite3.Connection, voter_ip: str) -> list[dict]:
             ci.seen_by_admin,
             COALESCE(SUM(v.vote = 'like'), 0)    AS likes,
             COALESCE(SUM(v.vote = 'dislike'), 0) AS dislikes,
-            MAX(CASE WHEN v.voter_ip = ? THEN v.vote END) AS my_vote
+            MAX(CASE WHEN v.voter_hash = ? THEN v.vote END) AS my_vote
         FROM card_ideas ci
         LEFT JOIN card_idea_votes v ON v.idea_id = ci.id
         GROUP BY ci.id
         ORDER BY ci.created_at DESC, ci.id DESC
         """,
-        (voter_ip,),
+        (voter_hash,),
     ).fetchall()
     return [dict(r) for r in rows]
 
@@ -214,7 +260,7 @@ def _refresh_idea_counts(conn: sqlite3.Connection, idea_id: int) -> dict:
     return {"likes": likes, "dislikes": dislikes}
 
 
-def vote_card_idea(conn: sqlite3.Connection, idea_id: int, voter_ip: str, vote: str) -> dict | None:
+def vote_card_idea(conn: sqlite3.Connection, idea_id: int, voter_hash: str, vote: str) -> dict | None:
     """Cast one vote per IP per card. Toggling the same vote removes it; the
     opposite vote replaces it. Returns updated counts + my_vote, or None if the
     idea does not exist."""
@@ -224,26 +270,26 @@ def vote_card_idea(conn: sqlite3.Connection, idea_id: int, voter_ip: str, vote: 
         return None
 
     existing = conn.execute(
-        "SELECT vote FROM card_idea_votes WHERE idea_id = ? AND voter_ip = ?",
-        (idea_id, voter_ip),
+        "SELECT vote FROM card_idea_votes WHERE idea_id = ? AND voter_hash = ?",
+        (idea_id, voter_hash),
     ).fetchone()
 
     if existing and existing["vote"] == vote:
         # Same button again → un-vote
         conn.execute(
-            "DELETE FROM card_idea_votes WHERE idea_id = ? AND voter_ip = ?",
-            (idea_id, voter_ip),
+            "DELETE FROM card_idea_votes WHERE idea_id = ? AND voter_hash = ?",
+            (idea_id, voter_hash),
         )
         my_vote = None
     else:
         now = datetime.now(timezone.utc).isoformat()
         conn.execute(
             """
-            INSERT INTO card_idea_votes (idea_id, voter_ip, vote, created_at)
+            INSERT INTO card_idea_votes (idea_id, voter_hash, vote, created_at)
             VALUES (?, ?, ?, ?)
-            ON CONFLICT(idea_id, voter_ip) DO UPDATE SET vote = excluded.vote
+            ON CONFLICT(idea_id, voter_hash) DO UPDATE SET vote = excluded.vote
             """,
-            (idea_id, voter_ip, vote, now),
+            (idea_id, voter_hash, vote, now),
         )
         my_vote = vote
 

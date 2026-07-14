@@ -16,6 +16,7 @@ from server.messages_db import (
     COMMUNITY_EDITION_ID,
     COMMUNITY_ID_OFFSET,
 )
+from server.privacy import pseudonymize_ip
 
 
 # ── Fixtures & helpers ────────────────────────────────────────────────────────
@@ -28,6 +29,15 @@ def db():
     ensure_tables(conn)
     yield conn
     conn.close()
+
+
+@pytest.fixture(autouse=True)
+def privacy_hmac_secret(monkeypatch):
+    monkeypatch.setenv("EEK_PRIVACY_HMAC_SECRET", "test-only-privacy-secret")
+
+
+def voter_hash(ip: str) -> str:
+    return pseudonymize_ip(ip, "card-idea-vote")
 
 
 @pytest.fixture
@@ -125,7 +135,7 @@ def test_community_cards_use_number_of_white_cards_as_pick(db):
 
 def test_list_card_ideas_zero_counts_initially(db):
     save_card_idea(db, "white", "Friss ötlet.")
-    rows = list_card_ideas(db, "1.1.1.1")
+    rows = list_card_ideas(db, voter_hash("1.1.1.1"))
     assert len(rows) == 1
     assert rows[0]["likes"] == 0
     assert rows[0]["dislikes"] == 0
@@ -135,10 +145,10 @@ def test_list_card_ideas_zero_counts_initially(db):
 def test_list_card_ideas_reports_my_vote_per_ip(db):
     save_card_idea(db, "black", "Szavazható kártya.")
     idea_id = db.execute("SELECT id FROM card_ideas").fetchone()[0]
-    vote_card_idea(db, idea_id, "1.1.1.1", "like")
-    assert list_card_ideas(db, "1.1.1.1")[0]["my_vote"] == "like"
+    vote_card_idea(db, idea_id, voter_hash("1.1.1.1"), "like")
+    assert list_card_ideas(db, voter_hash("1.1.1.1"))[0]["my_vote"] == "like"
     # A different IP sees the count but not its own vote
-    other = list_card_ideas(db, "2.2.2.2")[0]
+    other = list_card_ideas(db, voter_hash("2.2.2.2"))[0]
     assert other["likes"] == 1
     assert other["my_vote"] is None
 
@@ -148,15 +158,15 @@ def test_list_card_ideas_reports_my_vote_per_ip(db):
 def test_vote_like_increments_count(db):
     save_card_idea(db, "white", "Tetszik?")
     idea_id = db.execute("SELECT id FROM card_ideas").fetchone()[0]
-    res = vote_card_idea(db, idea_id, "5.5.5.5", "like")
+    res = vote_card_idea(db, idea_id, voter_hash("5.5.5.5"), "like")
     assert res == {"id": idea_id, "my_vote": "like", "likes": 1, "dislikes": 0}
 
 
 def test_same_vote_again_unvotes(db):
     save_card_idea(db, "white", "Toggle.")
     idea_id = db.execute("SELECT id FROM card_ideas").fetchone()[0]
-    vote_card_idea(db, idea_id, "5.5.5.5", "like")
-    res = vote_card_idea(db, idea_id, "5.5.5.5", "like")
+    vote_card_idea(db, idea_id, voter_hash("5.5.5.5"), "like")
+    res = vote_card_idea(db, idea_id, voter_hash("5.5.5.5"), "like")
     assert res["my_vote"] is None
     assert res["likes"] == 0
 
@@ -164,8 +174,8 @@ def test_same_vote_again_unvotes(db):
 def test_opposite_vote_switches(db):
     save_card_idea(db, "white", "Switch.")
     idea_id = db.execute("SELECT id FROM card_ideas").fetchone()[0]
-    vote_card_idea(db, idea_id, "5.5.5.5", "like")
-    res = vote_card_idea(db, idea_id, "5.5.5.5", "dislike")
+    vote_card_idea(db, idea_id, voter_hash("5.5.5.5"), "like")
+    res = vote_card_idea(db, idea_id, voter_hash("5.5.5.5"), "dislike")
     assert res["my_vote"] == "dislike"
     assert res["likes"] == 0
     assert res["dislikes"] == 1
@@ -174,12 +184,12 @@ def test_opposite_vote_switches(db):
 def test_one_vote_per_ip(db):
     save_card_idea(db, "white", "Egy IP egy szavazat.")
     idea_id = db.execute("SELECT id FROM card_ideas").fetchone()[0]
-    vote_card_idea(db, idea_id, "1.1.1.1", "like")
-    vote_card_idea(db, idea_id, "1.1.1.1", "like")  # toggles off, no double-count
-    vote_card_idea(db, idea_id, "1.1.1.1", "like")  # on again
+    vote_card_idea(db, idea_id, voter_hash("1.1.1.1"), "like")
+    vote_card_idea(db, idea_id, voter_hash("1.1.1.1"), "like")  # toggles off, no double-count
+    vote_card_idea(db, idea_id, voter_hash("1.1.1.1"), "like")  # on again
     rows_for_ip = db.execute(
-        "SELECT COUNT(*) FROM card_idea_votes WHERE idea_id = ? AND voter_ip = ?",
-        (idea_id, "1.1.1.1"),
+        "SELECT COUNT(*) FROM card_idea_votes WHERE idea_id = ? AND voter_hash = ?",
+        (idea_id, voter_hash("1.1.1.1")),
     ).fetchone()[0]
     assert rows_for_ip == 1
 
@@ -187,9 +197,9 @@ def test_one_vote_per_ip(db):
 def test_distinct_ips_counted_separately(db):
     save_card_idea(db, "white", "Több IP.")
     idea_id = db.execute("SELECT id FROM card_ideas").fetchone()[0]
-    vote_card_idea(db, idea_id, "1.1.1.1", "like")
-    vote_card_idea(db, idea_id, "2.2.2.2", "like")
-    res = vote_card_idea(db, idea_id, "3.3.3.3", "dislike")
+    vote_card_idea(db, idea_id, voter_hash("1.1.1.1"), "like")
+    vote_card_idea(db, idea_id, voter_hash("2.2.2.2"), "like")
+    res = vote_card_idea(db, idea_id, voter_hash("3.3.3.3"), "dislike")
     assert res["likes"] == 2
     assert res["dislikes"] == 1
 
@@ -197,30 +207,57 @@ def test_distinct_ips_counted_separately(db):
 def test_vote_refreshes_denormalized_counters(db):
     save_card_idea(db, "white", "Denormalizált.")
     idea_id = db.execute("SELECT id FROM card_ideas").fetchone()[0]
-    vote_card_idea(db, idea_id, "1.1.1.1", "like")
-    vote_card_idea(db, idea_id, "2.2.2.2", "dislike")
+    vote_card_idea(db, idea_id, voter_hash("1.1.1.1"), "like")
+    vote_card_idea(db, idea_id, voter_hash("2.2.2.2"), "dislike")
     row = db.execute('SELECT "like", dislike FROM card_ideas WHERE id = ?', (idea_id,)).fetchone()
     assert row["like"] == 1
     assert row["dislike"] == 1
 
 
 def test_vote_nonexistent_idea_returns_none(db):
-    assert vote_card_idea(db, 999999, "1.1.1.1", "like") is None
+    assert vote_card_idea(db, 999999, voter_hash("1.1.1.1"), "like") is None
 
 
 def test_vote_invalid_value_raises(db):
     save_card_idea(db, "white", "Rossz szavazat.")
     idea_id = db.execute("SELECT id FROM card_ideas").fetchone()[0]
     with pytest.raises(ValueError):
-        vote_card_idea(db, idea_id, "1.1.1.1", "meh")
+        vote_card_idea(db, idea_id, voter_hash("1.1.1.1"), "meh")
+
+
+def test_legacy_raw_ip_votes_are_migrated_to_hmac(db):
+    db.execute("DROP TABLE card_idea_votes")
+    db.execute("""
+        CREATE TABLE card_idea_votes (
+            idea_id INTEGER NOT NULL,
+            voter_ip TEXT NOT NULL,
+            vote TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY (idea_id, voter_ip)
+        )
+    """)
+    db.execute(
+        "INSERT INTO card_idea_votes VALUES (1, '1.2.3.4', 'like', '2026-01-01T00:00:00Z')"
+    )
+    ensure_tables(db, migrate_legacy_votes=True)
+
+    columns = {row[1] for row in db.execute("PRAGMA table_info(card_idea_votes)")}
+    assert "voter_ip" not in columns
+    assert db.execute("SELECT voter_hash FROM card_idea_votes").fetchone()[0] == voter_hash("1.2.3.4")
 
 
 # ── _client_ip helper ─────────────────────────────────────────────────────────
 
-def test_client_ip_uses_first_forwarded_hop():
+def test_client_ip_uses_nginx_real_ip_header():
     from server.main import _client_ip
-    req = make_request(headers={"x-forwarded-for": "1.2.3.4, 5.6.7.8"})
+    req = make_request(headers={"x-real-ip": "1.2.3.4"})
     assert _client_ip(req) == "1.2.3.4"
+
+
+def test_client_ip_does_not_trust_forwarded_header():
+    from server.main import _client_ip
+    req = make_request(headers={"x-forwarded-for": "1.2.3.4"})
+    assert _client_ip(req) is None
 
 
 def test_client_ip_falls_back_to_socket():
@@ -231,7 +268,7 @@ def test_client_ip_falls_back_to_socket():
 
 def test_client_ip_unknown_when_no_client():
     from server.main import _client_ip
-    assert _client_ip(make_request()) == "unknown"
+    assert _client_ip(make_request()) is None
 
 
 # ── HTTP endpoints ────────────────────────────────────────────────────────────
@@ -259,7 +296,7 @@ async def test_api_list_card_ideas_returns_list(api_db):
 async def test_api_vote_valid_returns_counts(api_db):
     from server.main import api_vote_card_idea
     idea_id = seed_idea("white", "API szavazás.")
-    res = await api_vote_card_idea(idea_id, json_request({"vote": "like"}, {"x-forwarded-for": "8.8.8.8"}))
+    res = await api_vote_card_idea(idea_id, json_request({"vote": "like"}, {"x-real-ip": "8.8.8.8"}))
     assert res["likes"] == 1
     assert res["my_vote"] == "like"
 
@@ -268,12 +305,12 @@ async def test_api_vote_valid_returns_counts(api_db):
 async def test_api_vote_persists_per_ip_across_calls(api_db):
     from server.main import api_vote_card_idea, api_list_card_ideas
     idea_id = seed_idea("white", "IP-alapú.")
-    await api_vote_card_idea(idea_id, json_request({"vote": "like"}, {"x-forwarded-for": "8.8.8.8"}))
+    await api_vote_card_idea(idea_id, json_request({"vote": "like"}, {"x-real-ip": "8.8.8.8"}))
     # Same IP listing sees its own vote
-    same_ip = await api_list_card_ideas(make_request(headers={"x-forwarded-for": "8.8.8.8"}))
+    same_ip = await api_list_card_ideas(make_request(headers={"x-real-ip": "8.8.8.8"}))
     assert same_ip[0]["my_vote"] == "like"
     # Different IP sees the count but no personal vote
-    other_ip = await api_list_card_ideas(make_request(headers={"x-forwarded-for": "9.9.9.9"}))
+    other_ip = await api_list_card_ideas(make_request(headers={"x-real-ip": "9.9.9.9"}))
     assert other_ip[0]["likes"] == 1
     assert other_ip[0]["my_vote"] is None
 
@@ -291,7 +328,7 @@ async def test_api_vote_invalid_value_returns_400(api_db):
 async def test_api_vote_nonexistent_returns_404(api_db):
     from server.main import api_vote_card_idea
     with pytest.raises(HTTPException) as exc:
-        await api_vote_card_idea(424242, json_request({"vote": "like"}))
+        await api_vote_card_idea(424242, json_request({"vote": "like"}, {"x-real-ip": "8.8.8.8"}))
     assert exc.value.status_code == 404
 
 

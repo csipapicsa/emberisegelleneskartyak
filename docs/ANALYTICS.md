@@ -1,6 +1,6 @@
 # Analytics — Implementation Summary
 
-Private, lightweight event tracking to understand real game usage. No external services, no raw PII stored.
+Private, lightweight event tracking to understand real game usage. No external services and no raw IP storage.
 
 ---
 
@@ -26,11 +26,11 @@ CREATE TABLE events (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     event_type   TEXT    NOT NULL,
     ts           TEXT    NOT NULL DEFAULT (datetime('now')),
-    room_code    TEXT,
-    username     TEXT,
-    ip_hash      TEXT,       -- SHA-256 of IP, first 16 hex chars
+    room_code    TEXT,       -- legacy column; new events leave it empty
+    username     TEXT,       -- legacy column; new events leave it empty
+    ip_hash      TEXT,       -- HMAC(IP, internal-statistics purpose)
     player_count INTEGER,
-    user_agent   TEXT,       -- truncated to 200 chars
+    user_agent   TEXT,       -- legacy column; new events leave it empty
     extra        TEXT        -- JSON blob for event-specific data
 );
 ```
@@ -45,11 +45,11 @@ Indexes on `ts` and `event_type`.
 
 | event_type | Trigger | Captured fields |
 |---|---|---|
-| `room_created` | `POST /api/room` | room_code, username (admin), ip_hash, user_agent |
-| `player_joined` | Admin approves a player via WebSocket | room_code, username, player_count |
-| `game_started` | Admin sends `start_game` event | room_code, player_count |
-| `game_ended` | Game finishes (all rounds done) | room_code, player_count, extra: `{"rounds": N}` |
-| `room_abandoned` | Cleanup task removes an unstarted room | room_code, username (admin), player_count |
+| `room_created` | `POST /api/room` | purpose-bound IP HMAC, player_count where applicable |
+| `player_joined` | Admin approves a player via WebSocket | player_count |
+| `game_started` | Admin sends `start_game` event | player_count |
+| `game_ended` | Game finishes (all rounds done) | player_count, extra: `{"rounds": N}` |
+| `room_abandoned` | Cleanup task removes an unstarted room | player_count |
 
 **What is NOT tracked:** page views, bot traffic, reconnections, chat messages, card feedback.
 
@@ -65,9 +65,13 @@ Events logged without a user_agent (e.g. `game_ended` from game logic) are never
 
 ## Privacy
 
-- IP addresses are **never stored raw**. Only the first 16 hex characters of `SHA-256(ip)` are kept — enough to count unique visitors, not enough to reverse to an IP.
-- Usernames are nicknames chosen by players (no account system).
-- No cookies or tracking pixels involved.
+- IP addresses are **never stored raw**. A server-secret HMAC is stored only
+  for the internal-statistics purpose; it cannot be reused for voting.
+- Player name, room code and user-agent are not retained in analytics.
+- Events are retained for 90 days; older events are deleted automatically.
+- The site has no tracking pixels or third-party analytics. Browser
+  `localStorage` is used for game functionality and preferences; see the
+  public privacy notice when it is published.
 
 ---
 
