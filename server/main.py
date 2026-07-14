@@ -976,8 +976,10 @@ async def admin_stats(key: str = ""):
     for e in s["recent"]:
         label = event_labels.get(e["event_type"], e["event_type"])
         ts    = e["ts"][:16].replace("T", " ")
+        room  = e["room_code"] or "—"
+        user  = e["username"] or "—"
         pc    = e["player_count"] if e["player_count"] is not None else "—"
-        recent_rows += f"<tr><td>{ts}</td><td>{label}</td><td>{pc}</td></tr>"
+        recent_rows += f"<tr><td>{ts}</td><td>{label}</td><td>{room}</td><td>{user}</td><td>{pc}</td></tr>"
 
     html = f"""<!DOCTYPE html>
 <html lang="hu">
@@ -1048,7 +1050,7 @@ async def admin_stats(key: str = ""):
 <div class="section-label">Legutóbbi események</div>
 <div class="tbl-wrap">
 <table>
-  <thead><tr><th>Időpont</th><th>Esemény</th><th>Játékosok</th></tr></thead>
+  <thead><tr><th>Időpont</th><th>Esemény</th><th>Szoba</th><th>Felhasználó</th><th>Játékosok</th></tr></thead>
   <tbody>{recent_rows or "<tr><td colspan=5 style='color:var(--muted);text-align:center;padding:20px'>Még nincs adat</td></tr>"}</tbody>
 </table>
 </div>

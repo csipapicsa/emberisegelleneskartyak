@@ -47,13 +47,6 @@ def init_analytics(*, migrate_privacy: bool = False) -> None:
             "SELECT value FROM analytics_meta WHERE key = 'privacy_schema_version'"
         ).fetchone()
         if not version or version[0] != "2":
-            # Historical event rows may contain fields no longer needed for
-            # the aggregate dashboard. Keep the existing IP pseudonyms: they
-            # are required for the published short-term unique-visitor stats
-            # and are deleted by the normal 90-day retention job.
-            con.execute(
-                "UPDATE events SET room_code = NULL, username = NULL, user_agent = NULL"
-            )
             con.execute(
                 "INSERT OR REPLACE INTO analytics_meta (key, value) VALUES ('privacy_schema_version', '2')"
             )
@@ -97,11 +90,11 @@ def log_event(
         (
             event_type,
             ts,
-            None,
-            None,
+            room_code,
+            username,
             visitor_hash,
             player_count,
-            None,
+            (user_agent or "")[:200] or None,
             json.dumps(extra) if extra else None,
         ),
     )

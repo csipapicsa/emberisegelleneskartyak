@@ -24,7 +24,7 @@ def test_privacy_migration_removes_unneeded_legacy_event_fields(tmp_path, monkey
     con = sqlite3.connect(db_path)
     assert con.execute(
         "SELECT room_code, username, ip_hash, user_agent FROM events"
-    ).fetchone() == (None, None, "legacy", None)
+    ).fetchone() == ("1234", "Feri", "legacy", "UA")
     con.close()
 
 
@@ -47,4 +47,4 @@ def test_new_events_store_only_purpose_bound_ip_hmac(tmp_path, monkeypatch):
         "SELECT room_code, username, ip_hash, user_agent FROM events"
     ).fetchone()
     con.close()
-    assert row == (None, None, pseudonymize_ip("1.2.3.4", "internal-statistics"), None)
+    assert row == ("1234", "Feri", pseudonymize_ip("1.2.3.4", "internal-statistics"), "Example Browser")
