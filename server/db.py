@@ -13,7 +13,19 @@ def get_conn() -> sqlite3.Connection:
 
 
 def get_editions(conn: sqlite3.Connection) -> list[dict]:
-    rows = conn.execute("SELECT id, name FROM editions ORDER BY name").fetchall()
+    # Count only the Hungarian cards because those are the cards that
+    # get_cards_for_editions() can add to a game.
+    rows = conn.execute("""
+        SELECT
+            editions.id,
+            editions.name,
+            COUNT(CASE WHEN cards.language = 'HUN' AND cards.type = 'Black' THEN 1 END) AS black_count,
+            COUNT(CASE WHEN cards.language = 'HUN' AND cards.type = 'White' THEN 1 END) AS white_count
+        FROM editions
+        LEFT JOIN cards ON cards.edition_id = editions.id
+        GROUP BY editions.id, editions.name
+        ORDER BY editions.name
+    """).fetchall()
     return [dict(r) for r in rows]
 
 

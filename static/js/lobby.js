@@ -264,7 +264,7 @@ async function loadEditions(currentIds) {
   container.innerHTML = list.map(e => `
     <label class="select-option ${selected.includes(e.id) ? 'selected' : ''}" data-id="${e.id}"${e.community ? ' data-community="1"' : ''}>
       <input type="checkbox" ${selected.includes(e.id) ? 'checked' : ''}>
-      ${esc(e.name)}${e.community ? ` <span class="edition-hint">(csak másik csomaggal &middot; ${e.black_count} fekete, ${e.white_count} fehér)</span>` : ''}
+      ${esc(e.name)} <span class="edition-hint">(${e.community ? 'csak másik csomaggal &middot; ' : ''}${e.black_count} fekete, ${e.white_count} fehér)</span>
     </label>
   `).join('');
 
