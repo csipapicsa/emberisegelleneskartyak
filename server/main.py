@@ -17,7 +17,13 @@ from fastapi import FastAPI, Request, WebSocket, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 
-from server.db import get_conn, get_editions, get_cards_for_editions
+from server.db import (
+    get_conn,
+    get_editions,
+    get_edition_name,
+    get_cards_for_edition,
+    get_cards_for_editions,
+)
 from server import edition_display
 from server.messages_db import get_conn as get_msg_conn, ensure_tables as ensure_msg_tables, \
     save_message, save_card_idea, get_chat_messages, post_chat_message, \
@@ -470,6 +476,40 @@ async def api_editions():
     for e in editions:
         e["name"] = edition_display.label_for(e["name"])
     return editions
+
+
+@app.get("/api/editions/{edition_id}/cards")
+async def api_edition_cards(edition_id: int):
+    """Return one edition's playable cards for the read-only card browser."""
+    if edition_id == COMMUNITY_EDITION_ID:
+        conn = get_msg_conn()
+        try:
+            black_cards, white_cards = get_community_cards(conn)
+        finally:
+            conn.close()
+        name = COMMUNITY_EDITION_NAME
+        community = True
+    else:
+        conn = get_conn()
+        try:
+            name = get_edition_name(conn, edition_id)
+            if name is None:
+                raise HTTPException(404, "Ez a kártyacsomag nem létezik.")
+            black_cards, white_cards = get_cards_for_edition(conn, edition_id)
+        finally:
+            conn.close()
+        community = False
+
+    def card_payload(card: dict) -> dict:
+        return {"text": card["text"], "pick": card["pick"]}
+
+    return {
+        "id": edition_id,
+        "name": edition_display.label_for(name),
+        "community": community,
+        "black_cards": [card_payload(card) for card in black_cards],
+        "white_cards": [card_payload(card) for card in white_cards],
+    }
 
 
 @app.get("/api/config")
@@ -954,7 +994,7 @@ async def admin_stats(key: str = ""):
         hh = f"{h:02d}"
         cnt = s["peak_hours"].get(hh, 0)
         pct = round(cnt / max_cnt * 100) if max_cnt else 0
-        hour_bars += f'<div class="hbar-col"><div class="hbar-fill" style="height:{pct}%"></div><div class="hbar-label">{hh}</div></div>'
+        hour_bars += f'<div class="hbar-col"><div class="hbar-fill" style="height:{pct}%" title="{hh}:00 — {cnt} esemény"></div><div class="hbar-label">{hh}</div></div>'
 
     # Daily table rows
     daily_rows = ""
@@ -1004,8 +1044,8 @@ async def admin_stats(key: str = ""):
   .dau-label{{font-size:.75rem;color:var(--muted);margin-top:4px}}
   .chart-wrap{{background:var(--card);border-radius:12px;padding:20px;margin-bottom:28px}}
   .hbar-grid{{display:flex;align-items:flex-end;gap:3px;height:80px}}
-  .hbar-col{{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%}}
-  .hbar-fill{{width:100%;background:var(--accent);border-radius:3px 3px 0 0;transition:height .3s;min-height:2px}}
+  .hbar-col{{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:4px;height:100%}}
+  .hbar-fill{{width:100%;background:var(--accent);border-radius:3px 3px 0 0;transition:height .3s;min-height:2px;cursor:default}}
   .hbar-label{{font-size:.55rem;color:var(--muted)}}
   table{{width:100%;border-collapse:collapse;font-size:.83rem;margin-bottom:28px}}
   th{{text-align:left;padding:8px 12px;color:var(--muted);font-size:.75rem;font-weight:600;border-bottom:1px solid var(--card2)}}
@@ -1087,6 +1127,7 @@ async def serve_html(full_path: str):
         "kartyaotlet.html": "kartyaotlet.html",
         "kartyaszavazas": "kartyaszavazas.html",
         "kartyaszavazas.html": "kartyaszavazas.html",
+        "kartyak": "cardlist.html",
         "adatkezeles": "adatkezeles.html",
         "adatkezeles.html": "adatkezeles.html",
     }

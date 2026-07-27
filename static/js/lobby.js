@@ -262,10 +262,13 @@ async function loadEditions(currentIds) {
     : list.filter(e => e.name !== 'Bōks').map(e => e.id);
 
   container.innerHTML = list.map(e => `
-    <label class="select-option ${selected.includes(e.id) ? 'selected' : ''}" data-id="${e.id}"${e.community ? ' data-community="1"' : ''}>
-      <input type="checkbox" ${selected.includes(e.id) ? 'checked' : ''}>
-      ${esc(e.name)} <span class="edition-hint">(${e.community ? 'csak másik csomaggal &middot; ' : ''}${e.black_count} fekete, ${e.white_count} fehér)</span>
-    </label>
+    <div class="select-option ${selected.includes(e.id) ? 'selected' : ''}" data-id="${e.id}"${e.community ? ' data-community="1"' : ''}>
+      <label class="edition-choice">
+        <input type="checkbox" ${selected.includes(e.id) ? 'checked' : ''}>
+        <span>${esc(e.name)} <span class="edition-hint">(${e.community ? 'csak másik csomaggal &middot; ' : ''}${e.black_count} fekete, ${e.white_count} fehér)</span></span>
+      </label>
+      <a class="edition-cards-link" href="/kartyak?edition=${encodeURIComponent(e.id)}" title="${esc(e.name)} kártyáinak megtekintése" aria-label="${esc(e.name)} kártyáinak megtekintése">Kártyák</a>
+    </div>
   `).join('');
 
   // Send initial selection to server

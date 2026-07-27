@@ -215,7 +215,12 @@ def get_community_cards(conn: sqlite3.Connection) -> tuple[list[dict], list[dict
     included so unreviewed submissions never show up in-game.
     """
     rows = conn.execute(
-        "SELECT id, card_type, text, number_of_white_cards FROM card_ideas WHERE approved = 1"
+        """
+        SELECT id, card_type, text, number_of_white_cards
+        FROM card_ideas
+        WHERE approved = 1
+        ORDER BY id ASC
+        """
     ).fetchall()
     black, white = [], []
     for r in rows:

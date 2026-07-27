@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kártyák – Emberiség Ellenes Kártyák</title>
+  <meta name="robots" content="noindex, follow">
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <meta name="theme-color" content="#000000">
+  <link rel="stylesheet" href="/static/css/base.css">
+  <style>
+    .card-list-page { max-width: 720px; }
+    .card-list-header { display:flex; align-items:center; gap:14px; }
+    .back-link { color:var(--text-muted); font-size:.85rem; }
+    .card-list-summary { color:var(--text-muted); font-size:.85rem; line-height:1.45; }
+    .card-list-section { display:flex; flex-direction:column; gap:10px; }
+    .card-list-heading { display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+    .card-list-count { color:var(--text-muted); font-size:.8rem; font-weight:600; }
+    .card-list { display:flex; flex-direction:column; gap:8px; }
+    .listed-card { padding:15px 16px; font-size:.95rem; line-height:1.45; user-select:text; }
+    .listed-card.card-black { border-color:var(--grey2); }
+    .pick-label { display:block; margin-top:12px; color:rgba(255,255,255,.55); font-size:.72rem; font-weight:600; }
+    .empty-cards { color:var(--text-muted); font-size:.9rem; padding:8px 0; }
+  </style>
+  <script defer src="https://stats.emberisegelleneskartyak.hu/script.js" data-website-id="3a36dfac-359e-4e1c-afda-27530984c903"></script>
+</head>
+<body>
+  <main class="page card-list-page">
+    <div class="card-list-header">
+      <a class="back-link" id="backLink" href="/">← Vissza</a>
+      <div class="logo">Kártyák</div>
+    </div>
+
+    <div id="loading" style="color:var(--text-muted)">Betöltés...</div>
+    <div id="error" class="hidden" style="color:var(--danger)"></div>
+    <div id="cardContent" class="hidden" style="display:flex;flex-direction:column;gap:24px">
+      <div>
+        <h1 id="editionName"></h1>
+        <p id="editionSummary" class="card-list-summary"></p>
+      </div>
+
+      <section class="card-list-section" aria-labelledby="blackHeading">
+        <div class="card-list-heading">
+          <h2 id="blackHeading">Fekete kártyák</h2>
+          <span id="blackCount" class="card-list-count"></span>
+        </div>
+        <div id="blackCards" class="card-list"></div>
+      </section>
+
+      <section class="card-list-section" aria-labelledby="whiteHeading">
+        <div class="card-list-heading">
+          <h2 id="whiteHeading">Fehér kártyák</h2>
+          <span id="whiteCount" class="card-list-count"></span>
+        </div>
+        <div id="whiteCards" class="card-list"></div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const editionId = new URLSearchParams(location.search).get('edition');
+
+    document.getElementById('backLink').addEventListener('click', event => {
+      if (history.length > 1) {
+        event.preventDefault();
+        history.back();
+      }
+    });
+
+    function renderCards(container, cards, type) {
+      if (!cards.length) {
+        const empty = document.createElement('p');
+        empty.className = 'empty-cards';
+        empty.textContent = 'Ebben a csomagban nincs ilyen kártya.';
+        container.append(empty);
+        return;
+      }
+
+      cards.forEach(card => {
+        const element = document.createElement('article');
+        element.className = `listed-card ${type === 'black' ? 'card-black' : 'card-white'}`;
+        element.textContent = card.text;
+        if (type === 'black' && card.pick > 1) {
+          const pick = document.createElement('span');
+          pick.className = 'pick-label';
+          pick.textContent = `Játssz ki ${card.pick} kártyát`;
+          element.append(pick);
+        }
+        container.append(element);
+      });
+    }
+
+    async function loadCards() {
+      const loading = document.getElementById('loading');
+      const error = document.getElementById('error');
+      if (!editionId || !/^-?\d+$/.test(editionId)) {
+        loading.classList.add('hidden');
+        error.textContent = 'Hiányzó vagy érvénytelen kártyacsomag.';
+        error.classList.remove('hidden');
+        return;
+      }
+
+      try {
+        const response = await fetch(`/api/editions/${encodeURIComponent(editionId)}/cards`);
+        const data = await response.json().catch(() => null);
+        if (!response.ok || !data) throw new Error(data?.detail || 'A kártyák betöltése nem sikerült.');
+
+        const blackCards = data.black_cards || [];
+        const whiteCards = data.white_cards || [];
+        document.title = `${data.name} kártyái – Emberiség Ellenes Kártyák`;
+        document.getElementById('editionName').textContent = data.name;
+        document.getElementById('editionSummary').textContent = `${blackCards.length} fekete és ${whiteCards.length} fehér kártya`;
+        document.getElementById('blackCount').textContent = `${blackCards.length} db`;
+        document.getElementById('whiteCount').textContent = `${whiteCards.length} db`;
+        renderCards(document.getElementById('blackCards'), blackCards, 'black');
+        renderCards(document.getElementById('whiteCards'), whiteCards, 'white');
+        loading.classList.add('hidden');
+        document.getElementById('cardContent').classList.remove('hidden');
+      } catch (err) {
+        loading.classList.add('hidden');
+        error.textContent = err.message || 'A kártyák betöltése nem sikerült.';
+        error.classList.remove('hidden');
+      }
+    }
+
+    loadCards();
+  </script>
+</body>
+</html>
