@@ -262,10 +262,10 @@ async function loadEditions(currentIds) {
     : list.filter(e => e.name !== 'Bōks').map(e => e.id);
 
   container.innerHTML = list.map(e => `
-    <div class="select-option ${selected.includes(e.id) ? 'selected' : ''}" data-id="${e.id}"${e.community ? ' data-community="1"' : ''}>
+    <div class="select-option ${selected.includes(e.id) ? 'selected' : ''}" data-id="${e.id}">
       <label class="edition-choice">
         <input type="checkbox" ${selected.includes(e.id) ? 'checked' : ''}>
-        <span>${esc(e.name)} <span class="edition-hint">(${e.community ? 'csak másik csomaggal &middot; ' : ''}${e.black_count} fekete, ${e.white_count} fehér)</span></span>
+        <span>${esc(e.name)} <span class="edition-hint">(${e.black_count} fekete, ${e.white_count} fehér)</span></span>
       </label>
       <a class="edition-cards-link" href="/kartyak?edition=${encodeURIComponent(e.id)}" title="${esc(e.name)} kártyáinak megtekintése" aria-label="${esc(e.name)} kártyáinak megtekintése">Kártyák</a>
     </div>
@@ -284,14 +284,6 @@ async function loadEditions(currentIds) {
       el.classList.toggle('selected', el.querySelector('input').checked);
     });
   });
-}
-
-// The community "Ti küldtétek" edition can't be played on its own. Returns true
-// when it's selected and no normal edition is — server enforces this too.
-function onlyCommunitySelected() {
-  const checked = [...document.querySelectorAll('#editionList .select-option')]
-    .filter(el => el.querySelector('input').checked);
-  return checked.length > 0 && checked.every(el => el.dataset.community === '1');
 }
 
 function renderConfig(state) {

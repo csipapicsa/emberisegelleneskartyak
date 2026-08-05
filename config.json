@@ -4,5 +4,6 @@
   "room_code_digits": 4,
   "timer_options_seconds": [0, 15, 30, 45, 60],
   "round_options": [10, 20, 30, 40, 50],
-  "hand_size": 10
+  "hand_size": 10,
+  "min_white_cards_per_player": 10
 }

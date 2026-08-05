@@ -169,7 +169,7 @@
   <script src="/static/js/ws.js"></script>
   <script src="/static/js/voice.js"></script>
   <script src="/static/js/chat.js?v=20260707-backtrap"></script>
-  <script src="/static/js/lobby.js?v=20260711-roomreplaced"></script>
+  <script src="/static/js/lobby.js?v=20260727-whitecardguard"></script>
   <script>
     const code = location.pathname.split('/').pop();
 
@@ -188,10 +188,6 @@
       setTimeout(() => loadEditions([]), 100);
 
       document.getElementById('startBtn').addEventListener('click', () => {
-        if (onlyCommunitySelected()) {
-          showToast("A 'Ti küldtétek' csomag önállóan nem játszható – válassz mellé legalább egy másik csomagot.");
-          return;
-        }
         socket.send('start_game');
       });
     })();

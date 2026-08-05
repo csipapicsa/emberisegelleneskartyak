@@ -791,9 +791,6 @@ async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
             return
         real_ids = [e for e in room.edition_ids if e != COMMUNITY_EDITION_ID]
         include_community = COMMUNITY_EDITION_ID in room.edition_ids
-        if include_community and not real_ids:
-            await manager.send(room_code, session_id, {"event": "error", "message": "A 'Ti küldtétek' csomag önállóan nem játszható – válassz mellé legalább egy másik csomagot."})
-            return
         if len(room.players) < 1:
             await manager.send(room_code, session_id, {"event": "error", "message": "Legalább 1 játékos szükséges."})
             return
@@ -810,6 +807,13 @@ async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
                 msg_conn.close()
             black_cards += c_black
             white_cards += c_white
+        # Universal guard: a game needs enough distinct white cards to keep
+        # dealing fresh hands round after round, scaled to the table size —
+        # replaces the old "community edition can't be played alone" rule.
+        min_white_needed = CONFIG.get("min_white_cards_per_player", 10) * len(room.players)
+        if len(white_cards) < min_white_needed:
+            await manager.send(room_code, session_id, {"event": "error", "message": "Túl kevés fehér lap van a kiválasztott csomagokban ennyi játékoshoz – válassz még egy paklit."})
+            return
         log_event("game_started", room_code=room_code, player_count=len(room.players))
         await game_logic.start_game(room, black_cards, white_cards, manager)
 
