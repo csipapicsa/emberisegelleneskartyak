@@ -201,6 +201,10 @@ function makeHandTrack() {
   const track = {
     style: { transform: '' },
     _els: [],
+    _handlers: {},
+    addEventListener(ev, fn) { (track._handlers[ev] = track._handlers[ev] || []).push(fn); },
+    handlerCount(ev) { return (track._handlers[ev] || []).length; },
+    dispatch(ev, event) { (track._handlers[ev] || []).forEach(fn => fn(event)); },
     // Must return the real parsed cards: _updateClasses() iterates these, and a
      // stub that returns [] would make it a no-op and hide anything it does.
     querySelectorAll(sel) {
@@ -250,6 +254,10 @@ function makeHandTrack() {
           style: {
             setProperty(prop, value) { el.styleText = `${prop}:${value}`; },
           },
+          closest(sel) {
+            return el.className.indexOf('hand-card') !== -1 ? el : null;
+          },
+          contains(other) { return other === el; },
           // _updateClasses() manages the multi-pick order badge through these.
           querySelector: () => null,
           appendChild() {},
@@ -305,6 +313,8 @@ function loadHand(opts = {}) {
       createElement: () => fakeEl(''),
     },
     window: { addEventListener() {} },
+    // Default to a desktop mouse; pass finePointer:false to model a touchscreen.
+    matchMedia: () => ({ matches: opts.finePointer !== false }),
     requestAnimationFrame: fn => { fn(); return 1; },
     cancelAnimationFrame() {},
     setTimeout: () => 0,

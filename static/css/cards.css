@@ -49,6 +49,18 @@
    selected card still buries the card immediately before it in the fan. */
 .hand-card.before-selected { margin-right: 8px; }
 
+/* Mouse only: brushing a card lifts it as if you were about to pick it up.
+   Scoped to real pointers so a tap on a touchscreen can never leave a card
+   stuck in a hovered state. Must come before .active/.selected — same
+   specificity, so source order decides which lift wins. */
+@media (hover: hover) and (pointer: fine) {
+  .hand-card:hover {
+    transform: translateY(-12px) scale(1.02) rotate(var(--tilt));
+    box-shadow: 0 10px 22px rgba(0,0,0,.55);
+    z-index: 5;
+  }
+}
+
 /* Active/highlighted card (lifted) */
 .hand-card.active {
   transform: translateY(-24px) scale(1.04) rotate(var(--tilt));

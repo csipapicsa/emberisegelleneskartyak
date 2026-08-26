@@ -143,6 +143,16 @@ class Hand {
     return `--tilt:${this._tiltFor(id).toFixed(2)}deg`;
   }
 
+  // The mouse left a card, so it is set back down — and it never lands at
+  // quite the angle it was lying at. A selected card is still in your hand,
+  // so it keeps its angle until you actually put it back.
+  _onCardLeave(id) {
+    if (this.disabled || this.submitted) return;
+    if (id === undefined || id === null || id === '') return;
+    if (this.selected.some(sel => String(sel) === String(id))) return;
+    this._reTilt(id);
+  }
+
   // Picked up or put back down — it never lands at quite the same angle.
   _reTilt(id) {
     this._tilts[id] = this._rollTilt();
@@ -152,6 +162,19 @@ class Hand {
 
   _bindEvents() {
     const el = this.container;
+
+    // Mouse-only pickup feel. Gated on a real pointer so the synthesized mouse
+    // events a touchscreen fires after a tap cannot re-roll the fan unasked.
+    const finePointer = typeof matchMedia === 'function'
+      && matchMedia('(hover: hover) and (pointer: fine)').matches;
+    if (finePointer) {
+      // Delegated: mouseleave does not bubble, and the cards are rebuilt often.
+      this.track.addEventListener('mouseout', e => {
+        const card = e.target.closest?.('.hand-card');
+        if (!card || card.contains(e.relatedTarget)) return;   // still inside it
+        this._onCardLeave(card.dataset.id);
+      });
+    }
 
     // Non-passive touchmove so we can preventDefault and block page scroll
     el.addEventListener('touchstart', e => {

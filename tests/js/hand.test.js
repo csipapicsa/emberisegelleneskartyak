@@ -190,3 +190,98 @@ test('angles stay within range across many deals', () => {
     }
   }
 });
+
+// ── mouse pickup feel (desktop only) ─────────────────────────────────────────
+
+test('a card the mouse leaves is set back down at a new angle', () => {
+  const { hand, track } = loadHand();
+  const cards = deal(5);
+  hand.setCards(cards);
+  const before = cards.map(c => hand._tiltFor(c.id));
+
+  hand._onCardLeave(String(cards[2].id));
+
+  const after = cards.map(c => hand._tiltFor(c.id));
+  assert.notEqual(after[2], before[2], 'the brushed card kept its old angle');
+  assert.deepEqual(
+    after.filter((_, i) => i !== 2),
+    before.filter((_, i) => i !== 2),
+    'other cards moved',
+  );
+  assert.equal(track.cardTilt(cards[2].id), rendered(after[2]), 'the new angle was rendered');
+});
+
+test('a held (selected) card keeps its angle when the mouse leaves it', () => {
+  const { hand } = loadHand();
+  const cards = deal(5);
+  hand.setPickCount(2);
+  hand.setCards(cards);
+
+  hand._confirmCard(1);                        // now holding it
+  const held = hand._tiltFor(cards[1].id);
+
+  hand._onCardLeave(String(cards[1].id));
+
+  assert.equal(hand._tiltFor(cards[1].id), held,
+    'a card still in your hand should not be re-laid on the table');
+});
+
+test('leaving a card does nothing once the hand is submitted', () => {
+  const { hand } = loadHand();
+  const cards = deal(4);
+  hand.setCards(cards);
+  const before = hand._tiltFor(cards[0].id);
+
+  hand.submitted = true;
+  hand._onCardLeave(String(cards[0].id));
+  assert.equal(hand._tiltFor(cards[0].id), before);
+
+  hand.submitted = false;
+  hand.disabled = true;
+  hand._onCardLeave(String(cards[0].id));
+  assert.equal(hand._tiltFor(cards[0].id), before);
+});
+
+test('the action card has no id, so leaving it is a no-op', () => {
+  const { hand } = loadHand();
+  hand.setAction(true);
+  hand.setCards(deal(3));
+  const before = { ...hand._tilts };
+
+  hand._onCardLeave(undefined);
+
+  assert.deepEqual(hand._tilts, before);
+});
+
+test('the mouse handler is wired up on a desktop pointer', () => {
+  const { hand, track } = loadHand();           // finePointer defaults to true
+  const cards = deal(4);
+  hand.setCards(cards);
+  assert.equal(track.handlerCount('mouseout'), 1, 'no mouseout listener bound');
+
+  const before = hand._tiltFor(cards[1].id);
+  const card = track._els.find(e => e.dataset.id === String(cards[1].id));
+  track.dispatch('mouseout', { target: card, relatedTarget: null });
+
+  assert.notEqual(hand._tiltFor(cards[1].id), before, 'the event did not reach _onCardLeave');
+});
+
+test('moving within the same card does not re-roll it', () => {
+  const { hand, track } = loadHand();
+  const cards = deal(4);
+  hand.setCards(cards);
+
+  const before = hand._tiltFor(cards[1].id);
+  const card = track._els.find(e => e.dataset.id === String(cards[1].id));
+  // relatedTarget still inside the card — the pointer never actually left.
+  track.dispatch('mouseout', { target: card, relatedTarget: card });
+
+  assert.equal(hand._tiltFor(cards[1].id), before);
+});
+
+test('no mouse handler is bound on a touchscreen', () => {
+  const { hand, track } = loadHand({ finePointer: false });
+  hand.setCards(deal(4));
+  assert.equal(track.handlerCount('mouseout'), 0,
+    'a touchscreen must not get the mouse-only behaviour');
+});
