@@ -191,4 +191,136 @@ function loadVoice(opts = {}) {
 
 const flush = async (n = 6) => { for (let i = 0; i < n; i++) await new Promise(r => setImmediate(r)); };
 
-module.exports = { loadVoice, makeStream, makeTrack, flush, FakePeerConnection };
+const HAND_SRC = path.join(__dirname, '..', '..', 'static', 'js', 'hand.js');
+
+// A stand-in for .hand-track. Assigning innerHTML re-derives the card elements
+// from the markup, which is enough to read back the inline --tilt each card was
+// rendered with and to let _reTilt() update one in place.
+function makeHandTrack() {
+  let html = '';
+  const track = {
+    style: { transform: '' },
+    _els: [],
+    // Must return the real parsed cards: _updateClasses() iterates these, and a
+     // stub that returns [] would make it a no-op and hide anything it does.
+    querySelectorAll(sel) {
+      if (sel.indexOf('hand-action-card') !== -1) {
+        return track._els.filter(e => e.dataset.action !== undefined);
+      }
+      if (sel.indexOf('data-idx') !== -1) {
+        return track._els.filter(e => e.dataset.idx !== undefined);
+      }
+      return track._els.slice();
+    },
+    querySelector(sel) {
+      const m = /data-id="([^"]+)"/.exec(sel);
+      return m ? track._els.find(e => e.dataset.id === m[1]) || null : null;
+    },
+    cardTilt(id) {
+      const el = track._els.find(e => e.dataset.id === String(id));
+      return el ? el.tilt() : null;
+    },
+    actionTilt() {
+      const el = track._els.find(e => e.dataset.action !== undefined);
+      return el ? el.tilt() : null;
+    },
+  };
+  Object.defineProperty(track, 'innerHTML', {
+    get: () => html,
+    set(v) {
+      html = v;
+      track._els = [];
+      const re = /<div class="([^"]*)"([^>]*)>/g;
+      let m;
+      while ((m = re.exec(v)) !== null) {
+        if (m[1].indexOf('hand-card') === -1) continue;
+        const attrs = m[2];
+        const id = /data-id="([^"]+)"/.exec(attrs);
+        const idx = /data-idx="([^"]+)"/.exec(attrs);
+        const action = /data-action="([^"]+)"/.exec(attrs);
+        const style = /style="([^"]*)"/.exec(attrs);
+        const el = {
+          dataset: {
+            id: id ? id[1] : undefined,
+            idx: idx ? idx[1] : undefined,
+            action: action ? action[1] : undefined,
+          },
+          styleText: style ? style[1] : '',
+          className: m[1],
+          style: {
+            setProperty(prop, value) { el.styleText = `${prop}:${value}`; },
+          },
+          // _updateClasses() manages the multi-pick order badge through these.
+          querySelector: () => null,
+          appendChild() {},
+          remove() {},
+          tilt() {
+            const t = /--tilt:\s*(-?[\d.]+)deg/.exec(el.styleText);
+            return t ? parseFloat(t[1]) : null;
+          },
+        };
+        track._els.push(el);
+      }
+    },
+  });
+  return track;
+}
+
+/** Load hand.js in a sandbox and return a ready Hand instance plus its track. */
+function loadHand(opts = {}) {
+  const track = makeHandTrack();
+  const container = {
+    _track: track,
+    querySelector: () => track,
+    addEventListener() {},
+  };
+  // _showConfirm() reaches for the confirm-modal elements, so hand back
+  // something with the bits of Element it actually uses.
+  const fakeEl = id => {
+    const el = {
+      id, textContent: '', innerHTML: '', className: '',
+      style: {},
+      classList: {
+        _s: new Set(),
+        add(c) { el.classList._s.add(c); },
+        remove(c) { el.classList._s.delete(c); },
+        contains(c) { return el.classList._s.has(c); },
+      },
+      dataset: {},
+      addEventListener() {},
+      cloneNode() { return fakeEl(id); },
+      replaceWith() {},
+      appendChild() {},
+      remove() {},
+      querySelector: () => null,
+    };
+    return el;
+  };
+  const byId = {};
+
+  const context = {
+    document: {
+      elementFromPoint: () => null,
+      getElementById: id => (byId[id] = byId[id] || fakeEl(id)),
+      createElement: () => fakeEl(''),
+    },
+    window: { addEventListener() {} },
+    requestAnimationFrame: fn => { fn(); return 1; },
+    cancelAnimationFrame() {},
+    setTimeout: () => 0,
+    clearTimeout() {},
+    Math,
+    console,
+  };
+  vm.createContext(context);
+  vm.runInContext(
+    fs.readFileSync(HAND_SRC, 'utf8') + '\n;globalThis.Hand = Hand;\n;globalThis.HAND_TILT_DEG = HAND_TILT_DEG;\n',
+    context,
+    { filename: 'hand.js' },
+  );
+
+  const hand = new context.Hand(container, opts.onSelect || (() => {}), 2500, opts.onAction || null);
+  return { hand, track, maxTilt: context.HAND_TILT_DEG };
+}
+
+module.exports = { loadVoice, loadHand, makeStream, makeTrack, makeHandTrack, flush, FakePeerConnection };

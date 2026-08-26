@@ -34,6 +34,13 @@
   transition: transform .2s ease, box-shadow .2s ease, margin-right .2s ease;
   border: 2px solid transparent;
   user-select: none;
+
+  /* Per-card resting angle, set inline by hand.js so the fan looks laid out by
+     hand rather than machine-stacked. Every transform rule below has to carry
+     it through — `transform` is one property, so any rule that omits it would
+     snap the card square again. */
+  --tilt: 0deg;
+  transform: rotate(var(--tilt));
 }
 
 .hand-card:last-child { margin-right: 0; }
@@ -44,7 +51,7 @@
 
 /* Active/highlighted card (lifted) */
 .hand-card.active {
-  transform: translateY(-24px) scale(1.04);
+  transform: translateY(-24px) scale(1.04) rotate(var(--tilt));
   box-shadow: 0 12px 28px rgba(0,0,0,.6);
   z-index: 10;
   margin-right: 8px;
@@ -53,7 +60,7 @@
 /* Selected card (locked in) */
 .hand-card.selected {
   border-color: #27ae60;
-  transform: translateY(-28px) scale(1.05);
+  transform: translateY(-28px) scale(1.05) rotate(var(--tilt));
   box-shadow: 0 0 0 3px #27ae60, 0 12px 28px rgba(0,0,0,.6);
   z-index: 11;
   margin-right: 8px;

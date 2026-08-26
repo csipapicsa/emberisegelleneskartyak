@@ -1,3 +1,8 @@
+// Maximum resting angle, in degrees, for a card in the fan. Each card keeps
+// its own angle until it is actually picked up or put down, so the hand looks
+// dealt by a person without the cards twitching during a drag.
+const HAND_TILT_DEG = 5;
+
 class Hand {
   constructor(containerEl, onSelect, holdDurationMs = 2500, onAction = null) {
     this.container    = containerEl;
@@ -21,6 +26,7 @@ class Hand {
     this._dragStartOffset = 0;
     this._pendingOffset   = 0;
     this._rafId           = null;
+    this._tilts           = {};   // card id -> resting angle, stable between pickups
 
     this._CARD_STEP = 90; // approximate step, only used to bound horizontal drag/scroll range
 
@@ -29,6 +35,7 @@ class Hand {
 
   setCards(cards) {
     this.cards     = cards;
+    this._tilts    = {};   // a new deal gets laid out afresh
     this.selected  = [];
     this.submitted = false;
     this.disabled  = false;
@@ -53,7 +60,7 @@ class Hand {
   // Full DOM rebuild — only on setCards
   _rebuild() {
     const cards = this.cards.map((c, i) => `
-      <div class="hand-card" data-idx="${i}" data-id="${c.id}">
+      <div class="hand-card" data-idx="${i}" data-id="${c.id}" style="${this._tiltStyle(c.id)}">
         <!-- Egyenkénti kártyacsere későbbi használatra:
         <button class="swap-card-btn" type="button" data-id="${c.id}" title="Kártya cseréje">Csere</button>
         -->
@@ -62,7 +69,7 @@ class Hand {
       </div>
     `).join('');
     const action = this.action.visible ? `
-      <div class="hand-card hand-action-card" data-action="new-hand">
+      <div class="hand-card hand-action-card" data-action="new-hand" style="${this._tiltStyle('__action__')}">
         <span>${esc(this.action.label)}</span>
       </div>
     ` : '';
@@ -106,6 +113,29 @@ class Hand {
 
   _applyOffset() {
     this.track.style.transform = `translateX(${this._offset}px)`;
+  }
+
+  // A card keeps its angle until it is handled. Deliberately NOT re-rolled from
+  // _updateClasses(): that runs inside the requestAnimationFrame drag loop, so
+  // re-rolling there would make the whole fan vibrate while you swipe.
+  _tiltFor(id) {
+    if (!(id in this._tilts)) this._tilts[id] = this._rollTilt();
+    return this._tilts[id];
+  }
+
+  _rollTilt() {
+    return (Math.random() * 2 - 1) * HAND_TILT_DEG;
+  }
+
+  _tiltStyle(id) {
+    return `--tilt:${this._tiltFor(id).toFixed(2)}deg`;
+  }
+
+  // Picked up or put back down — it never lands at quite the same angle.
+  _reTilt(id) {
+    this._tilts[id] = this._rollTilt();
+    const el = this.track.querySelector(`.hand-card[data-id="${id}"]`);
+    if (el) el.style.setProperty('--tilt', `${this._tilts[id].toFixed(2)}deg`);
   }
 
   _bindEvents() {
@@ -243,15 +273,19 @@ class Hand {
 
     if (this.selected.includes(card.id)) {
       this.selected = this.selected.filter(id => id !== card.id);
+      this._reTilt(card.id);                       // put back down
       this._updateClasses();
       return;
     }
 
     if (this.selected.length >= this.pickCount) {
+      const replaced = this.selected[this.pickCount - 1];
       this.selected[this.pickCount - 1] = card.id;
+      if (replaced !== undefined) this._reTilt(replaced);   // bumped one goes back too
     } else {
       this.selected.push(card.id);
     }
+    this._reTilt(card.id);                         // picked up
     this._updateClasses();
 
     if (this.selected.length === this.pickCount) {
