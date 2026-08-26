@@ -92,10 +92,8 @@ async function initGame(code, sid) {
   const spkBtn = document.getElementById('speakerBtn');
   micBtn.classList.remove('hidden');
   spkBtn.classList.remove('hidden');
-  micBtn.classList.toggle('muted', voiceManager.muted);
-  micBtn.textContent = voiceManager.muted ? '🔇' : '🎤';
-  spkBtn.classList.toggle('muted', voiceManager.speakerMuted);
-  spkBtn.textContent = voiceManager.speakerMuted ? '🔕' : '🔊';
+  voiceManager.onStateChange = _renderVoiceButtons;
+  _renderVoiceButtons();
   micBtn.addEventListener('click', _toggleMic);
   spkBtn.addEventListener('click', _toggleSpeaker);
 
@@ -549,20 +547,32 @@ function showToast(msg) {
   setTimeout(() => t.classList.remove('show'), 2800);
 }
 
-function _toggleMic() {
+// Single source of truth for both buttons — the voice manager also calls this
+// when the state changes without a click (mic denied at join, granted later).
+function _renderVoiceButtons() {
   if (!voiceManager) return;
-  const muted = voiceManager.toggleMute();
-  const btn = document.getElementById('micBtn');
-  btn.classList.toggle('muted', muted);
-  btn.textContent = muted ? '🔇' : '🎤';
+  const micBtn = document.getElementById('micBtn');
+  const spkBtn = document.getElementById('speakerBtn');
+  if (!micBtn || !spkBtn) return;
+  micBtn.classList.toggle('muted', voiceManager.muted);
+  micBtn.textContent = voiceManager.muted ? '🔇' : '🎤';
+  spkBtn.classList.toggle('muted', voiceManager.speakerMuted);
+  spkBtn.textContent = voiceManager.speakerMuted ? '🔕' : '🔊';
+}
+
+async function _toggleMic() {
+  if (!voiceManager) return;
+  const wasMuted = voiceManager.muted;
+  const muted = await voiceManager.toggleMute();
+  // Still muted after asking to unmute means we could not get a microphone.
+  if (wasMuted && muted) {
+    showToast('Nem érem el a mikrofont — engedélyezd a böngészőben!');
+  }
 }
 
 function _toggleSpeaker() {
   if (!voiceManager) return;
-  const muted = voiceManager.toggleSpeaker();
-  const btn = document.getElementById('speakerBtn');
-  btn.classList.toggle('muted', muted);
-  btn.textContent = muted ? '🔕' : '🔊';
+  voiceManager.toggleSpeaker();
 }
 
 // ── Hand drawer ───────────────────────────────────────────────────────────────
