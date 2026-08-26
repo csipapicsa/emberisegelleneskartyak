@@ -285,3 +285,88 @@ test('no mouse handler is bound on a touchscreen', () => {
   assert.equal(track.handlerCount('mouseout'), 0,
     'a touchscreen must not get the mouse-only behaviour');
 });
+
+// ── coming back down from the lifted state ───────────────────────────────────
+
+test('a lifted card that drops back on its own lands at a new angle', () => {
+  const { hand, track, runTimers, tapCard } = loadHand();
+  const cards = deal(5);
+  hand.setCards(cards);
+
+  tapCard(2);                                  // a real tap, which lifts the card
+  assert.equal(hand._activeIdx, 2, 'the tap did not lift the card');
+  const whileUp = hand._tiltFor(cards[2].id);
+
+  runTimers();                                 // hold timer expires, it drops back
+
+  assert.equal(hand._activeIdx, -1, 'the card should no longer be lifted');
+  assert.notEqual(hand._tiltFor(cards[2].id), whileUp,
+    'it fell back into exactly the same position');
+  assert.equal(track.cardTilt(cards[2].id), rendered(hand._tiltFor(cards[2].id)));
+});
+
+test('lifting a different card sets the previous one back down at a new angle', () => {
+  const { hand } = loadHand();
+  const cards = deal(5);
+  hand.setCards(cards);
+
+  hand._setActive(1);
+  const first = hand._tiltFor(cards[1].id);
+  const untouched = hand._tiltFor(cards[4].id);
+
+  hand._setActive(3);                          // attention moves to another card
+
+  assert.notEqual(hand._tiltFor(cards[1].id), first, 'the card left behind kept its angle');
+  assert.equal(hand._tiltFor(cards[4].id), untouched, 'an uninvolved card moved');
+});
+
+test('re-asserting the same active card does not re-roll it', () => {
+  const { hand } = loadHand();
+  const cards = deal(4);
+  hand.setCards(cards);
+
+  hand._setActive(2);
+  const t = hand._tiltFor(cards[2].id);
+  // What the drag loop does every frame while the finger stays on one card.
+  for (let frame = 0; frame < 60; frame++) hand._setActive(2);
+
+  assert.equal(hand._tiltFor(cards[2].id), t, 'the lifted card twitched while held');
+});
+
+test('dragging across the fan sets each card down once as it is left', () => {
+  const { hand } = loadHand();
+  const cards = deal(5);
+  hand.setCards(cards);
+  const before = cards.map(c => hand._tiltFor(c.id));
+
+  hand._setActive(0);
+  hand._setActive(1);
+  hand._setActive(2);
+  const afterPass = cards.map(c => hand._tiltFor(c.id));
+
+  assert.notEqual(afterPass[0], before[0], 'card 0 was passed over but not re-laid');
+  assert.notEqual(afterPass[1], before[1], 'card 1 was passed over but not re-laid');
+  assert.equal(afterPass[2], before[2], 'card 2 is still lifted, so it keeps its angle');
+  assert.equal(afterPass[3], before[3], 'card 3 was never touched');
+
+  // Still holding card 2: hovering it again must not disturb the ones already down.
+  const settled = cards.map(c => hand._tiltFor(c.id));
+  for (let i = 0; i < 10; i++) hand._setActive(2);
+  assert.deepEqual(cards.map(c => hand._tiltFor(c.id)), settled);
+});
+
+test('a held card is not re-laid when it stops being the lifted one', () => {
+  const { hand } = loadHand();
+  const cards = deal(5);
+  hand.setPickCount(2);
+  hand.setCards(cards);
+
+  hand._confirmCard(1);                        // selected — in your hand now
+  const held = hand._tiltFor(cards[1].id);
+
+  hand._setActive(1);
+  hand._setActive(3);                          // attention leaves the held card
+
+  assert.equal(hand._tiltFor(cards[1].id), held,
+    'a card you are holding should keep its angle until you put it back');
+});

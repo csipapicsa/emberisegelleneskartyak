@@ -277,6 +277,8 @@ function makeHandTrack() {
 /** Load hand.js in a sandbox and return a ready Hand instance plus its track. */
 function loadHand(opts = {}) {
   const track = makeHandTrack();
+  const timers = [];   // pending setTimeout callbacks; fire them with runTimers()
+  let hitTarget = null;   // what document.elementFromPoint() should resolve to
   const container = {
     _track: track,
     querySelector: () => track,
@@ -308,7 +310,7 @@ function loadHand(opts = {}) {
 
   const context = {
     document: {
-      elementFromPoint: () => null,
+      elementFromPoint: () => hitTarget,
       getElementById: id => (byId[id] = byId[id] || fakeEl(id)),
       createElement: () => fakeEl(''),
     },
@@ -317,8 +319,8 @@ function loadHand(opts = {}) {
     matchMedia: () => ({ matches: opts.finePointer !== false }),
     requestAnimationFrame: fn => { fn(); return 1; },
     cancelAnimationFrame() {},
-    setTimeout: () => 0,
-    clearTimeout() {},
+    setTimeout: (fn) => { timers.push(fn); return timers.length; },
+    clearTimeout: (id) => { if (id) timers[id - 1] = null; },
     Math,
     console,
   };
@@ -330,7 +332,19 @@ function loadHand(opts = {}) {
   );
 
   const hand = new context.Hand(container, opts.onSelect || (() => {}), 2500, opts.onAction || null);
-  return { hand, track, maxTilt: context.HAND_TILT_DEG };
+  // Fire every still-pending timeout — used to expire the card hold timer.
+  const runTimers = () => {
+    const due = timers.splice(0).filter(Boolean);
+    due.forEach(fn => fn());
+  };
+  // Point the hit test at one card so a tap can be simulated end to end.
+  const setHit = el => { hitTarget = el; };
+  const tapCard = idx => {
+    setHit(track._els.find(e => e.dataset.idx === String(idx)));
+    hand._onStart(0);
+    hand._onEnd(0, 0);
+  };
+  return { hand, track, runTimers, setHit, tapCard, maxTilt: context.HAND_TILT_DEG };
 }
 
 module.exports = { loadVoice, loadHand, makeStream, makeTrack, makeHandTrack, flush, FakePeerConnection };

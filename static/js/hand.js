@@ -143,6 +143,17 @@ class Hand {
     return `--tilt:${this._tiltFor(id).toFixed(2)}deg`;
   }
 
+  // Every route out of the lifted state goes through here, so a card that
+  // drops back onto the table always lands at a new angle — being lifted and
+  // set down again is exactly the moment it should not return to its old one.
+  // Safe inside the drag loop: this fires on the transition, not per frame.
+  _setActive(idx) {
+    if (idx === this._activeIdx) return;
+    const leaving = this.cards[this._activeIdx];
+    this._activeIdx = idx;
+    if (leaving) this._onCardLeave(leaving.id);
+  }
+
   // The mouse left a card, so it is set back down — and it never lands at
   // quite the angle it was lying at. A selected card is still in your hand,
   // so it keeps its angle until you actually put it back.
@@ -236,7 +247,7 @@ class Hand {
         // so any fixed-step estimate drifts a card off once selections exist.
         const idx = this._idxAtPoint(x, y);
         if (idx !== this._activeIdx) {
-          this._activeIdx = idx;
+          this._setActive(idx);
           this._updateClasses();
         }
       });
@@ -255,7 +266,7 @@ class Hand {
     }
 
     if (this._moved) {
-      this._activeIdx = -1;
+      this._setActive(-1);
       this._updateClasses();
       return;
     }
@@ -279,11 +290,11 @@ class Hand {
     }
 
     clearTimeout(this._holdTimer);
-    this._activeIdx = idx;
+    this._setActive(idx);
     this._updateClasses();
 
     this._holdTimer = setTimeout(() => {
-      this._activeIdx = -1;
+      this._setActive(-1);
       this._updateClasses();
     }, this.holdDuration);
   }
@@ -302,7 +313,7 @@ class Hand {
 
   _confirmCard(idx) {
     clearTimeout(this._holdTimer);
-    this._activeIdx = -1;
+    this._setActive(-1);
     const card = this.cards[idx];
     if (!card) return;
 
