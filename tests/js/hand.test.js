@@ -115,16 +115,59 @@ test('a bumped-out selection is put down too when the pick limit is reached', ()
     'the displaced card should land at a new angle as well');
 });
 
-test('a new deal lays every card out afresh', () => {
-  const { hand } = loadHand();
-  const cards = deal(4);
+test('cards still in hand keep their angle when the next round is dealt', () => {
+  const { hand, track } = loadHand();
+  const cards = deal(6);
   hand.setCards(cards);
   const before = cards.map(c => hand._tiltFor(c.id));
 
-  hand.setCards(cards);                       // same ids, dealt again
-  const after = cards.map(c => hand._tiltFor(c.id));
+  // What the server actually sends each round: the same hand minus the card
+  // that was played, plus one freshly drawn replacement.
+  const kept = cards.slice(1);
+  const nextHand = [...kept, { id: 999, text: 'drawn' }];
+  hand.setCards(nextHand);
 
-  assert.notDeepEqual(after, before, 'angles were carried over from the previous hand');
+  assert.deepEqual(
+    kept.map(c => hand._tiltFor(c.id)),
+    before.slice(1),
+    'untouched cards were re-rolled — the fan reshuffled itself between rounds',
+  );
+  assert.deepEqual(kept.map(c => track.cardTilt(c.id)),
+    before.slice(1).map(rendered), 'rendered angles moved too');
+});
+
+test('a freshly drawn card gets an angle of its own', () => {
+  const { hand, track, maxTilt } = loadHand();
+  hand.setCards(deal(4));
+  hand.setCards([...deal(4), { id: 999, text: 'drawn' }]);
+
+  const t = hand._tiltFor(999);
+  assert.notEqual(t, null);
+  assert.ok(Math.abs(t) <= maxTilt);
+  assert.equal(track.cardTilt(999), rendered(t));
+});
+
+test('a card that leaves the hand is forgotten, so the map stays bounded', () => {
+  const { hand } = loadHand();
+  hand.setCards(deal(5));
+  assert.equal(Object.keys(hand._tilts).length, 5);
+
+  for (let round = 0; round < 50; round++) {
+    hand.setCards(deal(5).map(c => ({ ...c, id: c.id + round * 100 })));
+  }
+  assert.ok(Object.keys(hand._tilts).length <= 6,
+    `tilt map grew to ${Object.keys(hand._tilts).length} entries`);
+});
+
+test('a completely new hand is laid out afresh', () => {
+  const { hand } = loadHand();
+  hand.setCards(deal(4));
+  const before = deal(4).map(c => hand._tiltFor(c.id));
+
+  hand.setCards(deal(4).map(c => ({ ...c, id: c.id + 500 })));   // all new ids
+  const after = deal(4).map((c, i) => hand._tiltFor(c.id + 500));
+
+  assert.notDeepEqual(after, before);
 });
 
 test('the fan is not uniform — cards get genuinely different angles', () => {

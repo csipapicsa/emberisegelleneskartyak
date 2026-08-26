@@ -35,7 +35,7 @@ class Hand {
 
   setCards(cards) {
     this.cards     = cards;
-    this._tilts    = {};   // a new deal gets laid out afresh
+    this._forgetTiltsExcept(cards);
     this.selected  = [];
     this.submitted = false;
     this.disabled  = false;
@@ -125,6 +125,18 @@ class Hand {
 
   _rollTilt() {
     return (Math.random() * 2 - 1) * HAND_TILT_DEG;
+  }
+
+  // A new hand arrives every round, mostly made of the same cards. Those were
+  // never touched, so they must keep the angle they are lying at — re-rolling
+  // them made the whole fan reshuffle itself at the start of each round.
+  // Cards that have left the hand are forgotten so the map stays bounded.
+  _forgetTiltsExcept(cards) {
+    const held = new Set(cards.map(c => String(c.id)));
+    held.add('__action__');
+    for (const id of Object.keys(this._tilts)) {
+      if (!held.has(id)) delete this._tilts[id];
+    }
   }
 
   _tiltStyle(id) {
