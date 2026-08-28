@@ -29,14 +29,26 @@ test('every dealt card is rendered with an angle inside the configured range', (
   }
 });
 
-test('the action card is tilted too, so it does not sit conspicuously square', () => {
-  const { hand, track, maxTilt } = loadHand();
+test('the action card stays square — it is a button, not a playing card', () => {
+  const { hand, track } = loadHand();
   hand.setAction(true);
   hand.setCards(deal(3));
 
-  const t = track.actionTilt();
-  assert.notEqual(t, null);
-  assert.ok(Math.abs(t) <= maxTilt);
+  assert.equal(track.actionTilt(), null,
+    'the "new cards" button should carry no tilt of its own');
+  // It must not sneak into the tilt map either.
+  assert.equal(Object.keys(hand._tilts).length, 3);
+});
+
+test('the action card stays square across rounds', () => {
+  const { hand, track } = loadHand();
+  hand.setAction(true);
+  hand.setCards(deal(4));
+  hand.setCards(deal(4));           // next round
+  hand.setCards([...deal(3), { id: 999, text: 'drawn' }]);
+
+  assert.equal(track.actionTilt(), null);
+  assert.ok(!('__action__' in hand._tilts), 'stale action entry left in the tilt map');
 });
 
 test('a card holds its angle when read repeatedly', () => {

@@ -69,7 +69,7 @@ class Hand {
       </div>
     `).join('');
     const action = this.action.visible ? `
-      <div class="hand-card hand-action-card" data-action="new-hand" style="${this._tiltStyle('__action__')}">
+      <div class="hand-card hand-action-card" data-action="new-hand">
         <span>${esc(this.action.label)}</span>
       </div>
     ` : '';
@@ -133,7 +133,6 @@ class Hand {
   // Cards that have left the hand are forgotten so the map stays bounded.
   _forgetTiltsExcept(cards) {
     const held = new Set(cards.map(c => String(c.id)));
-    held.add('__action__');
     for (const id of Object.keys(this._tilts)) {
       if (!held.has(id)) delete this._tilts[id];
     }
