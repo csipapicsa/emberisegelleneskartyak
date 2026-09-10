@@ -50,7 +50,8 @@ async function initGame(code, sid) {
     document.getElementById('handContainer'),
     onCardsSelected,
     config.card_hold_duration_ms,
-    requestNewHand
+    requestNewHand,
+    onHandCardFeedback
   );
 
   socket = new GameSocket(code, sid);
@@ -100,6 +101,7 @@ async function initGame(code, sid) {
   voiceManager.init();
 
   _initHandDrawer();
+  _initFeedbackModal();
 
   window.addEventListener('pagehide', () => {
     socket.close();
@@ -150,6 +152,7 @@ function onRoomState(state) {
 }
 
 function onRoundStart(msg) {
+  closeFeedbackPopup();
   currentBlack    = msg.black_card;
   currentCzarSid  = msg.czar;
   currentCzarName = msg.czar_username || playersMap[msg.czar] || '';
@@ -205,9 +208,11 @@ function onTimerTick(msg) {
   const t = document.getElementById('timerEl');
   t.textContent = msg.seconds_remaining;
   t.classList.toggle('urgent', msg.seconds_remaining <= 10);
+  if (msg.seconds_remaining <= 0) closeFeedbackPopup();
 }
 
 function onCardsRevealed(msg) {
+  closeFeedbackPopup();
   currentPhase = 'revealed';
   revealedSubmissions = msg.submissions;
   preventSelfVote = msg.prevent_self_vote !== false;
@@ -253,6 +258,7 @@ function onSubmissionWithdrawn(msg) {
 }
 
 function onRoundEnd(msg) {
+  closeFeedbackPopup();
   currentPhase = 'round_ending';
   showCzarHint(false);
   highlightWinner(msg.winner_session_id);
@@ -305,12 +311,14 @@ function revealAuthors(authors) {
 }
 
 function onGameEnd(msg) {
+  closeFeedbackPopup();
   // Voice channel is intentionally kept open on the end screen so players can
   // chat about the game. Cleanup runs on pagehide / explicit leave.
   showEndScreen(msg.final_scores);
 }
 
 function onRoomClosed() {
+  closeFeedbackPopup();
   showToast('A szobát bezárták.');
   setTimeout(() => location.replace('/join'), 1200);
 }
@@ -323,6 +331,7 @@ function hideGameShell() {
   hideChatUi();
   document.getElementById('scoresFab')?.classList.add('hidden');
   document.getElementById('confirmModal')?.classList.add('hidden');
+  document.getElementById('feedbackModal')?.classList.add('hidden');
   document.getElementById('winnerOverlay')?.classList.add('hidden');
   voiceManager?.cleanup();
 }
@@ -350,6 +359,11 @@ function onCardsSelected(cardIds) {
   socket.send('submit_card', { card_ids: cardIds });
 }
 
+function onHandCardFeedback(cardId) {
+  const card = hand.cards.find(c => c.id === cardId);
+  openFeedbackPopup(cardId, card?.text || '', 'white');
+}
+
 // ── Czar picking ──────────────────────────────────────────────────────────────
 
 function onCzarPick(winnerSessionId) {
@@ -364,7 +378,8 @@ function renderBlackCard(card) {
   const el = document.getElementById('blackCard');
   const text = card.text.replace(/_+/g, '<span class="blank"></span>');
   const badge = card.community ? '<span class="community-badge">Ti küldtétek</span>' : '';
-  el.innerHTML = `${text}${card.pick > 1 ? `<span class="pick-label">Húzz ${card.pick}-t</span>` : ''}${badge}`;
+  const feedbackBtn = `<button class="feedback-icon-btn" type="button" data-feedback-id="${card.id}" title="Visszajelzés erre a kártyára">💡</button>`;
+  el.innerHTML = `${text}${card.pick > 1 ? `<span class="pick-label">Húzz ${card.pick}-t</span>` : ''}${badge}${feedbackBtn}`;
 }
 
 function renderSubmissionsViewer(submissions) {
@@ -537,6 +552,68 @@ function withdrawSubmission() {
   socket.send('withdraw_submission', {});
 }
 
+
+// ── Card feedback popup ──────────────────────────────────────────────────────
+// Lowest-priority UI: whatever it's holding gets discarded and it is force-
+// closed the moment the round moves on or its time runs out, no exceptions.
+
+let feedbackCardId = null;
+let feedbackCardText = '';
+let feedbackCardType = 'white';
+let feedbackReaction = null; // true = Tetszik, false = Nem tetszik, null = none picked yet
+
+function openFeedbackPopup(cardId, cardText, cardType) {
+  feedbackCardId = cardId;
+  feedbackCardText = cardText || '';
+  feedbackCardType = cardType;
+  feedbackReaction = null;
+  document.getElementById('feedbackCardPreview').textContent = cardText;
+  document.getElementById('feedbackComment').value = '';
+  _updateFeedbackButtons();
+  document.getElementById('feedbackModal').classList.remove('hidden');
+}
+
+function closeFeedbackPopup() {
+  feedbackCardId = null;
+  feedbackCardText = '';
+  document.getElementById('feedbackModal')?.classList.add('hidden');
+}
+
+function _updateFeedbackButtons() {
+  document.getElementById('feedbackLikeBtn').classList.toggle('active', feedbackReaction === true);
+  document.getElementById('feedbackDislikeBtn').classList.toggle('active', feedbackReaction === false);
+  document.getElementById('feedbackSubmitBtn').disabled = feedbackReaction === null;
+}
+
+function _initFeedbackModal() {
+  document.getElementById('blackCard')?.addEventListener('click', e => {
+    const btn = e.target.closest('.feedback-icon-btn');
+    if (!btn || !currentBlack) return;
+    openFeedbackPopup(currentBlack.id, currentBlack.text, 'black');
+  });
+
+  document.getElementById('feedbackLikeBtn').addEventListener('click', () => {
+    feedbackReaction = true;
+    _updateFeedbackButtons();
+  });
+  document.getElementById('feedbackDislikeBtn').addEventListener('click', () => {
+    feedbackReaction = false;
+    _updateFeedbackButtons();
+  });
+  document.getElementById('feedbackCloseBtn').addEventListener('click', closeFeedbackPopup);
+  document.getElementById('feedbackSubmitBtn').addEventListener('click', () => {
+    if (feedbackCardId == null || feedbackReaction === null) return;
+    socket.send('card_feedback', {
+      card_id: feedbackCardId,
+      card_text: feedbackCardText,
+      card_type: feedbackCardType,
+      liked: feedbackReaction,
+      comment: document.getElementById('feedbackComment').value.trim(),
+    });
+    showToast('Köszönjük a visszajelzést!');
+    closeFeedbackPopup();
+  });
+}
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 

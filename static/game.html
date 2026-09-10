@@ -27,8 +27,8 @@
   <meta name="theme-color" content="#000000">
 
   <link rel="stylesheet" href="/static/css/base.css?v=20260627-community">
-  <link rel="stylesheet" href="/static/css/cards.css?v=20260805-cardtilt3">
-  <link rel="stylesheet" href="/static/css/game.css">
+  <link rel="stylesheet" href="/static/css/cards.css?v=20260910-feedback">
+  <link rel="stylesheet" href="/static/css/game.css?v=20260910-feedback">
   <link rel="stylesheet" href="/static/css/chat.css?v=20260707-chat2">
   <script defer src="https://stats.emberisegelleneskartyak.hu/script.js" data-website-id="3a36dfac-359e-4e1c-afda-27530984c903"></script>
 </head>
@@ -126,6 +126,24 @@
     </div>
   </div>
 
+  <!-- Card feedback popup — lowest priority UI: force-closed on any round
+       transition or timeout, no matter what state it was left in. -->
+  <div class="overlay hidden" id="feedbackModal">
+    <div class="modal feedback-modal">
+      <div class="chat-modal-header">
+        <h2>Visszajelzés a kártyára</h2>
+        <button class="chat-close-btn" id="feedbackCloseBtn">✕</button>
+      </div>
+      <div class="feedback-card-preview" id="feedbackCardPreview"></div>
+      <div class="modal-actions">
+        <button class="btn btn-secondary feedback-reaction-btn like" id="feedbackLikeBtn" type="button">👍 Tetszik</button>
+        <button class="btn btn-secondary feedback-reaction-btn dislike" id="feedbackDislikeBtn" type="button">👎 Nem tetszik</button>
+      </div>
+      <textarea class="input feedback-comment" id="feedbackComment" maxlength="500" rows="3" placeholder="Megjegyzés (opcionális)"></textarea>
+      <button class="btn btn-primary" id="feedbackSubmitBtn" type="button" disabled>Beküldés</button>
+    </div>
+  </div>
+
   <!-- Winner announcement (3 seconds) -->
   <div class="winner-overlay hidden" id="winnerOverlay">
     <div class="winner-box">
@@ -147,8 +165,8 @@
   <script src="/static/js/ws.js"></script>
   <script src="/static/js/voice.js?v=20260805-voicefix"></script>
   <script src="/static/js/chat.js?v=20260707-backtrap"></script>
-  <script src="/static/js/hand.js?v=20260805-cardtilt5"></script>
-  <script src="/static/js/game.js?v=20260805-voicefix"></script>
+  <script src="/static/js/hand.js?v=20260910-feedback"></script>
+  <script src="/static/js/game.js?v=20260910-feedback"></script>
   <script>
     const code = location.pathname.split('/').pop();
     (async () => {

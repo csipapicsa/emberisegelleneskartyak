@@ -46,24 +46,15 @@ def ensure_tables(conn: sqlite3.Connection, *, migrate_legacy_votes: bool = Fals
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
-        CREATE TABLE IF NOT EXISTS feedback_like (
-            card_id    INTEGER NOT NULL,
-            session_id TEXT NOT NULL,
-            PRIMARY KEY (card_id, session_id)
-        );
-
-        CREATE TABLE IF NOT EXISTS feedback_dislike (
-            card_id    INTEGER NOT NULL,
-            session_id TEXT NOT NULL,
-            PRIMARY KEY (card_id, session_id)
-        );
-
-        CREATE TABLE IF NOT EXISTS feedback_comment (
+        CREATE TABLE IF NOT EXISTS card_feedback (
             id         INTEGER PRIMARY KEY AUTOINCREMENT,
             card_id    INTEGER NOT NULL,
+            card_text  TEXT NOT NULL,
+            card_type  TEXT NOT NULL CHECK (card_type IN ('white', 'black')),
             session_id TEXT NOT NULL,
-            username   TEXT NOT NULL,
-            comment    TEXT NOT NULL,
+            "like"     INTEGER NOT NULL DEFAULT 0,
+            dislike    INTEGER NOT NULL DEFAULT 0,
+            comment    TEXT NOT NULL DEFAULT '',
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
 
@@ -98,6 +89,14 @@ def ensure_tables(conn: sqlite3.Connection, *, migrate_legacy_votes: bool = Fals
         conn.execute("ALTER TABLE card_ideas ADD COLUMN seen_by_admin INTEGER NOT NULL DEFAULT 0")
     if "number_of_white_cards" not in columns:
         conn.execute("ALTER TABLE card_ideas ADD COLUMN number_of_white_cards INTEGER NOT NULL DEFAULT 1")
+
+    # Superseded by the single card_feedback table above — never held real
+    # data (the feature wasn't wired up to anything until card_feedback was
+    # added), so a straight drop is safe.
+    conn.execute("DROP TABLE IF EXISTS feedback_like")
+    conn.execute("DROP TABLE IF EXISTS feedback_dislike")
+    conn.execute("DROP TABLE IF EXISTS feedback_comment")
+
     _migrate_legacy_vote_ips(conn, enabled=migrate_legacy_votes)
     conn.commit()
 
@@ -331,26 +330,22 @@ def vote_card_idea(conn: sqlite3.Connection, idea_id: int, voter_hash: str, vote
     return {"id": idea_id, "my_vote": my_vote, **counts}
 
 
-def add_like(conn: sqlite3.Connection, card_id: int, session_id: str) -> None:
+def add_card_feedback(
+    conn: sqlite3.Connection,
+    card_id: int,
+    card_text: str,
+    card_type: str,
+    session_id: str,
+    liked: bool,
+    comment: str = "",
+) -> None:
+    clean_comment = html.escape(comment.strip())[:500] if comment else ""
     conn.execute(
-        "INSERT OR IGNORE INTO feedback_like (card_id, session_id) VALUES (?, ?)",
-        (card_id, session_id),
-    )
-    conn.execute(
-        "DELETE FROM feedback_dislike WHERE card_id = ? AND session_id = ?",
-        (card_id, session_id),
-    )
-    conn.commit()
-
-
-def add_dislike(conn: sqlite3.Connection, card_id: int, session_id: str) -> None:
-    conn.execute(
-        "INSERT OR IGNORE INTO feedback_dislike (card_id, session_id) VALUES (?, ?)",
-        (card_id, session_id),
-    )
-    conn.execute(
-        "DELETE FROM feedback_like WHERE card_id = ? AND session_id = ?",
-        (card_id, session_id),
+        """
+        INSERT INTO card_feedback (card_id, card_text, card_type, session_id, "like", dislike, comment)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (card_id, card_text[:500], card_type, session_id, 1 if liked else 0, 0 if liked else 1, clean_comment),
     )
     conn.commit()
 
@@ -377,12 +372,3 @@ def post_chat_message(conn: sqlite3.Connection, username: str, message: str) -> 
     conn.commit()
 
 
-def add_comment(conn: sqlite3.Connection, card_id: int, session_id: str, username: str, comment: str) -> None:
-    clean = html.escape(comment.strip())[:500]
-    if not clean:
-        return
-    conn.execute(
-        "INSERT INTO feedback_comment (card_id, session_id, username, comment) VALUES (?, ?, ?, ?)",
-        (card_id, session_id, username, clean),
-    )
-    conn.commit()

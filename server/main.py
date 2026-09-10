@@ -28,6 +28,7 @@ from server import edition_display
 from server.messages_db import get_conn as get_msg_conn, ensure_tables as ensure_msg_tables, \
     save_message, save_card_idea, get_chat_messages, post_chat_message, \
     get_community_cards, list_card_ideas, vote_card_idea, purge_expired_data, \
+    add_card_feedback, \
     COMMUNITY_EDITION_ID, COMMUNITY_EDITION_NAME
 from server import chat_db
 from server.session import create_or_get_session
@@ -918,6 +919,25 @@ async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
                 player.hand.append(card)
         await manager.send(room_code, session_id, {"event": "hand_update", "hand": player.hand})
         await manager.send(room_code, session_id, {"event": "new_hand_dealt"})
+
+    elif event == "card_feedback":
+        player = room.players.get(session_id)
+        if not player:
+            return
+        card_id = msg.get("card_id")
+        liked = msg.get("liked")
+        card_type = msg.get("card_type")
+        if not isinstance(card_id, int) or not isinstance(liked, bool) or card_type not in ("white", "black"):
+            return
+        card_text = msg.get("card_text")
+        card_text = card_text if isinstance(card_text, str) else ""
+        comment = msg.get("comment")
+        comment = comment if isinstance(comment, str) else ""
+        conn = get_msg_conn()
+        try:
+            add_card_feedback(conn, card_id, card_text, card_type, session_id, liked, comment)
+        finally:
+            conn.close()
 
     elif event == "chat_send":
         text = msg.get("message")
