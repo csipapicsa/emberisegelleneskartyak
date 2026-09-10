@@ -153,6 +153,37 @@ def test_list_card_ideas_reports_my_vote_per_ip(db):
     assert other["my_vote"] is None
 
 
+# ── idea status (approved / rejected / pending) ────────────────────────────────
+
+def test_list_card_ideas_status_pending_by_default(db):
+    save_card_idea(db, "white", "Friss ötlet.")
+    assert list_card_ideas(db, voter_hash("1.1.1.1"))[0]["status"] == "pending"
+
+
+def test_list_card_ideas_status_rejected_when_seen_but_not_approved(db):
+    save_card_idea(db, "white", "Elutasított.")
+    db.execute("UPDATE card_ideas SET seen_by_admin = 1")
+    db.commit()
+    assert list_card_ideas(db, voter_hash("1.1.1.1"))[0]["status"] == "rejected"
+
+
+def test_list_card_ideas_status_approved_wins_even_if_unseen(db):
+    """Regression: admins approve ideas with a direct DB update that doesn't
+    also set seen_by_admin — approved must still take priority over that,
+    or an approved idea wrongly shows up as pending on the vote page."""
+    save_card_idea(db, "white", "Jóváhagyva, de nem jelölve látottnak.")
+    db.execute("UPDATE card_ideas SET approved = 1")
+    db.commit()
+    assert list_card_ideas(db, voter_hash("1.1.1.1"))[0]["status"] == "approved"
+
+
+def test_list_card_ideas_status_approved_wins_when_also_seen(db):
+    save_card_idea(db, "white", "Jóváhagyva és látott.")
+    db.execute("UPDATE card_ideas SET approved = 1, seen_by_admin = 1")
+    db.commit()
+    assert list_card_ideas(db, voter_hash("1.1.1.1"))[0]["status"] == "approved"
+
+
 # ── vote_card_idea ────────────────────────────────────────────────────────────
 
 def test_vote_like_increments_count(db):

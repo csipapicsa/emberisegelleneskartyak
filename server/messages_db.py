@@ -258,7 +258,20 @@ def list_card_ideas(conn: sqlite3.Connection, voter_hash: str | None) -> list[di
         """,
         (voter_hash,),
     ).fetchall()
-    return [dict(r) for r in rows]
+    ideas = [dict(r) for r in rows]
+    for idea in ideas:
+        idea["status"] = idea_status(idea)
+    return ideas
+
+
+def idea_status(idea: dict) -> str:
+    """Single source of truth for moderation status — approval always wins,
+    even for rows approved directly in the DB without seen_by_admin being set."""
+    if idea["approved"]:
+        return "approved"
+    if idea["seen_by_admin"]:
+        return "rejected"
+    return "pending"
 
 
 def _refresh_idea_counts(conn: sqlite3.Connection, idea_id: int) -> dict:

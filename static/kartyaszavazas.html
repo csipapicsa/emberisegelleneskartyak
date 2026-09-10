@@ -105,6 +105,13 @@
       <button class="filter-btn" data-filter="black" type="button">Fekete</button>
     </section>
 
+    <section class="filter-row" aria-label="Szűrés állapot szerint">
+      <button class="filter-btn active" data-status="all" type="button">Összes</button>
+      <button class="filter-btn" data-status="approved" type="button">Jóváhagyott</button>
+      <button class="filter-btn" data-status="rejected" type="button">Elutasított</button>
+      <button class="filter-btn" data-status="pending" type="button">Elbírálás alatt</button>
+    </section>
+
     <div id="ideaList" class="idea-list"><p class="loading">Betöltés…</p></div>
   </main>
 
@@ -112,19 +119,24 @@
     const listEl = document.getElementById('ideaList');
     let ideas = [];
     let filter = 'all';
+    let statusFilter = 'all';
+
+    function matchesStatus(i) {
+      return statusFilter === 'all' || i.status === statusFilter;
+    }
 
     function esc(str) {
       return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
     function statusText(i) {
-      if (i.approved) return '✅ Jóváhagyva – játszható a „Ti küldtétek” csomagban';
-      if (i.seen_by_admin) return '🚫 Egyelőre nem került be a játékba';
+      if (i.status === 'approved') return '✅ Jóváhagyva – játszható a „Ti küldtétek” csomagban';
+      if (i.status === 'rejected') return '🚫 Egyelőre nem került be a játékba';
       return '⏳ Elbírálás alatt';
     }
 
     function render() {
-      const rows = ideas.filter(i => filter === 'all' || i.card_type === filter);
+      const rows = ideas.filter(i => (filter === 'all' || i.card_type === filter) && matchesStatus(i));
       if (rows.length === 0) {
         listEl.innerHTML = '<p class="empty">Még nincs beküldött kártya ebben a kategóriában.</p>';
         return;
@@ -182,10 +194,18 @@
       castVote(id, btn.dataset.vote, [...card.querySelectorAll('.vote-btn')]);
     });
 
-    document.querySelectorAll('.filter-btn').forEach(btn => {
+    document.querySelectorAll('[data-filter]').forEach(btn => {
       btn.addEventListener('click', () => {
         filter = btn.dataset.filter;
-        document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b === btn));
+        document.querySelectorAll('[data-filter]').forEach(b => b.classList.toggle('active', b === btn));
+        render();
+      });
+    });
+
+    document.querySelectorAll('[data-status]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        statusFilter = btn.dataset.status;
+        document.querySelectorAll('[data-status]').forEach(b => b.classList.toggle('active', b === btn));
         render();
       });
     });
