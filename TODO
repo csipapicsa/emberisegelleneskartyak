@@ -42,3 +42,4 @@ Kész
 [x] Umami az adatkezelési tájékoztatóban, 2 éves megőrzés + napi törlő időzítő
 [x] AdSense tulajdonjog igazolva meta taggel, /ads.txt route
 [x] also-banner hirdetési egység létrehozva
+[x] Umami útvonal-normalizálás: /room/:code, /game/:code, /join?code=xxxx (élesben ellenőrizve 2026-10-16)
