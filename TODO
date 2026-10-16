@@ -4,11 +4,8 @@ Részletek: docs/adatkezeles_hirdetes_szoveg.md, docs/emberisegellenes_umami_ads
 Gergő
 [x] Auto ads kikapcsolva
 [x] Auto optimize kikapcsolva
-[ ] GDPR-üzenet (CMP) létrehozása és közzététele:
-    AdSense → Adatvédelem és üzenetkezelés → Európai szabályozások → Üzenet létrehozása
-    - nyelv: magyar
-    - gombok: Hozzájárulás + Nem járulok hozzá + Beállítások kezelése
-    - adatvédelmi URL: https://emberisegelleneskartyak.hu/adatkezeles
+[x] GDPR-üzenet (CMP) közzétéve: magyar, Hozzájárulás / Nem járulok hozzá (minden ország) / Beállítások,
+    Optimize off, logó: static/logo-wide.png
 [x] Szerver-újraindítás → /ads.txt él (2026-10-16 23:13)
 [ ] Várni a Google jóváhagyására (Request review elküldve 2026-10-16)
     → ha megjött, szólni Claude-nak; ha elutasítás, az indoklást elhozni
@@ -18,6 +15,8 @@ Claude (a jóváhagyás után)
 [ ] also-banner (320×50, slot 1343136630) az adSlot dobozba; asztalin is 320×50, középen;
     320 px széles telefonon ne lógjon ki
 [ ] Hirdetési szakasz az adatkezeles.html-be + „Hatályos” dátum
+[ ] Hozzájárulás visszavonása: a Google CMP „Adatvédelmi beállítások” linkje megjelenik-e
+    a 3 oldalon; ha nem, saját link a láblécbe (googlefc.showRevocationMessage())
 [ ] tests/test_ad_banner.py frissítése: Google-kód csak a 3 engedélyezett oldalon
 [ ] Élesítés után: ad-network kérés nincs /game, /room, /kartyak oldalon (böngészőben ellenőrizni)
 
