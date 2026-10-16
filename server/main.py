@@ -1138,6 +1138,11 @@ async def sitemap_xml():
     return FileResponse(os.path.join(BASE_DIR, "static", "sitemap.xml"), media_type="application/xml")
 
 
+@app.api_route("/ads.txt", methods=["GET", "HEAD"], include_in_schema=False)
+async def ads_txt():
+    return FileResponse(os.path.join(BASE_DIR, "static", "ads.txt"), media_type="text/plain")
+
+
 _NO_CACHE = {"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache"}
 
 

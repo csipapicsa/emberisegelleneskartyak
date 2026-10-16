@@ -41,3 +41,20 @@ def test_no_ad_network_code_anywhere():
     files = _html_pages() + [os.path.join("js", f) for f in os.listdir(os.path.join(STATIC, "js"))]
     for rel in files:
         assert not AD_NETWORK.search(_read(rel)), rel
+
+
+def test_adsense_ownership_meta_only_on_homepage():
+    # Ownership is verified with a meta tag (no Google script, no cookies).
+    for page in _html_pages():
+        has_meta = '<meta name="google-adsense-account" content="ca-pub-3693585614019775">' in _read(page)
+        assert has_meta == (page == "index.html"), page
+
+
+def test_ads_txt_served_at_root():
+    from fastapi.testclient import TestClient
+    from server.main import app
+
+    res = TestClient(app).get("/ads.txt")
+    assert res.status_code == 200
+    assert res.headers["content-type"].startswith("text/plain")
+    assert res.text.strip() == "google.com, pub-3693585614019775, DIRECT, f08c47fec0942fa0"
