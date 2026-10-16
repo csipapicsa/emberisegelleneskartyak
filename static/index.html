@@ -32,7 +32,7 @@
   <link rel="manifest" href="/static/site.webmanifest">
   <meta name="theme-color" content="#000000">
 
-  <link rel="stylesheet" href="/static/css/base.css">
+  <link rel="stylesheet" href="/static/css/base.css?v=20261016-ad-slot">
   <style>
     /* ── Section 1 ───────────────────────────── */
     .hero { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 16px; }
@@ -227,6 +227,11 @@
 
       <a class="btn btn-secondary idea-link" href="/kartyaotlet.html">Ötlet beküldés</a>
 
+      <div class="ad-slot" id="adSlot" hidden style="margin-top:12px">
+        <span class="ad-slot-label">Hirdetés</span>
+        <div class="ad-slot-box"></div>
+      </div>
+
       <div class="scroll-hint">
         <span>Hírek &amp; Infó</span>
         <span class="scroll-hint-arrow">↓</span>
@@ -391,6 +396,7 @@
 ]
 </script>
 <script src="/static/js/session.js"></script>
+<script src="/static/js/ads.js?v=20261016-ad-create"></script>
 <script>
   /* ── Username & buttons ─────────────────── */
   const usernameEl = document.getElementById('username');

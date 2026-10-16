@@ -30,7 +30,7 @@
   <link rel="manifest" href="/static/site.webmanifest">
   <meta name="theme-color" content="#000000">
 
-  <link rel="stylesheet" href="/static/css/base.css">
+  <link rel="stylesheet" href="/static/css/base.css?v=20261016-ad-slot">
   <style>
     .code-input { text-align: center; font-size: 2rem; font-weight: 800; letter-spacing: 12px; }
     .chat-fab {
@@ -185,6 +185,11 @@
     <div id="error" class="error-msg"></div>
 
     <button class="btn btn-primary" id="joinBtn">Csatlakozás</button>
+
+    <div class="ad-slot" id="adSlot" hidden style="margin-top:auto;padding-top:32px;margin-bottom:56px">
+      <span class="ad-slot-label">Hirdetés</span>
+      <div class="ad-slot-box"></div>
+    </div>
   </div>
 
   <!-- Chat FAB -->
@@ -210,6 +215,7 @@
   <div id="toast"></div>
 
   <script src="/static/js/session.js"></script>
+  <script src="/static/js/ads.js?v=20261016-ad-create"></script>
   <script>
     const usernameEl = document.getElementById('username');
     const codeEl     = document.getElementById('code');

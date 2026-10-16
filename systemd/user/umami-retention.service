@@ -1,0 +1,7 @@
+[Unit]
+Description=Delete Umami analytics data older than 2 years
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/emberisegellenes_kartyak
+ExecStart=/usr/bin/python3 /opt/emberisegellenes_kartyak/scripts/umami_retention.py

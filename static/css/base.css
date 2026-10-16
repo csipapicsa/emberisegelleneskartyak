@@ -251,3 +251,21 @@ h2 { font-size: 1.1rem; font-weight: 700; color: var(--accent); }
 
 /* Mute indicator next to player names */
 .voice-indicator { font-size: .8rem; margin-right: 4px; }
+
+/* Bottom ad banner (static/js/ads.js) — in normal flow, never sticky/overlay.
+   Fixed height so the page doesn't jump when an ad loads. */
+.ad-slot { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.ad-slot[hidden] { display: none; }
+.ad-slot-label {
+  font-size: .65rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--text-muted);
+}
+.ad-slot-box {
+  width: 100%; max-width: 320px; height: 50px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--grey); border: 1px dashed var(--grey2); border-radius: 6px;
+  color: var(--text-muted); font-size: .75rem; overflow: hidden;
+}
+@media (min-width: 641px) {
+  .ad-slot-box { max-width: 468px; height: 60px; }
+}

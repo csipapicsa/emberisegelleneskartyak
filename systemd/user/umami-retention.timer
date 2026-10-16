@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Umami analytics retention cleanup
+
+[Timer]
+OnCalendar=*-*-* 03:35:00
+Persistent=true
+Unit=umami-retention.service
+
+[Install]
+WantedBy=timers.target
