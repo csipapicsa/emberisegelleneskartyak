@@ -23,6 +23,23 @@ Claude (a jóváhagyás után)
 [ ] tests/test_ad_banner.py frissítése: Google-kód csak a 3 engedélyezett oldalon
 [ ] Élesítés után: ad-network kérés nincs /game, /room, /kartyak oldalon (böngészőben ellenőrizni)
 
+Hangfunkció használatának mérése (következő alkalom, Claude)
+Kérdés: hallják-e ténylegesen egymást a játékosok, nem a gombnyomások és nem a saját mikrofon.
+[ ] Kliens (static/js/voice.js): csak a FOGADÓ oldal — getStats() inbound-rtp audioLevel /
+    totalAudioEnergy ~10 mp-enként; „hallott hangot” = hallható bejövő hang ÉS a lap előtérben
+    (document.visibilityState). A saját mikrofont NEM mérjük. Nincs hangtartalom,
+    nincs megnevezve, ki beszélt.
+[ ] Játék végén / kilépéskor egyetlen összesítő üzenet a szervernek:
+    hallott másokat: 0 / <1 / 1–5 / 5–15 / 15+ perc
+[ ] Szerver: log_event("voice_heard", sáv) az analytics.db-be (90 nap), név és szobakód nélkül
+[ ] /admin/stats: „a játékok X%-ában hallották egymást”, átlagos hallgatási idő
+[ ] adatkezeles.html „Belső statisztika”: „a hangfunkciónál összesítve, hogy érkezett-e hallható
+    hang (tartalom nélkül)”
+[ ] Tesztek: pytest (szerver) + node (voice.js), mutation-check
+[ ] Szerver-újraindítás kell (összevonható az ads.txt-s újraindítással)
+Megjegyzés: a TURN-kapcsolatok száma (~1060 / 30 nap) NEM mutat használatot, mert a hang
+mindenkinél automatikusan csatlakozik.
+
 Kész
 [x] Hirdetési hely (/, /join, /create), alapból kikapcsolva, ?ads=preview előnézet
 [x] Umami az adatkezelési tájékoztatóban, 2 éves megőrzés + napi törlő időzítő
