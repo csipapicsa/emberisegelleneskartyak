@@ -1,0 +1,30 @@
+AdSense — teendők (2026-10-16)
+Részletek: docs/adatkezeles_hirdetes_szoveg.md, docs/emberisegellenes_umami_adsense_fejlesztesi_terv.md
+
+Gergő
+[x] Auto ads kikapcsolva
+[ ] Auto optimize kikapcsolása (AdSense → Ads → By site → ceruza)
+[ ] GDPR-üzenet (CMP) létrehozása és közzététele:
+    AdSense → Adatvédelem és üzenetkezelés → Európai szabályozások → Üzenet létrehozása
+    - nyelv: magyar
+    - gombok: Hozzájárulás + Nem járulok hozzá + Beállítások kezelése
+    - adatvédelmi URL: https://emberisegelleneskartyak.hu/adatkezeles
+[ ] Szerver-újraindítás csendes időben (/ads.txt miatt):
+    sudo systemctl restart emberisegellenes.service
+    → ellenőrzés: https://emberisegelleneskartyak.hu/ads.txt egy sort mutat
+[ ] Várni a Google jóváhagyására (Request review elküldve 2026-10-16)
+    → ha megjött, szólni Claude-nak; ha elutasítás, az indoklást elhozni
+
+Claude (a jóváhagyás után)
+[ ] AdSense-szkript betöltése csak /, /join, /create oldalon (static/js/ads.js), ADS_ENABLED = true
+[ ] also-banner (320×50, slot 1343136630) az adSlot dobozba; asztalin is 320×50, középen;
+    320 px széles telefonon ne lógjon ki
+[ ] Hirdetési szakasz az adatkezeles.html-be + „Hatályos” dátum
+[ ] tests/test_ad_banner.py frissítése: Google-kód csak a 3 engedélyezett oldalon
+[ ] Élesítés után: ad-network kérés nincs /game, /room, /kartyak oldalon (böngészőben ellenőrizni)
+
+Kész
+[x] Hirdetési hely (/, /join, /create), alapból kikapcsolva, ?ads=preview előnézet
+[x] Umami az adatkezelési tájékoztatóban, 2 éves megőrzés + napi törlő időzítő
+[x] AdSense tulajdonjog igazolva meta taggel, /ads.txt route
+[x] also-banner hirdetési egység létrehozva
