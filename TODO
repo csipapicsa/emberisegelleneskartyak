@@ -9,9 +9,7 @@ Gergő
     - nyelv: magyar
     - gombok: Hozzájárulás + Nem járulok hozzá + Beállítások kezelése
     - adatvédelmi URL: https://emberisegelleneskartyak.hu/adatkezeles
-[ ] Szerver-újraindítás csendes időben (/ads.txt miatt):
-    sudo systemctl restart emberisegellenes.service
-    → ellenőrzés: https://emberisegelleneskartyak.hu/ads.txt egy sort mutat
+[x] Szerver-újraindítás → /ads.txt él (2026-10-16 23:13)
 [ ] Várni a Google jóváhagyására (Request review elküldve 2026-10-16)
     → ha megjött, szólni Claude-nak; ha elutasítás, az indoklást elhozni
 
@@ -36,7 +34,7 @@ Kérdés: hallják-e ténylegesen egymást a játékosok, nem a gombnyomások é
 [ ] adatkezeles.html „Belső statisztika”: „a hangfunkciónál összesítve, hogy érkezett-e hallható
     hang (tartalom nélkül)”
 [ ] Tesztek: pytest (szerver) + node (voice.js), mutation-check
-[ ] Szerver-újraindítás kell (összevonható az ads.txt-s újraindítással)
+[ ] Szerver-újraindítás kell
 Megjegyzés: a TURN-kapcsolatok száma (~1060 / 30 nap) NEM mutat használatot, mert a hang
 mindenkinél automatikusan csatlakozik.
 
