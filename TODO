@@ -3,7 +3,7 @@ Részletek: docs/adatkezeles_hirdetes_szoveg.md, docs/emberisegellenes_umami_ads
 
 Gergő
 [x] Auto ads kikapcsolva
-[ ] Auto optimize kikapcsolása (AdSense → Ads → By site → ceruza)
+[x] Auto optimize kikapcsolva
 [ ] GDPR-üzenet (CMP) létrehozása és közzététele:
     AdSense → Adatvédelem és üzenetkezelés → Európai szabályozások → Üzenet létrehozása
     - nyelv: magyar
