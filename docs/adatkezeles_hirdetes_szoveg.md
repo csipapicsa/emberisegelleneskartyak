@@ -30,7 +30,10 @@ hirdetési sütiket és hasonló technológiákat helyezhet el.”
 
 1. AdSense → Adatvédelem és üzenetkezelés: Google CMP (EU/EGT, UK, CH) bekapcsolva.
 2. AdSense → Automatikus hirdetések: **kikapcsolva**.
-3. Fix méretű hirdetési egység (mobil 320×50, asztali 468×60) a `adSlot` dobozba.
+3. Fix méretű hirdetési egység a `adSlot` dobozba — létrehozva (2026-10-16):
+   `also-banner`, 320×50, `data-ad-client="ca-pub-3693585614019775"`,
+   `data-ad-slot="1343136630"`. Asztali gépen is 320×50, középre igazítva
+   (a `.ad-slot-box` 468×60-as asztali méretét ehhez kell igazítani).
 4. `ads.txt` a gyökérben a publisher ID-val.
 5. A fenti szöveg a tájékoztatóba, „Hatályos” dátum frissítése.
 6. `tests/test_ad_banner.py` frissítése (jelenleg tiltja az AdSense-kódot).
