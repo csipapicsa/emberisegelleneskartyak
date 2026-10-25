@@ -134,13 +134,23 @@ systemctl --user status container-umami-db.service container-umami-app.service  
   fel `main`-re.
 - [ ] Opcionális: egy mondat az `adatkezeles.html` "Belső statisztika"
   pontjához az új önhosztolt analitikáról (felajánlva, még nem kész).
-- [ ] Eldöntendő: a `hollandmagyarradio.hu` és `partvalto.hu` bekötése
-  ugyanebbe az Umami-példányba. Umami oldalon triviális (több website egy
-  telepítésben, ingyenes); kód oldalon külön projektek — a `partvalto.hu`
-  Vite-tel épített SPA, a `dist/index.html` build-artifact, a forrás
-  `index.html`-t kellene módosítani, különben a következő build felülírja;
-  a `hollandmagyarradio.hu` `/var/www/hollandmagyarradio`-ból szolgál ki,
-  a deploy-folyamata még nincs feltérképezve.
+- [x] `partvalto.hu` bekötve ugyanebbe az Umami-példányba (2026-08-28).
+  Umami website létrehozva közvetlenül a Postgres `website` táblában
+  (`INSERT`, `website_id=eed4e5f8-a427-47ef-b6db-af8baf33f12f`, `name=Pártváltó`,
+  `domain=partvalto.hu`, ugyanaz a `user_id`/`created_by` mint a másik két
+  site-nál, mert a dashboard admin jelszava nem volt elérhető ebben a
+  sessionben az API/UI-n keresztüli létrehozáshoz). Tracking script a
+  forrás `frontend/index.html`-be került (nem a build-artifact
+  `dist/index.html`-be), majd `npm run build` lefuttatva, hogy a
+  `dist/index.html` is frissüljön — enélkül a következő deploy felülírta
+  volna. `partvalto-api` és nginx nem lett újraindítva/reloadolva, mert a
+  változás tisztán statikus asset, a `try_files` már a frissített
+  `dist/index.html`-t szolgálja ki. Ellenőrizve: `curl -s
+  https://partvalto.hu/ | grep stats.ember...` mutatja a script tag-et.
+- [ ] `hollandmagyarradio.hu` Umami website létrehozva a dashboardon
+  (2026-08-28, `website_id=1a5e306f-9166-4566-ad62-d1b46bb3088a`), de a
+  tracking script **nincs** bekötve a `/var/www/hollandmagyarradio`
+  forrásba — a deploy-folyamata még nincs feltérképezve, ez még nyitott.
 - [ ] Az Umami/Postgres image-ek frissítése (`podman pull` + újraindítás)
   nincs automatizálva — új, saját karbantartást igénylő szolgáltatás lett a
   szerveren.
