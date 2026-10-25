@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create consistent SQLite backups of every runtime database in this project.
+"""Create consistent SQLite backups of every database in this project.
 
 Backups are written below ``backups/`` and files older than the configured
 retention window are removed.  SQLite's backup API is used rather than a raw
@@ -18,11 +18,24 @@ from pathlib import Path
 
 RETENTION_DAYS = 30
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+# Subdirectories whose databases are backed up too, e.g. the uploaded
+# database/card_master.db (the game's card source).
+DATABASE_SUBDIRS = ("database",)
 
 
 def sqlite_databases(project_root: Path) -> list[Path]:
-    """Return every top-level SQLite database, excluding the backup directory."""
-    return sorted(path for path in project_root.glob("*.db") if path.is_file())
+    """Return every top-level SQLite database plus those in DATABASE_SUBDIRS,
+    excluding the backup directory."""
+    paths = list(project_root.glob("*.db"))
+    for subdir in DATABASE_SUBDIRS:
+        paths.extend((project_root / subdir).glob("*.db"))
+    return sorted(path for path in paths if path.is_file())
+
+
+def backup_name(project_root: Path, source_path: Path) -> str:
+    """Backup file stem: the path relative to the project root, with ``/``
+    turned into ``__`` so database/x.db can't collide with a top-level x.db."""
+    return "__".join(source_path.relative_to(project_root).with_suffix("").parts)
 
 
 def backup_database(source_path: Path, destination_path: Path) -> None:
@@ -61,7 +74,7 @@ def run(project_root: Path, now: datetime | None = None) -> tuple[list[Path], li
         timestamp = now.strftime("%Y%m%dT%H%M%SZ")
         created: list[Path] = []
         for source_path in sqlite_databases(project_root):
-            destination_path = backup_dir / f"{source_path.stem}--{timestamp}.db"
+            destination_path = backup_dir / f"{backup_name(project_root, source_path)}--{timestamp}.db"
             backup_database(source_path, destination_path)
             created.append(destination_path)
         deleted = prune_old_backups(backup_dir, now)
@@ -74,7 +87,7 @@ def main(argv: list[str] | None = None) -> int:
         "--project-root",
         type=Path,
         default=PROJECT_ROOT,
-        help="Project directory containing the top-level .db files.",
+        help="Project directory containing the .db files.",
     )
     args = parser.parse_args(argv)
     try:

@@ -37,3 +37,22 @@ def test_run_backs_up_every_top_level_database_and_prunes_expired(tmp_path):
         con.close()
         assert backup.stat().st_mode & 0o777 == 0o600
     assert sorted(values) == ["first", "second"]
+
+
+def test_run_backs_up_databases_in_the_database_subdir(tmp_path):
+    # database/card_master.db is the uploaded card source; it must be backed
+    # up too, without clashing with a top-level database of the same name.
+    make_database(tmp_path / "card_master.db", "top")
+    (tmp_path / "database").mkdir()
+    make_database(tmp_path / "database" / "card_master.db", "uploaded")
+    now = datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc)
+
+    created, _ = backup_databases.run(tmp_path, now=now)
+
+    assert sorted(path.name for path in created) == [
+        "card_master--20261025T120000Z.db",
+        "database__card_master--20261025T120000Z.db",
+    ]
+    con = sqlite3.connect(tmp_path / "backups" / "database__card_master--20261025T120000Z.db")
+    assert con.execute("SELECT value FROM values_table").fetchone()[0] == "uploaded"
+    con.close()

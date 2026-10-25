@@ -2,9 +2,11 @@
 
 ## Mit ment a rendszer?
 
-A `scripts/backup_databases.py` minden, a projekt gyökerében lévő `.db`
-fájlról mentést készít. Jelenleg ez például a `cards.db`, `messages.db`,
-`chat.db`, `analytics.db` és a biztonsági kártyaadatbázis. A mentés a SQLite
+A `scripts/backup_databases.py` minden, a projekt gyökerében és a
+`database/` könyvtárban lévő `.db` fájlról mentést készít. Jelenleg ez például
+a `cards.db`, `messages.db`, `chat.db`, `analytics.db`, a biztonsági
+kártyaadatbázis és a `database/card_master.db` (ennek mentése
+`database__card_master--<időbélyeg>.db` néven készül). A mentés a SQLite
 online backup API-ját használja, ezért futó weboldal mellett is konzisztens.
 
 ## Hova és meddig?
