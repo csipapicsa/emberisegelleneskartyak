@@ -108,6 +108,17 @@ def test_community_card_ids_are_offset(db):
     assert white[0]["id"] >= COMMUNITY_ID_OFFSET
 
 
+def test_community_card_text_is_sent_raw_for_the_client_to_escape(db):
+    # Stored escaped (sanitize_card_idea_text), but the game client escapes
+    # every card text itself — sending it escaped would show "&quot;".
+    save_card_idea(db, "white", '"Idézet" & <b>')
+    db.execute("UPDATE card_ideas SET approved = 1")
+    db.commit()
+    assert "&quot;" in db.execute("SELECT text FROM card_ideas").fetchone()[0]
+    _, white = get_community_cards(db)
+    assert white[0]["text"] == '"Idézet" & <b>'
+
+
 def test_community_cards_empty_when_no_ideas(db):
     black, white = get_community_cards(db)
     assert black == [] and white == []

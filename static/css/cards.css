@@ -294,3 +294,12 @@
   font-weight: 800;
   padding: 0 8px;
 }
+
+/* Card texts can contain line breaks (card_master.db) — keep them. Only on
+   elements whose content is the card text itself, not template whitespace. */
+.black-card,
+.hand-card > span,
+.submission-pile .sub-card,
+.winner-cards .sub-card,
+#confirmPreview,
+#confirmMultiPreview .card-white { white-space: pre-line; }

@@ -12,10 +12,10 @@ CONTACT_RETENTION_DAYS = 365
 VOTE_RETENTION_DAYS = 5 * 365
 
 # Synthetic "Ti küldtétek" community edition. These cards live in messages.db
-# (card_ideas), not cards.db, so the edition is virtual:
-#   COMMUNITY_EDITION_ID  — sentinel id never stored in cards.db.editions
+# (card_ideas), not card_master.db, so the edition is virtual:
+#   COMMUNITY_EDITION_ID  — sentinel id never stored in card_master.db.editions
 #   COMMUNITY_ID_OFFSET   — added to card_ideas.id when building in-game card
-#                           dicts so community ids can't collide with cards.db ids
+#                           dicts so community ids can't collide with card_master.db ids
 COMMUNITY_EDITION_ID = -1
 COMMUNITY_EDITION_NAME = "Ti küldtétek"
 COMMUNITY_ID_OFFSET = 10_000_000
@@ -210,8 +210,10 @@ def get_community_cards(conn: sqlite3.Connection) -> tuple[list[dict], list[dict
     Returns (black, white) lists shaped like cards.db rows so they can be mixed
     into a normal deck: type 'Black'/'White', pick (black cards only, from
     number_of_white_cards), edition_id sentinel, community flag, and an id
-    offset so it can't collide with cards.db ids. Only approved==1 rows are
-    included so unreviewed submissions never show up in-game.
+    offset so it can't collide with card_master.db ids. Only approved==1 rows
+    are included so unreviewed submissions never show up in-game. Text is
+    stored HTML-escaped (sanitize_card_idea_text) but sent raw like every
+    other card, because the game client escapes all card text itself.
     """
     rows = conn.execute(
         """
@@ -225,7 +227,7 @@ def get_community_cards(conn: sqlite3.Connection) -> tuple[list[dict], list[dict
     for r in rows:
         card = {
             "id": r["id"] + COMMUNITY_ID_OFFSET,
-            "text": r["text"],
+            "text": html.unescape(r["text"]),
             "type": _CARD_TYPE_TO_GAME[r["card_type"]],
             "pick": r["number_of_white_cards"],
             "edition_id": COMMUNITY_EDITION_ID,

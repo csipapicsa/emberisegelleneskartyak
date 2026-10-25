@@ -457,7 +457,7 @@ async def api_list_rooms():
 async def api_editions():
     conn = get_conn()
     try:
-        editions = get_editions(conn)
+        editions = get_editions(conn, CONFIG.get("min_edition_cards", 0))
     finally:
         conn.close()
     # Append the virtual community edition (cards live in messages.db, not cards.db)
@@ -473,7 +473,7 @@ async def api_editions():
         "black_count": len(c_black),
         "white_count": len(c_white),
     })
-    editions.sort(key=lambda e: edition_display.sort_key(e["name"]))
+    editions.sort(key=lambda e: edition_display.sort_key(e["name"], e.pop("sort_order", None)))
     for e in editions:
         e["name"] = edition_display.label_for(e["name"])
     return editions

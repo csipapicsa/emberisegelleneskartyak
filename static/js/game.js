@@ -376,7 +376,7 @@ function onCzarPick(winnerSessionId) {
 
 function renderBlackCard(card) {
   const el = document.getElementById('blackCard');
-  const text = card.text.replace(/_+/g, '<span class="blank"></span>');
+  const text = esc(card.text).replace(/_+/g, '<span class="blank"></span>');
   const badge = card.community ? '<span class="community-badge">Ti küldtétek</span>' : '';
   const feedbackBtn = `<button class="feedback-icon-btn" type="button" data-feedback-id="${card.id}" title="Visszajelzés erre a kártyára">💡</button>`;
   el.innerHTML = `${text}${card.pick > 1 ? `<span class="pick-label">Húzz ${card.pick}-t</span>` : ''}${badge}${feedbackBtn}`;

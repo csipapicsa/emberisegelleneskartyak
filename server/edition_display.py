@@ -2,20 +2,22 @@
 the room lobby's package picker.
 
 To add a new edition, reorder one, or change its label, just edit ORDER below
-— nothing else needs to change. Keyed by the exact `name` stored in
-cards.db.editions (or, for the virtual community pack,
-messages_db.COMMUNITY_EDITION_NAME). An edition whose name isn't listed here
-still shows up — with its raw DB name as the label — sorted after every
-listed edition.
+— nothing else needs to change. Keyed by the edition's display name in
+card_master.db (``COALESCE(hun_name, name)``, or, for the virtual community
+pack, messages_db.COMMUNITY_EDITION_NAME). An edition whose name isn't listed
+here still shows up — with that name as the label — sorted after every listed
+edition, in card_master.db's ``sort_order``. Which editions show up at all is
+decided by ``min_edition_cards`` in config.json.
 """
+from __future__ import annotations
 
 ORDER: list[tuple[str, str]] = [
     # (name as stored in the DB, label shown to players)
     ("Magyar Alap",    "Magyar Alap"),
     ("Vegyes",         "Vegyes"),
     ("Ti küldtétek",   "Ti küldtétek"),
-    ("2nd Expansion",  "Második kiadás"),
-    ("3rd Expansion",  "Harmadik kiadás"),
+    ("Második (2nd)",  "Második kiadás"),
+    ("Harmadik (3rd)", "Harmadik kiadás"),
     ("Negyedik (4th)", "Negyedik kiadás"),
     ("Ötödik (5th)",   "Ötödik kiadás"),
     ("Hatodik (6th)",  "Hatodik kiadás"),
@@ -26,10 +28,10 @@ _POSITION = {name: i for i, (name, _label) in enumerate(ORDER)}
 _LABEL = {name: label for name, label in ORDER}
 
 
-def sort_key(name: str) -> tuple[int, str]:
+def sort_key(name: str, sort_order: int | None = None) -> tuple[int, int, str]:
     """Sort position for an edition name; unlisted names sort after every
-    listed one, alphabetically among themselves."""
-    return (_POSITION.get(name, len(ORDER)), name)
+    listed one, by the database's sort_order among themselves (then name)."""
+    return (_POSITION.get(name, len(ORDER)), sort_order if sort_order is not None else 0, name)
 
 
 def label_for(name: str) -> str:
