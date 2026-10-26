@@ -457,7 +457,7 @@ async def api_list_rooms():
 async def api_editions():
     conn = get_conn()
     try:
-        editions = get_editions(conn, CONFIG.get("min_edition_cards", 0))
+        editions = get_editions(conn)
     finally:
         conn.close()
     # Append the virtual community edition (cards live in messages.db, not cards.db)
@@ -808,6 +808,11 @@ async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
                 msg_conn.close()
             black_cards += c_black
             white_cards += c_white
+        # Some complete packs have only white cards (Határon túl), and with
+        # no black card the game would end before the first round.
+        if not black_cards:
+            await manager.send(room_code, session_id, {"event": "error", "message": "A kiválasztott csomagokban nincs fekete lap – válassz még egy paklit."})
+            return
         # Universal guard: a game needs enough distinct white cards to keep
         # dealing fresh hands round after round, scaled to the table size —
         # replaces the old "community edition can't be played alone" rule.

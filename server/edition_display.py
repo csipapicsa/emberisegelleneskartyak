@@ -7,7 +7,7 @@ card_master.db (``COALESCE(hun_name, name)``, or, for the virtual community
 pack, messages_db.COMMUNITY_EDITION_NAME). An edition whose name isn't listed
 here still shows up — with that name as the label — sorted after every listed
 edition, in card_master.db's ``sort_order``. Which editions show up at all is
-decided by ``min_edition_cards`` in config.json.
+decided by card_master.db: only packs with ``edition_status.complete = 1``.
 """
 from __future__ import annotations
 

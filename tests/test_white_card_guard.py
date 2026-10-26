@@ -130,3 +130,21 @@ async def test_start_game_only_community_selected_and_large_enough_now_allowed(m
     await main_mod._handle_message("sid_0", CODE, {"event": "start_game"})
 
     assert room.started is True
+
+
+@pytest.mark.asyncio
+async def test_start_game_blocked_when_selected_packs_have_no_black_card(monkeypatch):
+    """Határon túl is a complete pack with only white cards; on its own the
+    game would end before the first round."""
+    room, sids = make_room(CODE, n_players=1)
+    room.edition_ids = [7]
+    _patch_cards(monkeypatch, real_white_count=147, real_black_count=0)
+    mgr = FakeManager()
+    monkeypatch.setattr(main_mod, "manager", mgr)
+
+    await main_mod._handle_message("sid_0", CODE, {"event": "start_game"})
+
+    assert room.started is False
+    last = mgr.sent_to(CODE, "sid_0")[-1]
+    assert last["event"] == "error"
+    assert "fekete" in last["message"]
