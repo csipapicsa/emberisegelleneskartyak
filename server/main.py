@@ -31,6 +31,7 @@ from server.messages_db import get_conn as get_msg_conn, ensure_tables as ensure
     add_card_feedback, \
     COMMUNITY_EDITION_ID, COMMUNITY_EDITION_NAME
 from server import chat_db
+from server import card_seen
 from server.session import create_or_get_session
 from server.room import create_room, get_room, delete_room, Player
 from server import game as game_logic
@@ -59,6 +60,23 @@ def _delete_room_and_chat(code: str) -> None:
             conn.close()
     except Exception:
         logger.exception("failed to purge chat history for room %s", code)
+
+
+async def _card_seen_flush_task(stop: asyncio.Event) -> None:
+    """Periodically write the in-memory card_seen counts to disk, off the
+    event loop. Once stop is set it writes one last batch and returns, so
+    shutdown never cuts a write in half."""
+    while True:
+        with suppress(asyncio.TimeoutError):
+            await asyncio.wait_for(stop.wait(), card_seen.FLUSH_INTERVAL)
+        batch = card_seen.take_pending()
+        try:
+            await asyncio.to_thread(card_seen.write_counts, batch)
+        except Exception:
+            card_seen.restore_pending(batch)
+            logger.exception("card_seen flush failed; will retry")
+        if stop.is_set():
+            return
 
 
 async def _room_cleanup_task() -> None:
@@ -121,17 +139,23 @@ async def lifespan(app: FastAPI):
     from server.analytics import init_analytics
     init_analytics(migrate_privacy=True)
 
-    if os.environ.get("EEK_DISABLE_ROOM_CLEANUP") == "1":
-        yield
-        return
-
-    cleanup_task = asyncio.create_task(_room_cleanup_task())
+    flush_stop = asyncio.Event()
+    flush_task = asyncio.create_task(_card_seen_flush_task(flush_stop))
     try:
-        yield
+        if os.environ.get("EEK_DISABLE_ROOM_CLEANUP") == "1":
+            yield
+            return
+
+        cleanup_task = asyncio.create_task(_room_cleanup_task())
+        try:
+            yield
+        finally:
+            cleanup_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await cleanup_task
     finally:
-        cleanup_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await cleanup_task
+        flush_stop.set()
+        await flush_task
 
 
 app = FastAPI(lifespan=lifespan)
