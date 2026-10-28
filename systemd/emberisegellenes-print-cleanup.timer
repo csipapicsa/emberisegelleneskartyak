@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly cleanup of Emberiség Ellenes Kártyák print PDFs
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=300
+Persistent=true
+Unit=emberisegellenes-print-cleanup.service
+
+[Install]
+WantedBy=timers.target

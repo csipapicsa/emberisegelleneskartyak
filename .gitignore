@@ -18,3 +18,6 @@ docs/security/
 # OS / editor
 .DS_Store
 *.swp
+
+# Printable card PDFs (server/print_cards.py), deleted after 24 hours
+generated/
