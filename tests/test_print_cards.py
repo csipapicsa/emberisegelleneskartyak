@@ -15,7 +15,9 @@ from server import messages_db, print_cards
 from server.messages_db import COMMUNITY_EDITION_ID, COMMUNITY_ID_OFFSET
 from tests.test_editions import make_master
 
-WIDTH = print_cards.CARD_W - 2 * print_cards.PADDING
+NINE = print_cards.LAYOUTS[9]
+EIGHTEEN = print_cards.LAYOUTS[18]
+WIDTH = NINE.card_w - 2 * NINE.padding
 
 
 @pytest.fixture
@@ -106,6 +108,14 @@ def test_wrap_never_leaves_a_lone_letter_after_a_hyphen():
     assert not any(line.startswith("s ") for line in lines)
 
 
+def test_wrap_keeps_a_blank_together_with_its_suffix():
+    text = "Az arckifejezése, amikor ________-val leped meg, „________-kihívásként” ________-hoz/-hez"
+    for width in (WIDTH, EIGHTEEN.card_w - 2 * EIGHTEEN.padding):
+        lines, _ = print_cards.wrap(text, 14, width)
+        assert not any(line.endswith("________-") for line in lines), lines
+        assert not any(line.startswith(("val", "kihívásként", "hoz")) for line in lines), lines
+
+
 def test_wrap_flags_a_word_too_wide_for_any_line():
     lines, split_word = print_cards.wrap("A" * 80, 14, WIDTH)
     assert split_word
@@ -115,23 +125,29 @@ def test_wrap_flags_a_word_too_wide_for_any_line():
 
 def test_fit_text_shrinks_until_no_word_is_cut():
     # One long word that doesn't fit a line at 14pt.
-    word = "Megszentségteleníthetetlenségeskedéseitekért"
-    size, lines = print_cards.fit_text(word, WIDTH, 100 * print_cards.mm)
-    assert size < print_cards.MAX_FONT_SIZE
-    assert size == print_cards.MIN_FONT_SIZE or lines == [word]
+    word = "Jövedelemegyenlőtlenségeitekért"
+    size, lines, fits = print_cards.fit_text(word, WIDTH, 100 * print_cards.mm, NINE)
+    assert size < NINE.max_font
+    assert fits and lines == [word]
+
+
+def test_fit_text_reports_text_that_cannot_fit():
+    size, _lines, fits = print_cards.fit_text("szó " * 400, WIDTH, 30 * print_cards.mm, NINE)
+    assert size == NINE.min_font
+    assert not fits
 
 
 def test_fit_text_short_card_uses_the_largest_size():
-    size, lines = print_cards.fit_text("Lepra", WIDTH, 60 * print_cards.mm)
-    assert size == print_cards.MAX_FONT_SIZE
+    size, lines, fits = print_cards.fit_text("Lepra", WIDTH, 60 * print_cards.mm, NINE)
+    assert fits and size == NINE.max_font
     assert lines == ["Lepra"]
 
 
 def test_fit_text_long_card_fits_the_box():
     text = "Ez egy nagyon hosszú kártya, amin rengeteg szó van, " * 8
     height = 40 * print_cards.mm
-    size, lines = print_cards.fit_text(text, WIDTH, height)
-    assert size < print_cards.MAX_FONT_SIZE
+    size, lines, fits = print_cards.fit_text(text, WIDTH, height, NINE)
+    assert fits and size < NINE.max_font
     assert len(lines) * size * print_cards.LEADING <= height
 
 
@@ -143,18 +159,59 @@ def test_render_print_set_writes_three_pdfs_with_hashed_names(master, tmp_path):
     assert set(result) == {"white", "black", "black_on_white"}
     for variant, path in result.items():
         prefix = print_cards.VARIANTS[variant][0]
-        assert re.fullmatch(rf"{prefix}-[0-9a-f]{{16}}\.pdf", path.name)
+        assert re.fullmatch(rf"{prefix}-9-[0-9a-f]{{16}}\.pdf", path.name)
         assert path.read_bytes().startswith(b"%PDF")
         assert stat.S_IMODE(path.stat().st_mode) == 0o644
     assert len({p.name for p in result.values()}) == 3
     assert not list(out.glob("*.tmp"))
 
 
-def test_pdf_has_one_page_per_nine_cards(tmp_path):
+@pytest.mark.parametrize("per_page, pages", [(9, 3), (18, 2)])
+def test_pdf_page_count_follows_cards_per_page(tmp_path, per_page, pages):
     many = [{"id": i, "text": f"Kártya {i}", "pick": 1} for i in range(19)]
     path = tmp_path / "x.pdf"
-    print_cards.render_pdf(many, path, "white")
-    assert _pages(path) == 3
+    print_cards.render_pdf(many, path, "white", per_page)
+    assert _pages(path) == pages
+
+
+@pytest.mark.parametrize("per_page", [9, 18])
+def test_card_grid_fits_the_page_without_overlap(per_page):
+    layout = print_cards.LAYOUTS[per_page]
+    page_w, page_h = layout.pagesize
+    boxes = []
+    for slot in range(layout.per_page):
+        x, y = print_cards._card_origin(slot, layout)
+        # Printers can't print the outer ~4 mm.
+        assert x >= 4 * print_cards.mm and y >= 4 * print_cards.mm
+        assert x + layout.card_w <= page_w - 4 * print_cards.mm
+        assert y + layout.card_h <= page_h - 4 * print_cards.mm
+        boxes.append((x, y))
+    for i, (x1, y1) in enumerate(boxes):
+        for x2, y2 in boxes[i + 1:]:
+            apart_x = abs(x1 - x2) >= layout.card_w + layout.gap - 0.01
+            apart_y = abs(y1 - y2) >= layout.card_h + layout.gap - 0.01
+            assert apart_x or apart_y
+
+
+def test_eighteen_per_page_is_landscape_with_smaller_cards():
+    assert EIGHTEEN.pagesize[0] > EIGHTEEN.pagesize[1]
+    assert NINE.pagesize[0] < NINE.pagesize[1]
+    # Same card shape, 70 % of the size.
+    assert abs(EIGHTEEN.card_w / EIGHTEEN.card_h - NINE.card_w / NINE.card_h) < 1e-9
+    assert EIGHTEEN.card_w < NINE.card_w
+
+
+def test_cards_carry_only_their_text_and_pick_label(monkeypatch, tmp_path):
+    drawn = []
+    from reportlab.pdfgen.canvas import Canvas
+    monkeypatch.setattr(Canvas, "drawString", lambda self, x, y, text, *a, **k: drawn.append(text))
+    monkeypatch.setattr(Canvas, "drawRightString", lambda self, x, y, text, *a, **k: drawn.append(text))
+    cards = [{"id": 1, "text": "Mi ez ________?", "pick": 1},
+             {"id": 2, "text": "________ és ________.", "pick": 2}]
+    print_cards.render_pdf(cards, tmp_path / "x.pdf", "black", 9)
+    assert drawn[-1] == "Játssz ki 2 kártyát"
+    assert " ".join(drawn[:-1]).split() == "Mi ez ________? ________ és ________.".split()
+    assert not any("Emberiség" in text for text in drawn)
 
 
 def test_same_selection_reuses_the_file_and_restarts_its_clock(master, tmp_path):
@@ -175,6 +232,19 @@ def test_different_selection_gets_a_different_file(master, tmp_path):
     assert len(list(out.glob("feher-kartyak-*.pdf"))) == 2
 
 
+def test_nine_and_eighteen_per_page_are_separate_files(master, tmp_path):
+    nine = print_cards.render_print_set([1], tmp_path, per_page=9)["black"]
+    eighteen = print_cards.render_print_set([1], tmp_path, per_page=18)["black"]
+    assert nine != eighteen
+    assert re.fullmatch(r"fekete-kartyak-18-[0-9a-f]{16}\.pdf", eighteen.name)
+    assert _pages(eighteen) == 1
+
+
+def test_unsupported_cards_per_page_is_refused(master, tmp_path):
+    with pytest.raises(ValueError):
+        print_cards.render_print_set([1], tmp_path, per_page=12)
+
+
 def test_white_only_selection_has_no_black_pdfs(master, tmp_path):
     result = print_cards.render_print_set([4], tmp_path)
     assert result["black"] is None and result["black_on_white"] is None
@@ -186,6 +256,7 @@ def test_file_name_changes_with_text_pick_and_layout(monkeypatch):
     name = print_cards.file_name("black", cards)
     assert print_cards.file_name("black", [{**cards[0], "text": "Valami más ________."}]) != name
     assert print_cards.file_name("black", [{**cards[0], "pick": 2}]) != name
+    assert print_cards.file_name("black", cards, 18)[-20:] != name[-20:]
     # Same cards, other variant: a different hash, not just another prefix.
     assert print_cards.file_name("black_on_white", cards)[-20:] != name[-20:]
     monkeypatch.setattr(print_cards, "LAYOUT_VERSION", print_cards.LAYOUT_VERSION + 1)
@@ -193,7 +264,7 @@ def test_file_name_changes_with_text_pick_and_layout(monkeypatch):
 
 
 def test_failed_render_leaves_no_file_behind(master, tmp_path, monkeypatch):
-    def boom(cards, path, variant):
+    def boom(cards, path, variant, per_page):
         path.write_bytes(b"half")
         raise RuntimeError("render failed")
     monkeypatch.setattr(print_cards, "render_pdf", boom)
@@ -233,3 +304,41 @@ def test_cleanup_script_uses_the_print_folder(tmp_path, monkeypatch, capsys):
     assert cleanup_print_files.main() == 0
     assert not (tmp_path / "old.pdf").exists()
     assert "removed 1" in capsys.readouterr().out
+
+
+# ── every real card ───────────────────────────────────────────────────────────
+
+def test_every_real_card_fits_both_sizes_without_cutting_a_word():
+    """Runs on the real database/card_master.db, so a new upload with a card
+    too long for a printed card fails here (see also
+    scripts/render_print_pdfs.py --stress)."""
+    from server import db
+    conn = db.get_conn()
+    try:
+        cards = db.get_playable_cards(conn)
+    finally:
+        conn.close()
+    assert len(cards) > 1000
+    too_long = []
+    for layout in print_cards.LAYOUTS.values():
+        for card in cards:
+            frames = (False, True) if card["type"] == "Black" else (False,)
+            for frame in frames:
+                size, lines, fits = print_cards.layout_card(card, layout, frame)
+                if not fits:
+                    too_long.append((layout.per_page, frame, card["id"], card["text"]))
+    assert too_long == []
+
+
+@pytest.mark.parametrize("per_page", [9, 18])
+def test_long_text_stays_above_the_pick_label(monkeypatch, tmp_path, per_page):
+    texts, labels = [], []
+    from reportlab.pdfgen.canvas import Canvas
+    monkeypatch.setattr(Canvas, "drawString", lambda self, x, y, text, *a, **k: texts.append(y))
+    monkeypatch.setattr(Canvas, "drawRightString", lambda self, x, y, text, *a, **k: labels.append(y))
+    long_pick = {"id": 1, "pick": 3, "text": "Srácok, tegnap este láttam ezt az őrült filmet. " * 4}
+    print_cards.render_pdf([long_pick], tmp_path / "x.pdf", "black", per_page)
+    layout = print_cards.LAYOUTS[per_page]
+    [label_y] = labels
+    # The last text line's descenders stay clear of the label's top.
+    assert min(texts) - 0.25 * layout.max_font > label_y + layout.pick_font

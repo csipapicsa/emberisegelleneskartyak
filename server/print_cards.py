@@ -8,13 +8,14 @@ For a selection of editions three PDFs are made:
 - black cards on white with a thick black frame, to save ink. The frame keeps
   them apart from white cards once cut.
 
-Cards are 63 × 88 mm (standard playing-card size, so sleeves fit) with rounded
-corners, 9 per A4 page, with a gap between them so every card can be cut out
-on its own outline. Each card is printed once: packs overlap, so the cards are
-de-duplicated by id and by text.
+Two sizes (LAYOUTS): 9 cards of 63 × 88 mm (standard playing-card size, so
+sleeves fit) on a portrait A4 page, or 18 cards of 44 × 62 mm (the same shape
+at 70 %) on a landscape one. Corners are rounded and there's a gap between the
+cards, so every card can be cut out on its own outline. Each card is printed
+once: packs overlap, so the cards are de-duplicated by id and by text.
 
 Files go to OUTPUT_DIR and are named after a hash of what's on them, e.g.
-``feher-kartyak-3f9c0a1b2c3d4e5f.pdf``. The same selection on the same
+``feher-kartyak-9-3f9c0a1b2c3d4e5f.pdf``. The same selection on the same
 card_master.db gets the same name, so a file that's already there is reused
 instead of rendered again; any change in the cards gives a new name.
 cleanup() deletes files older than MAX_AGE_SECONDS
@@ -28,9 +29,10 @@ import os
 import re
 import tempfile
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -45,26 +47,47 @@ MAX_AGE_SECONDS = 24 * 60 * 60
 
 # Bump when the look changes, so files rendered with the old layout get new
 # names instead of being reused.
-LAYOUT_VERSION = 1
-
-CARD_W = 63 * mm
-CARD_H = 88 * mm
-CORNER_RADIUS = 3.5 * mm
-GAP = 4 * mm
-COLUMNS, ROWS = 3, 3
-PER_PAGE = COLUMNS * ROWS
-PADDING = 6 * mm
-FOOTER_H = 9 * mm
-FRAME_W = 2 * mm            # black frame on the ink-saving black cards
+LAYOUT_VERSION = 2
 
 FONT_NAME = "CardFont"
 FONT_PATH = Path(__file__).resolve().parent / "fonts" / "DejaVuSans-Bold.ttf"
-MAX_FONT_SIZE = 14
-MIN_FONT_SIZE = 6
 LEADING = 1.22
-FOOTER_FONT_SIZE = 6.5
-PICK_FONT_SIZE = 8
-FOOTER_TEXT = "Emberiség Ellenes Kártyák"
+
+
+@dataclass(frozen=True)
+class Layout:
+    """Page grid and card measurements, all in points."""
+    per_page: int
+    pagesize: tuple[float, float]
+    columns: int
+    rows: int
+    card_w: float
+    card_h: float
+    radius: float
+    gap: float
+    padding: float
+    frame_w: float          # black frame on the ink-saving black cards
+    max_font: float
+    min_font: float
+    pick_font: float        # "Játssz ki 2 kártyát" at the bottom
+
+
+def _layout(per_page: int, pagesize, columns: int, rows: int, scale: float, gap: float) -> Layout:
+    """A layout whose card is the 63 × 88 mm one scaled by `scale`."""
+    return Layout(
+        per_page=per_page, pagesize=pagesize, columns=columns, rows=rows,
+        card_w=63 * mm * scale, card_h=88 * mm * scale, radius=3.5 * mm * scale,
+        gap=gap, padding=6 * mm * scale, frame_w=2 * mm * scale,
+        max_font=round(14 * scale * 2) / 2, min_font=max(5.0, round(6 * scale * 2) / 2),
+        pick_font=round(8 * scale * 2) / 2,
+    )
+
+
+LAYOUTS = {
+    9: _layout(9, A4, 3, 3, 1.0, 4 * mm),
+    18: _layout(18, landscape(A4), 6, 3, 0.7, 3 * mm),
+}
+DEFAULT_PER_PAGE = 9
 
 # variant → (file name prefix, which cards, card fill, text colour, frame)
 VARIANTS = {
@@ -73,7 +96,7 @@ VARIANTS = {
     "black_on_white": ("fekete-kartyak-tintatakarekos", "Black", (1, 1, 1), (0, 0, 0), True),
 }
 CUT_LINE_GREY = (0.6, 0.6, 0.6)
-FOOTER_GREY = {(0, 0, 0): (0.45, 0.45, 0.45), (1, 1, 1): (0.7, 0.7, 0.7)}
+PDF_TITLE = "Emberiség Ellenes Kártyák – nyomtatható kártyák"
 
 
 def _register_font() -> None:
@@ -123,8 +146,9 @@ def _unique(cards: list[dict]) -> list[dict]:
 # ── text layout ───────────────────────────────────────────────────────────────
 
 # A line may break after a hyphen with 2+ letters before it and 3+ after
-# ("szuper-" / "képességem"), never "3H-" / "s".
-_AFTER_HYPHEN = re.compile(r"(?<=\w\w-)(?=\w{3})")
+# ("szuper-" / "képességem"), never "3H-" / "s", and never between a blank
+# and its suffix ("________-val"). [^\W_] is a letter or digit, not "_".
+_AFTER_HYPHEN = re.compile(r"(?<=[^\W_]{2}-)(?=[^\W_]{3})")
 
 
 def wrap(text: str, size: float, width: float) -> tuple[list[str], bool]:
@@ -167,14 +191,16 @@ def wrap(text: str, size: float, width: float) -> tuple[list[str], bool]:
     return lines, split_word
 
 
-def fit_text(text: str, width: float, height: float) -> tuple[float, list[str]]:
+def fit_text(text: str, width: float, height: float, layout: Layout) -> tuple[float, list[str], bool]:
     """Largest font size (in half points) at which the text fits the box
-    without cutting a word; at MIN_FONT_SIZE it's used as is."""
-    size = MAX_FONT_SIZE
+    without cutting a word. Returns (size, lines, fits); when nothing down
+    to layout.min_font fits, that size is used anyway and fits is False."""
+    size = layout.max_font
     while True:
         lines, split_word = wrap(text, size, width)
-        if (len(lines) * size * LEADING <= height and not split_word) or size <= MIN_FONT_SIZE:
-            return size, lines
+        fits = len(lines) * size * LEADING <= height and not split_word
+        if fits or size <= layout.min_font:
+            return size, lines, fits
         size -= 0.5
 
 
@@ -183,92 +209,104 @@ def _pick_label(card: dict) -> str:
     return f"Játssz ki {pick} kártyát" if pick > 1 else ""
 
 
+def text_box(card: dict, layout: Layout, frame: bool) -> tuple[float, float, float]:
+    """(inset, width, height) of the area the card's text may fill. The
+    bottom line is kept free for the pick label when there is one."""
+    inset = layout.padding + (layout.frame_w if frame else 0)
+    bottom = inset + (layout.pick_font * 2 if _pick_label(card) else 0)
+    return inset, layout.card_w - 2 * inset, layout.card_h - inset - bottom
+
+
+def layout_card(card: dict, layout: Layout, frame: bool = False) -> tuple[float, list[str], bool]:
+    """Font size, lines and whether the card's text fits on this layout."""
+    _inset, width, height = text_box(card, layout, frame)
+    return fit_text(card["text"], width, height, layout)
+
+
 # ── drawing ───────────────────────────────────────────────────────────────────
 
-def _card_origin(slot: int) -> tuple[float, float]:
-    page_w, page_h = A4
-    grid_w = COLUMNS * CARD_W + (COLUMNS - 1) * GAP
-    grid_h = ROWS * CARD_H + (ROWS - 1) * GAP
+def _card_origin(slot: int, layout: Layout) -> tuple[float, float]:
+    page_w, page_h = layout.pagesize
+    grid_w = layout.columns * layout.card_w + (layout.columns - 1) * layout.gap
+    grid_h = layout.rows * layout.card_h + (layout.rows - 1) * layout.gap
     left = (page_w - grid_w) / 2
     top = (page_h + grid_h) / 2
-    col, row = slot % COLUMNS, slot // COLUMNS
-    return left + col * (CARD_W + GAP), top - (row + 1) * CARD_H - row * GAP
+    col, row = slot % layout.columns, slot // layout.columns
+    return (left + col * (layout.card_w + layout.gap),
+            top - (row + 1) * layout.card_h - row * layout.gap)
 
 
-def _draw_card(c: canvas.Canvas, card: dict, x: float, y: float, fill, ink, frame: bool) -> None:
+def _draw_card(c: canvas.Canvas, card: dict, x: float, y: float, layout: Layout, fill, ink, frame: bool) -> None:
+    w, h, r = layout.card_w, layout.card_h, layout.radius
     c.setFillColorRGB(*fill)
     if frame:
         # Stroke centred on a path inset by half its width, so the frame's
         # outer edge is exactly the cut line.
-        inset = FRAME_W / 2
+        half = layout.frame_w / 2
         c.setStrokeColorRGB(0, 0, 0)
-        c.setLineWidth(FRAME_W)
-        c.roundRect(x + inset, y + inset, CARD_W - FRAME_W, CARD_H - FRAME_W,
-                    CORNER_RADIUS - inset, stroke=1, fill=1)
+        c.setLineWidth(layout.frame_w)
+        c.roundRect(x + half, y + half, w - layout.frame_w, h - layout.frame_w, r - half, stroke=1, fill=1)
     elif fill == (1, 1, 1):
         c.setStrokeColorRGB(*CUT_LINE_GREY)
         c.setLineWidth(0.4)
-        c.roundRect(x, y, CARD_W, CARD_H, CORNER_RADIUS, stroke=1, fill=1)
+        c.roundRect(x, y, w, h, r, stroke=1, fill=1)
     else:
-        c.roundRect(x, y, CARD_W, CARD_H, CORNER_RADIUS, stroke=0, fill=1)
+        c.roundRect(x, y, w, h, r, stroke=0, fill=1)
 
-    label = _pick_label(card)
-    pad = PADDING + (FRAME_W if frame else 0)
-    text_w = CARD_W - 2 * pad
-    text_h = CARD_H - pad - FOOTER_H - (FRAME_W if frame else 0) - (PICK_FONT_SIZE * 2 if label else 0)
-    size, lines = fit_text(card["text"], text_w, text_h)
+    inset, _width, _height = text_box(card, layout, frame)
+    size, lines, _fits = layout_card(card, layout, frame)
     c.setFillColorRGB(*ink)
     c.setFont(FONT_NAME, size)
-    baseline = y + CARD_H - pad - size
+    baseline = y + h - inset - size
     for line in lines:
-        c.drawString(x + pad, baseline, line)
+        c.drawString(x + inset, baseline, line)
         baseline -= size * LEADING
 
-    footer_y = y + (FRAME_W if frame else 0) + 4 * mm
-    c.setFont(FONT_NAME, FOOTER_FONT_SIZE)
-    c.setFillColorRGB(*FOOTER_GREY[ink])
-    c.drawString(x + pad, footer_y, FOOTER_TEXT)
+    label = _pick_label(card)
     if label:
-        # Its own line above the footer, right-aligned, so it can't run into it.
-        c.setFont(FONT_NAME, PICK_FONT_SIZE)
-        c.setFillColorRGB(*ink)
-        c.drawRightString(x + CARD_W - pad, footer_y + FOOTER_FONT_SIZE + 2 * mm, label)
+        c.setFont(FONT_NAME, layout.pick_font)
+        c.drawRightString(x + w - inset, y + inset, label)
 
 
-def render_pdf(cards: list[dict], path: Path, variant: str) -> None:
-    """Write cards to path as an A4 PDF, PER_PAGE per page."""
+def render_pdf(cards: list[dict], path: Path, variant: str, per_page: int = DEFAULT_PER_PAGE) -> None:
+    """Write cards to path as an A4 PDF, per_page cards per page."""
     _register_font()
+    layout = LAYOUTS[per_page]
     _prefix, _type, fill, ink, frame = VARIANTS[variant]
-    c = canvas.Canvas(str(path), pagesize=A4)
-    c.setTitle(f"{FOOTER_TEXT} – nyomtatható kártyák")
-    c.setAuthor(FOOTER_TEXT)
-    for page in range(math.ceil(len(cards) / PER_PAGE)):
-        for slot, card in enumerate(cards[page * PER_PAGE:(page + 1) * PER_PAGE]):
-            _draw_card(c, card, *_card_origin(slot), fill, ink, frame)
+    c = canvas.Canvas(str(path), pagesize=layout.pagesize)
+    c.setTitle(PDF_TITLE)
+    for page in range(math.ceil(len(cards) / per_page)):
+        for slot, card in enumerate(cards[page * per_page:(page + 1) * per_page]):
+            _draw_card(c, card, *_card_origin(slot, layout), layout, fill, ink, frame)
         c.showPage()
     c.save()
 
 
 # ── files ─────────────────────────────────────────────────────────────────────
 
-def file_name(variant: str, cards: list[dict]) -> str:
-    """<prefix>-<hash>.pdf, the hash covering everything printed on the cards."""
+def file_name(variant: str, cards: list[dict], per_page: int = DEFAULT_PER_PAGE) -> str:
+    """<prefix>-<per page>-<hash>.pdf, the hash covering everything printed."""
     prefix = VARIANTS[variant][0]
     payload = json.dumps(
-        [LAYOUT_VERSION, variant, [[c["text"], c.get("pick") or 1] for c in cards]],
+        [LAYOUT_VERSION, variant, per_page, [[c["text"], c.get("pick") or 1] for c in cards]],
         ensure_ascii=False,
     )
     digest = hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
-    return f"{prefix}-{digest}.pdf"
+    return f"{prefix}-{per_page}-{digest}.pdf"
 
 
-def render_print_set(edition_ids: list[int], output_dir: Path | None = None) -> dict[str, Path | None]:
-    """Render (or reuse) the three PDFs for a selection of editions.
+def render_print_set(
+    edition_ids: list[int], output_dir: Path | None = None, per_page: int = DEFAULT_PER_PAGE,
+) -> dict[str, Path | None]:
+    """Render (or reuse) the three PDFs for a selection of editions, with
+    per_page (9 or 18) cards on a page.
 
     Returns variant → file path, or None for a variant with no cards (a
     white-only pack has no black PDFs). Synchronous and CPU-bound: call it
     from a worker thread, not the event loop.
     """
+    if per_page not in LAYOUTS:
+        raise ValueError(f"per_page must be one of {sorted(LAYOUTS)}")
     output_dir = Path(output_dir or OUTPUT_DIR)
     output_dir.mkdir(parents=True, exist_ok=True)
     black, white = collect_cards(edition_ids)
@@ -279,7 +317,7 @@ def render_print_set(edition_ids: list[int], output_dir: Path | None = None) -> 
         if not cards:
             result[variant] = None
             continue
-        path = output_dir / file_name(variant, cards)
+        path = output_dir / file_name(variant, cards, per_page)
         if path.exists():
             os.utime(path)  # served again: restart its 24 hours
         else:
@@ -288,7 +326,7 @@ def render_print_set(edition_ids: list[int], output_dir: Path | None = None) -> 
             fd, tmp = tempfile.mkstemp(dir=output_dir, suffix=".pdf.tmp")
             os.close(fd)
             try:
-                render_pdf(cards, Path(tmp), variant)
+                render_pdf(cards, Path(tmp), variant, per_page)
                 os.chmod(tmp, 0o644)  # mkstemp makes it owner-only
                 os.replace(tmp, path)
             except BaseException:
