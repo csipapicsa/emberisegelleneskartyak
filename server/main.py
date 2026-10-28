@@ -23,7 +23,9 @@ from server.db import (
     get_edition_name,
     get_cards_for_edition,
     get_cards_for_editions,
+    get_playable_cards,
 )
+from server import card_search
 from server import edition_display
 from server.messages_db import get_conn as get_msg_conn, ensure_tables as ensure_msg_tables, \
     save_message, save_card_idea, get_chat_messages, post_chat_message, \
@@ -679,6 +681,75 @@ async def api_vote_card_idea(idea_id: int, request: Request):
     return result
 
 
+CARD_SEARCH_MAX_QUERY = 100
+CARD_FEEDBACK_MAX_BODY_BYTES = 4096
+
+
+def _feedback_cards() -> list[dict]:
+    """Every card a game can deal right now: complete card_master.db packs
+    plus approved community cards. Read on every call, so a new
+    card_master.db upload is searchable at once."""
+    conn = get_conn()
+    try:
+        cards = get_playable_cards(conn)
+    finally:
+        conn.close()
+    msg_conn = get_msg_conn()
+    try:
+        c_black, c_white = get_community_cards(msg_conn)
+    finally:
+        msg_conn.close()
+    return cards + c_black + c_white
+
+
+@app.get("/api/cards/search")
+async def api_card_search(q: str = ""):
+    """Cards matching the typed text, for the /visszajelzes card picker."""
+    if len(q) > CARD_SEARCH_MAX_QUERY:
+        raise HTTPException(400, "Túl hosszú keresés")
+    return [
+        {"id": c["id"], "text": c["text"], "type": c["type"].lower(), "pick": c["pick"]}
+        for c in card_search.search(_feedback_cards(), q)
+    ]
+
+
+@app.post("/api/card-feedback")
+async def api_card_feedback(request: Request):
+    """Store a like/dislike (+ optional comment) on a card picked on
+    /visszajelzes. Text and type come from the database, not the client, and
+    no visitor identifier is stored."""
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > CARD_FEEDBACK_MAX_BODY_BYTES:
+                raise HTTPException(413, "Túl nagy kérés")
+        except ValueError:
+            raise HTTPException(400, "Érvénytelen kérés")
+
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise HTTPException(400, "Érvénytelen JSON")
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Érvénytelen kérés")
+    card_id = body.get("card_id")
+    liked = body.get("liked")
+    comment = body.get("comment", "")
+    if type(card_id) is not int or not isinstance(liked, bool) or not isinstance(comment, str):
+        raise HTTPException(400, "Érvénytelen kérés")
+
+    card = next((c for c in _feedback_cards() if c["id"] == card_id), None)
+    if card is None:
+        raise HTTPException(404, "Nincs ilyen kártya")
+
+    conn = get_msg_conn()
+    try:
+        add_card_feedback(conn, card_id, card["text"], card["type"].lower(), "", liked, comment)
+    finally:
+        conn.close()
+    return {"ok": True}
+
+
 # ── WebSocket ─────────────────────────────────────────────────────────────────
 
 async def _evict_from_other_rooms(session_id: str, current_room_code: str) -> None:
@@ -949,25 +1020,6 @@ async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
         await manager.send(room_code, session_id, {"event": "hand_update", "hand": player.hand})
         await manager.send(room_code, session_id, {"event": "new_hand_dealt"})
 
-    elif event == "card_feedback":
-        player = room.players.get(session_id)
-        if not player:
-            return
-        card_id = msg.get("card_id")
-        liked = msg.get("liked")
-        card_type = msg.get("card_type")
-        if not isinstance(card_id, int) or not isinstance(liked, bool) or card_type not in ("white", "black"):
-            return
-        card_text = msg.get("card_text")
-        card_text = card_text if isinstance(card_text, str) else ""
-        comment = msg.get("comment")
-        comment = comment if isinstance(comment, str) else ""
-        conn = get_msg_conn()
-        try:
-            add_card_feedback(conn, card_id, card_text, card_type, session_id, liked, comment)
-        finally:
-            conn.close()
-
     elif event == "chat_send":
         text = msg.get("message")
         username = _chat_username(room, session_id)
@@ -1186,6 +1238,7 @@ async def serve_html(full_path: str):
         "kartyaszavazas": "kartyaszavazas.html",
         "kartyaszavazas.html": "kartyaszavazas.html",
         "kartyak": "cardlist.html",
+        "visszajelzes": "visszajelzes.html",
         "adatkezeles": "adatkezeles.html",
         "adatkezeles.html": "adatkezeles.html",
     }

@@ -75,3 +75,16 @@ def get_cards_for_editions(conn: sqlite3.Connection, edition_ids: list[int]) -> 
     black = [dict(r) for r in rows if r["type"] == "Black"]
     white = [dict(r) for r in rows if r["type"] == "White"]
     return black, white
+
+
+def get_playable_cards(conn: sqlite3.Connection) -> list[dict]:
+    """Every distinct card in a complete pack — the cards a game can deal."""
+    rows = conn.execute(
+        """
+        SELECT DISTINCT g.card_id AS id, g.text, g.type, COALESCE(g.pick, 1) AS pick
+        FROM game_cards g
+        JOIN card_editions ce ON ce.card_id = g.card_id
+        WHERE ce.edition_id IN (SELECT edition_id FROM edition_status WHERE complete = 1)
+        """
+    ).fetchall()
+    return [dict(r) for r in rows]

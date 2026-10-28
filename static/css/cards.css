@@ -170,37 +170,6 @@
 .black-card .community-badge { color: rgba(255,255,255,.6); }
 .hand-card .community-badge  { color: rgba(0,0,0,.5); }
 
-/* ── Per-card feedback icon (bottom-left) ─────────────────────────────────── */
-.feedback-icon-btn {
-  position: absolute;
-  bottom: 6px;
-  left: 8px;
-  width: 22px;
-  height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: .72rem;
-  line-height: 1;
-  cursor: pointer;
-  z-index: 3;
-}
-.hand-card .feedback-icon-btn {
-  background: rgba(0,0,0,.08);
-  color: rgba(0,0,0,.55);
-}
-.black-card .feedback-icon-btn {
-  background: rgba(255,255,255,.14);
-  color: rgba(255,255,255,.75);
-}
-.hand-card.disabled .feedback-icon-btn,
-.hand-action-card .feedback-icon-btn {
-  display: none;
-}
-
 /* Blank underline in black card text */
 .blank { display: inline-block; min-width: 80px; border-bottom: 2px solid var(--white); }
 

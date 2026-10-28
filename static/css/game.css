@@ -219,19 +219,4 @@
 }
 .podium-row:first-child { background: #3d3200; border: 1px solid gold; }
 
-/* Card feedback popup */
-.feedback-modal { width: min(380px, 92vw); }
-.feedback-card-preview {
-  background: var(--grey2);
-  border-radius: 8px;
-  padding: 10px 12px;
-  font-size: .85rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  max-height: 90px;
-  overflow-y: auto;
-}
-.feedback-reaction-btn.active.like    { background: rgba(39,174,96,.85);  color: #fff; }
-.feedback-reaction-btn.active.dislike { background: rgba(192,57,43,.85); color: #fff; }
-.feedback-comment { resize: vertical; min-height: 64px; font-size: .9rem; }
 .podium-row .rank { color: var(--text-muted); font-size: .85rem; min-width: 24px; }

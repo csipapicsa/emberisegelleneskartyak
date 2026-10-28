@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kártya visszajelzés – Emberiség Ellenes Kártyák</title>
+  <meta name="robots" content="noindex, follow">
+  <link rel="canonical" href="https://emberisegelleneskartyak.hu/visszajelzes">
+
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="manifest" href="/static/site.webmanifest">
+  <meta name="theme-color" content="#000000">
+
+  <link rel="stylesheet" href="/static/css/base.css?v=20260627-community">
+  <style>
+    .feedback-page { justify-content: flex-start; }
+    .back-link {
+      color: var(--text-muted);
+      font-size: .85rem;
+      font-weight: 700;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      width: fit-content;
+    }
+    .feedback-header { display: flex; flex-direction: column; gap: 8px; }
+    .feedback-lead { color: var(--text-muted); font-size: .95rem; line-height: 1.45; }
+    .result-list { display: flex; flex-direction: column; gap: 10px; }
+    .result-card {
+      width: 100%;
+      text-align: left;
+      font: inherit;
+      font-weight: 700;
+      font-size: .95rem;
+      cursor: pointer;
+      white-space: pre-line;
+      word-break: break-word;
+      padding: 14px 16px;
+    }
+    .result-card.card-black { border-color: var(--grey2); }
+    .result-card:active { transform: scale(.98); }
+    .type-tag {
+      display: block;
+      margin-top: 8px;
+      font-size: .62rem;
+      font-weight: 800;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      opacity: .45;
+    }
+    .search-hint { color: var(--text-muted); font-size: .9rem; text-align: center; padding: 16px 0; }
+    .selected-card { white-space: pre-line; word-break: break-word; }
+    .reaction-row { display: flex; gap: 10px; }
+    .reaction-row .btn { flex: 1; }
+    .reaction-btn.active.like    { background: rgba(39,174,96,.85);  color: #fff; }
+    .reaction-btn.active.dislike { background: rgba(192,57,43,.85); color: #fff; }
+    .feedback-comment { resize: vertical; min-height: 80px; font-size: .95rem; }
+    .form-actions { display: flex; gap: 10px; }
+    .form-actions .btn { flex: 1; }
+  </style>
+  <script src="/static/js/umami-normalize.js?v=20261016-umami-norm"></script>
+  <script defer src="https://stats.emberisegelleneskartyak.hu/script.js" data-website-id="3a36dfac-359e-4e1c-afda-27530984c903" data-before-send="umamiBeforeSend"></script>
+</head>
+<body>
+  <main class="page feedback-page">
+    <a class="back-link" href="/">Vissza a főoldalra</a>
+
+    <section class="feedback-header">
+      <div class="logo">Kártya visszajelzés</div>
+      <p class="feedback-lead">Volt egy kártya, ami nagyon ütött, vagy épp nagyon nem? Kezdd el begépelni a szövegét, válaszd ki, és mondd el, mit gondolsz róla.</p>
+      <a class="back-link" href="/adatkezeles">Adatkezelési tájékoztató</a>
+    </section>
+
+    <section id="searchStep" style="display:flex;flex-direction:column;gap:14px">
+      <div class="field">
+        <label class="label" for="cardSearch">Kártya szövege</label>
+        <input class="input" id="cardSearch" type="search" maxlength="100" placeholder="pl. Öregecske Japán" autocomplete="off" enterkeyhint="search">
+      </div>
+      <div id="resultList" class="result-list" aria-live="polite">
+        <p class="search-hint">Írj be legalább két betűt.</p>
+      </div>
+    </section>
+
+    <form id="feedbackStep" class="hidden" style="display:flex;flex-direction:column;gap:14px" novalidate>
+      <div id="selectedCard" class="selected-card"></div>
+      <div class="reaction-row">
+        <button class="btn btn-secondary reaction-btn like" id="likeBtn" type="button">👍 Tetszik</button>
+        <button class="btn btn-secondary reaction-btn dislike" id="dislikeBtn" type="button">👎 Nem tetszik</button>
+      </div>
+      <textarea class="input feedback-comment" id="comment" maxlength="500" rows="3" placeholder="Megjegyzés (opcionális) – pl. rossz a fordítás, elírás, nem érthető"></textarea>
+      <div id="feedbackError" class="error-msg"></div>
+      <div class="form-actions">
+        <button class="btn btn-secondary" type="button" id="otherCardBtn">Másik kártya</button>
+        <button class="btn btn-primary" type="submit" id="submitBtn" disabled>Beküldés</button>
+      </div>
+    </form>
+  </main>
+
+  <div id="toast"></div>
+
+  <script>
+    const searchInput = document.getElementById('cardSearch');
+    const resultList  = document.getElementById('resultList');
+    const searchStep  = document.getElementById('searchStep');
+    const form        = document.getElementById('feedbackStep');
+    const submitBtn   = document.getElementById('submitBtn');
+    const errorEl     = document.getElementById('feedbackError');
+
+    let results = [];
+    let selected = null;
+    let reaction = null;   // true = Tetszik, false = Nem tetszik
+    let searchTimer = null;
+    let searchSeq = 0;     // drop answers to older keystrokes that arrive late
+
+    function hint(text) {
+      resultList.innerHTML = '';
+      const p = document.createElement('p');
+      p.className = 'search-hint';
+      p.textContent = text;
+      resultList.append(p);
+    }
+
+    function cardElement(card, tag) {
+      const el = document.createElement(tag);
+      el.className = card.type === 'black' ? 'card-black' : 'card-white';
+      el.textContent = card.text;
+      const type = document.createElement('span');
+      type.className = 'type-tag';
+      type.textContent = card.type === 'black' ? 'Fekete kártya' : 'Fehér kártya';
+      el.append(type);
+      return el;
+    }
+
+    function renderResults() {
+      if (!results.length) {
+        hint('Nincs ilyen kártya a játékban. Próbáld más szavakkal.');
+        return;
+      }
+      resultList.innerHTML = '';
+      results.forEach((card, i) => {
+        const btn = cardElement(card, 'button');
+        btn.type = 'button';
+        btn.classList.add('result-card');
+        btn.dataset.idx = i;
+        resultList.append(btn);
+      });
+    }
+
+    async function runSearch(query) {
+      const seq = ++searchSeq;
+      try {
+        const res = await fetch(`/api/cards/search?q=${encodeURIComponent(query)}`);
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        if (seq !== searchSeq) return;
+        results = data;
+        renderResults();
+      } catch {
+        if (seq === searchSeq) hint('Nem sikerült keresni. Próbáld újra.');
+      }
+    }
+
+    searchInput.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      const query = searchInput.value.trim();
+      if (query.replace(/\s/g, '').length < 2) {
+        searchSeq++;
+        hint('Írj be legalább két betűt.');
+        return;
+      }
+      searchTimer = setTimeout(() => runSearch(query), 200);
+    });
+
+    resultList.addEventListener('click', e => {
+      const btn = e.target.closest('.result-card');
+      if (!btn) return;
+      selectCard(results[parseInt(btn.dataset.idx, 10)]);
+    });
+
+    function selectCard(card) {
+      selected = card;
+      reaction = null;
+      errorEl.textContent = '';
+      document.getElementById('comment').value = '';
+      const holder = document.getElementById('selectedCard');
+      holder.innerHTML = '';
+      holder.append(cardElement(card, 'div'));
+      updateReaction();
+      searchStep.classList.add('hidden');
+      form.classList.remove('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function backToSearch() {
+      selected = null;
+      form.classList.add('hidden');
+      searchStep.classList.remove('hidden');
+      searchInput.focus();
+    }
+
+    function updateReaction() {
+      document.getElementById('likeBtn').classList.toggle('active', reaction === true);
+      document.getElementById('dislikeBtn').classList.toggle('active', reaction === false);
+      submitBtn.disabled = reaction === null;
+    }
+
+    document.getElementById('likeBtn').addEventListener('click', () => { reaction = true; updateReaction(); });
+    document.getElementById('dislikeBtn').addEventListener('click', () => { reaction = false; updateReaction(); });
+    document.getElementById('otherCardBtn').addEventListener('click', backToSearch);
+
+    form.addEventListener('submit', async e => {
+      e.preventDefault();
+      if (!selected || reaction === null) return;
+      submitBtn.disabled = true;
+      errorEl.textContent = '';
+      try {
+        const res = await fetch('/api/card-feedback', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            card_id: selected.id,
+            liked: reaction,
+            comment: document.getElementById('comment').value.trim(),
+          }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(data?.detail || 'Nem sikerült beküldeni.');
+        showToast('Köszönjük a visszajelzést!');
+        backToSearch();
+      } catch (err) {
+        errorEl.textContent = err.message || 'Nem sikerült beküldeni.';
+        submitBtn.disabled = false;
+      }
+    });
+
+    function showToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 2800);
+    }
+  </script>
+</body>
+</html>

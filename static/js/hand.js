@@ -4,12 +4,11 @@
 const HAND_TILT_DEG = 5;
 
 class Hand {
-  constructor(containerEl, onSelect, holdDurationMs = 2500, onAction = null, onFeedback = null) {
+  constructor(containerEl, onSelect, holdDurationMs = 2500, onAction = null) {
     this.container    = containerEl;
     this.track        = containerEl.querySelector('.hand-track');
     this.onSelect     = onSelect;
     this.onAction     = onAction;
-    this.onFeedback   = onFeedback;
     this.holdDuration = holdDurationMs;
     this.cards        = [];
     this.action       = { visible: false, label: 'Kérek új kártyákat' };
@@ -67,7 +66,6 @@ class Hand {
         -->
         <span>${esc(c.text)}</span>
         ${c.community ? '<span class="community-badge">Ti küldtétek</span>' : ''}
-        <button class="feedback-icon-btn" type="button" data-feedback-id="${c.id}" title="Visszajelzés erre a kártyára">💡</button>
       </div>
     `).join('');
     const action = this.action.visible ? `
@@ -190,7 +188,7 @@ class Hand {
 
     // Non-passive touchmove so we can preventDefault and block page scroll
     el.addEventListener('touchstart', e => {
-      if (e.target.closest('.swap-card-btn, .feedback-icon-btn')) return;
+      if (e.target.closest('.swap-card-btn')) return;
       this._onStart(e.touches[0].clientX);
     }, { passive: true });
     el.addEventListener('touchmove',  e => {
@@ -201,19 +199,11 @@ class Hand {
     el.addEventListener('touchcancel', () => { this._dragging = false; });
 
     el.addEventListener('mousedown', e => {
-      if (e.target.closest('.swap-card-btn, .feedback-icon-btn')) return;
+      if (e.target.closest('.swap-card-btn')) return;
       this._onStart(e.clientX);
     });
     window.addEventListener('mousemove', e => { if (this._dragging) this._onMove(e.clientX, e.clientY); });
     window.addEventListener('mouseup',   e => { if (this._dragging) this._onEnd(e.clientX, e.clientY); });
-
-    this.track.addEventListener('click', e => {
-      const btn = e.target.closest('.feedback-icon-btn');
-      if (!btn) return;
-      e.preventDefault();
-      e.stopPropagation();
-      this.onFeedback?.(parseInt(btn.dataset.feedbackId, 10));
-    });
 
     // Egyenkénti kártyacsere későbbi használatra:
     // this.track.addEventListener('click', e => {
