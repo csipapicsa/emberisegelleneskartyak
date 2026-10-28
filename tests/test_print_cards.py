@@ -117,18 +117,57 @@ def test_wrap_keeps_a_blank_together_with_its_suffix():
 
 
 def test_wrap_flags_a_word_too_wide_for_any_line():
-    lines, split_word = print_cards.wrap("A" * 80, 14, WIDTH)
+    # Digits have no hyphenation point, so it can only be cut.
+    token = "1234567890" * 8
+    lines, split_word = print_cards.wrap(token, 14, WIDTH)
     assert split_word
-    assert "".join(lines) == "A" * 80
+    assert "".join(lines) == token
     assert all(_width(line, 14) <= WIDTH for line in lines)
 
 
-def test_fit_text_shrinks_until_no_word_is_cut():
-    # One long word that doesn't fit a line at 14pt.
-    word = "Jövedelemegyenlőtlenségeitekért"
-    size, lines, fits = print_cards.fit_text(word, WIDTH, 100 * print_cards.mm, NINE)
-    assert size < NINE.max_font
-    assert fits and lines == [word]
+def test_long_word_is_hyphenated_at_full_size():
+    for layout in (NINE, EIGHTEEN):
+        width = layout.card_w - 2 * layout.padding
+        for text in ("Gyűlöletbűncselekményt színlelni", "Jövedelemegyenlőtlenség",
+                     "Jövedelemegyenlőtlenségeitekért"):
+            size, lines, fits = print_cards.fit_text(text, width, 50 * print_cards.mm, layout)
+            assert fits and size == layout.max_font, (layout.per_page, text, size)
+            assert lines[0].endswith("-")
+            # Removing the inserted hyphens gives the text back.
+            assert "".join(l[:-1] if l.endswith("-") else l + " " for l in lines).strip() == text
+
+
+def test_hyphenation_points_are_hungarian_syllable_breaks():
+    import pyphen
+    valid = set(pyphen.Pyphen(lang="hu_HU", left=3, right=3).positions("gyűlöletbűncselekményt"))
+    lines, split_word = print_cards.wrap("Gyűlöletbűncselekményt", 14, WIDTH)
+    assert not split_word and len(lines) == 2
+    assert len(lines[0]) - 1 in valid          # break position, without the "-"
+
+
+def test_hyphenation_handles_the_hosszu_special_case():
+    # Hungarian: "hosszú" is hyphenated "hosz-szú", not "hossz-ú".
+    width = pdfmetrics.stringWidth("hosz-", print_cards.FONT_NAME, 14) + 1
+    lines, _ = print_cards.wrap("hosszú", 14, width)
+    assert lines == ["hosz-", "szú"]
+
+
+def test_word_that_fits_a_line_moves_down_instead_of_being_hyphenated():
+    lines, _ = print_cards.wrap("A következő elővarázsolom", 14, WIDTH)
+    assert not any(line.endswith("-") for line in lines)
+
+
+def test_blanks_numbers_and_file_names_are_not_hyphenated():
+    for token in ("„________-kihívásként”", "anya_apa_szexvideo.avi", "________.com/________."):
+        assert print_cards._hyphenate(token, lambda first: True) is None
+    assert print_cards._hyphenate("„Gyűlöletbűncselekményt”,", lambda first: True)[1].endswith("”,")
+
+
+def test_line_may_break_after_an_en_dash():
+    lines, split_word = print_cards.wrap("A Budapest–Belgrád vasútvonal", 14,
+                                         EIGHTEEN.card_w - 2 * EIGHTEEN.padding)
+    assert not split_word
+    assert any(line.endswith("Budapest–") for line in lines)
 
 
 def test_fit_text_reports_text_that_cannot_fit():

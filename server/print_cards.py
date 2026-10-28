@@ -32,6 +32,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+import pyphen
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
@@ -47,7 +48,7 @@ MAX_AGE_SECONDS = 24 * 60 * 60
 
 # Bump when the look changes, so files rendered with the old layout get new
 # names instead of being reused.
-LAYOUT_VERSION = 2
+LAYOUT_VERSION = 3
 
 FONT_NAME = "CardFont"
 FONT_PATH = Path(__file__).resolve().parent / "fonts" / "DejaVuSans-Bold.ttf"
@@ -145,19 +146,43 @@ def _unique(cards: list[dict]) -> list[dict]:
 
 # ── text layout ───────────────────────────────────────────────────────────────
 
-# A line may break after a hyphen with 2+ letters before it and 3+ after
-# ("szuper-" / "képességem"), never "3H-" / "s", and never between a blank
-# and its suffix ("________-val"). [^\W_] is a letter or digit, not "_".
-_AFTER_HYPHEN = re.compile(r"(?<=[^\W_]{2}-)(?=[^\W_]{3})")
+# A line may break after a hyphen or en dash with 2+ letters before it and
+# 3+ after ("szuper-" / "képességem", "Budapest–" / "Belgrád"), never "3H-" /
+# "s", and never between a blank and its suffix ("________-val"). [^\W_] is
+# a letter or digit, not "_".
+_AFTER_HYPHEN = re.compile(r"(?<=[^\W_]{2}[-–])(?=[^\W_]{3})")
+
+# Hungarian hyphenation (LibreOffice's hu_HU patterns): "Gyűlöletbűn-" /
+# "cselekményt", and the special cases too ("hosszú" → "hosz-" / "szú").
+# At least 3 letters on each side.
+_HYPHENATOR = pyphen.Pyphen(lang="hu_HU", left=3, right=3)
+# Only plain words are hyphenated, with any punctuation around them kept:
+# not blanks ("________-val"), numbers, "3H-s" or file names.
+_PLAIN_WORD = re.compile(r"^(\W*)([^\W\d_]+)(\W*)$")
+
+
+def _hyphenate(piece: str, fits_first) -> tuple[str, str] | None:
+    """Split piece at the latest Hungarian hyphenation point whose first
+    part (with its "-") passes fits_first; None when there is no such point."""
+    match = _PLAIN_WORD.match(piece)
+    if not match:
+        return None
+    lead, word, trail = match.groups()
+    for first, rest in _HYPHENATOR.iterate(word):   # longest first part first
+        if fits_first(f"{lead}{first}-"):
+            return f"{lead}{first}-", f"{rest}{trail}"
+    return None
 
 
 def wrap(text: str, size: float, width: float) -> tuple[list[str], bool]:
     """Break text into lines no wider than width at this font size.
 
     Keeps the card's own line breaks and may break after a hyphen
-    ("szuper-" / "képességem"). Returns (lines, split_word): split_word is
-    True when a word had to be cut mid-word because even that piece was too
-    wide — fit_text() then tries a smaller size first.
+    ("szuper-" / "képességem"). A word too wide for a line of its own is
+    hyphenated by Hungarian rules, filling the current line first; shorter
+    words just move to the next line. Returns (lines, split_word):
+    split_word is True when a word had to be cut where no hyphenation point
+    fits — fit_text() then tries a smaller size first.
     """
     _register_font()
 
@@ -175,16 +200,28 @@ def wrap(text: str, size: float, width: float) -> tuple[list[str], bool]:
                 if fits(candidate):
                     line = candidate
                     continue
-                if line:
-                    lines.append(line)
-                line = piece
-                while not fits(line):
-                    split_word = True
-                    cut = len(line) - 1
-                    while cut > 1 and not fits(line[:cut]):
-                        cut -= 1
-                    lines.append(line[:cut])
-                    line = line[cut:]
+                if fits(piece):
+                    if line:
+                        lines.append(line)
+                    line = piece
+                    continue
+                head = f"{line}{joiner}" if line else ""
+                while not fits(head + piece):
+                    split = _hyphenate(piece, lambda first: fits(head + first))
+                    if split is None:
+                        if head:  # no point fits after the line's words: start a fresh line
+                            lines.append(line)
+                            head = ""
+                            continue
+                        split_word = True
+                        cut = len(piece) - 1
+                        while cut > 1 and not fits(piece[:cut]):
+                            cut -= 1
+                        split = (piece[:cut], piece[cut:])
+                    first, piece = split
+                    lines.append(head + first)
+                    head = ""
+                line = head + piece
         lines.append(line)
     while lines and not lines[-1]:
         lines.pop()
