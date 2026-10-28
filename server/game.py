@@ -7,6 +7,7 @@ import time
 from collections import Counter
 from typing import TYPE_CHECKING
 
+from server import card_seen
 from server.deck import build_deck, deal_hand, draw_black, draw_card, reshuffle_into_deck
 from server.room import Room
 from server.analytics import log_event
@@ -101,7 +102,7 @@ async def start_game(room: Room, black_cards: list[dict], white_cards: list[dict
     room.czar_index = 0
     room.phase = "lobby"
 
-    black_deck, white_deck = build_deck(black_cards, white_cards)
+    black_deck, white_deck = build_deck(black_cards, white_cards, card_seen.current_counts())
     room.black_deck = black_deck
     room.white_deck = white_deck
 

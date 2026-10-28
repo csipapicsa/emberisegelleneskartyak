@@ -4,12 +4,39 @@ import random
 from server import card_seen
 
 
-def build_deck(black_cards: list[dict], white_cards: list[dict]) -> tuple[list[dict], list[dict]]:
-    black = list(black_cards)
-    white = list(white_cards)
-    random.shuffle(black)
-    random.shuffle(white)
-    return black, white
+def build_deck(
+    black_cards: list[dict], white_cards: list[dict], seen: dict[int, int] | None = None,
+) -> tuple[list[dict], list[dict]]:
+    """Shuffle both decks, putting cards players have seen less often near
+    the top. seen maps card id → global seen count (card_seen.current_counts());
+    without it the shuffle is uniform."""
+    seen = seen or {}
+    return least_seen_shuffle(black_cards, seen), least_seen_shuffle(white_cards, seen)
+
+
+def least_seen_shuffle(cards: list[dict], seen: dict[int, int]) -> list[dict]:
+    """Random order where each card's odds of coming early are weighted by
+    1 / (1 + seen / average)², the average taken over this deck.
+
+    It's still a shuffle, not a sort: any card can come first, but an unseen
+    card is 4× as likely to be picked as an average one and 16× as likely as
+    one seen 3× the average. Measuring against the deck's own average keeps
+    the pull the same strength whether counts are in the tens or thousands,
+    so a fresh pack gets dealt more but doesn't take over every hand.
+
+    Weighted sampling without replacement (Efraimidis–Spirakis): each card
+    draws an exponential key with rate = its weight, and the smallest keys go
+    first.
+    """
+    counts = [seen.get(card.get("id"), 0) for card in cards]
+    average = sum(counts) / len(counts) if counts else 0
+    if not average:
+        shuffled = list(cards)
+        random.shuffle(shuffled)
+        return shuffled
+    keys = [random.expovariate(1 / (1 + n / average) ** 2) for n in counts]
+    order = sorted(range(len(cards)), key=keys.__getitem__)
+    return [cards[i] for i in order]
 
 
 def deal_hand(white_deck: list[dict], size: int) -> list[dict]:

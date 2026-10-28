@@ -3,9 +3,9 @@
 
 Every card that leaves a deck (dealt into a hand, drawn as a refill or swap,
 or turned up as the round's black card) gets +1. It doesn't matter who saw it
-or whether it was played. The counts are meant to feed a later "deal the
-least-seen cards first" rule, so a newly added pack doesn't drown in cards
-players have already seen many times.
+or whether it was played. deck.build_deck() reads the counts back through
+current_counts() and puts the least-seen cards near the top, so a newly added
+pack doesn't drown in cards players have already seen many times.
 
 Recording must never slow the game down, so record() only bumps an in-memory
 Counter. flush() writes the batch in one transaction; the app calls it from a
@@ -101,3 +101,22 @@ def flush() -> None:
 def get_counts(conn: sqlite3.Connection) -> dict[int, int]:
     ensure_tables(conn)
     return dict(conn.execute("SELECT card_id, seen FROM card_seen").fetchall())
+
+
+def current_counts() -> dict[int, int]:
+    """Counts as of now: what's on disk plus the batch not yet flushed, so
+    games started within the same minute see each other's deals.
+
+    Never raises — a deck can always be built from uniform odds, so a broken
+    statistics file must not stop a game from starting."""
+    counts: Counter[int] = Counter()
+    try:
+        conn = get_conn()
+        try:
+            counts.update(get_counts(conn))
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("card_seen read failed; dealing without seen counts")
+    counts.update(_pending)
+    return dict(counts)

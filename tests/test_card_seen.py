@@ -99,3 +99,38 @@ def test_app_shutdown_flushes_pending_counts(monkeypatch, tmp_path):
     with TestClient(app):
         card_seen.record([{"id": 42}])
     assert _counts() == {42: 1}
+
+
+def test_current_counts_adds_unflushed_batch_to_disk_counts():
+    card_seen.record([{"id": 1}, {"id": 2}])
+    card_seen.flush()
+    card_seen.record([{"id": 2}, {"id": 3}])
+    assert card_seen.current_counts() == {1: 1, 2: 2, 3: 1}
+    # Reading must not consume the batch that still has to be written.
+    assert card_seen.take_pending() == {2: 1, 3: 1}
+
+
+def test_current_counts_falls_back_to_batch_when_db_unreadable(monkeypatch, tmp_path):
+    card_seen.record([{"id": 4}])
+    monkeypatch.setattr(card_seen, "DB_PATH", str(tmp_path / "missing_dir" / "x.db"))
+    assert card_seen.current_counts() == {4: 1}
+
+
+@pytest.mark.asyncio
+async def test_start_game_deals_from_current_seen_counts(monkeypatch):
+    from server import game
+    calls = []
+    real_build_deck = game.build_deck
+
+    def spy(black, white, seen=None):
+        calls.append(seen)
+        return real_build_deck(black, white, seen)
+
+    monkeypatch.setattr(game.card_seen, "current_counts", lambda: {0: 99})
+    monkeypatch.setattr(game, "build_deck", spy)
+    room, _ = make_room("SEEN2", n_players=1)
+    try:
+        await start_game(room, make_black_cards(5), make_white_cards(40), FakeManager())
+    finally:
+        delete_room("SEEN2")
+    assert calls == [{0: 99}]

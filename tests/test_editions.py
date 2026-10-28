@@ -227,3 +227,20 @@ def test_uploaded_card_master_has_what_the_server_needs():
         assert all(c['text'] for c in black + white)
     finally:
         conn.close()
+
+
+def test_edition_display_lists_first_expansion_before_second():
+    from server import edition_display as ed
+    assert ed.label_for("Első (1st)") == "Első kiadás"
+    assert ed.sort_key("Első (1st)") < ed.sort_key("Második (2nd)")
+    assert ed.sort_key("Ti küldtétek") < ed.sort_key("Első (1st)")
+
+
+def test_edition_display_labels_unlisted_numbered_expansion():
+    # A pack that shows up in a new card_master.db upload must look right
+    # without a code change.
+    from server import edition_display as ed
+    assert "Hetedik (7th)" not in dict(ed.ORDER)
+    assert ed.label_for("Hetedik (7th)") == "Hetedik kiadás"
+    assert ed.label_for("Piros") == "Piros"
+    assert ed.label_for("Valami (extra)") == "Valami (extra)"
