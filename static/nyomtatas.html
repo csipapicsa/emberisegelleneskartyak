@@ -54,7 +54,7 @@
 
     <section class="print-header">
       <div class="logo">Nyomtatható kártyák</div>
-      <p class="print-lead">Válaszd ki a csomagokat, és kapsz hozzájuk nyomtatható PDF-eket. Nyomtasd ki A4-es lapra, és vágd szét a vonalak mentén – a kártyák összeérnek, így egy vágással két kártya válik el. Ha egy kártya több csomagban is benne van, csak egyszer kerül bele.</p>
+      <p class="print-lead">Válassz csomagokat, és töltsd le nyomtatható PDF-ben.</p>
     </section>
 
     <section class="print-section">
@@ -65,7 +65,6 @@
       <div class="select-group" id="editionList">
         <p class="print-hint">Betöltés…</p>
       </div>
-      <p class="print-hint">A számok csomagonként értendők; ha egy kártya több kijelölt csomagban is szerepel, csak egyszer nyomtatjuk ki.</p>
     </section>
 
     <section class="print-section">
@@ -95,7 +94,7 @@
   <script>
     const PER_PAGE_HINT = {
       9: 'Szabványos kártyaméret (63 × 88 mm), álló A4-es oldal.',
-      18: 'Kisebb kártyák (44 × 62 mm), fekvő A4-es oldal – feleannyi papír.',
+      18: 'Kisebb kártyák (44 × 62 mm), fekvő A4-es oldal.',
     };
     const editionList = document.getElementById('editionList');
     const generateBtn = document.getElementById('generateBtn');
