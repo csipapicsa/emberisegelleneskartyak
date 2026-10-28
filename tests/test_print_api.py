@@ -128,3 +128,15 @@ def test_print_page_is_served_and_linked_from_the_main_page():
     assert "generateBtn" in res.text
     index = (pathlib.Path(main_mod.BASE_DIR) / "static" / "index.html").read_text(encoding="utf-8")
     assert 'href="/nyomtatas"' in index
+
+
+def test_print_page_is_set_up_for_search_engines():
+    static = pathlib.Path(main_mod.BASE_DIR) / "static"
+    html = (static / "nyomtatas.html").read_text(encoding="utf-8")
+    assert '<meta name="robots" content="index, follow">' in html
+    assert '<link rel="canonical" href="https://emberisegelleneskartyak.hu/nyomtatas">' in html
+    assert '<meta name="description" content="' in html
+    assert "<h1" in html and "PDF" in html.split("<title>")[1].split("</title>")[0]
+    assert "<loc>https://emberisegelleneskartyak.hu/nyomtatas</loc>" in (static / "sitemap.xml").read_text(encoding="utf-8")
+    # The generated PDFs are temporary: crawlers stay out of /api/.
+    assert "Disallow: /api/" in (static / "robots.txt").read_text(encoding="utf-8")
