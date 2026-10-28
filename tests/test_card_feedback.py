@@ -301,3 +301,11 @@ def test_game_page_has_no_feedback_lightbulb():
     for name in ("game.html", "js/game.js", "js/hand.js", "css/cards.css"):
         text = (static / name).read_text(encoding="utf-8")
         assert "💡" not in text and "feedback-icon-btn" not in text, name
+
+
+def test_main_page_links_to_feedback_page_under_idea_link():
+    import pathlib
+    html = (pathlib.Path(main_mod.BASE_DIR) / "static" / "index.html").read_text(encoding="utf-8")
+    idea = html.index('href="/kartyaotlet.html"')
+    feedback = html.index('href="/visszajelzes"')
+    assert idea < feedback
