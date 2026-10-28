@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nyomtatható kártyák – Emberiség Ellenes Kártyák</title>
+  <meta name="robots" content="noindex, follow">
+  <link rel="canonical" href="https://emberisegelleneskartyak.hu/nyomtatas">
+
+  <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+  <link rel="manifest" href="/static/site.webmanifest">
+  <meta name="theme-color" content="#000000">
+
+  <link rel="stylesheet" href="/static/css/base.css?v=20260627-community">
+  <style>
+    .print-page { justify-content: flex-start; }
+    .back-link {
+      color: var(--text-muted);
+      font-size: .85rem;
+      font-weight: 700;
+      text-decoration: underline;
+      text-underline-offset: 3px;
+      width: fit-content;
+    }
+    .print-header { display: flex; flex-direction: column; gap: 8px; }
+    .print-lead, .print-hint { color: var(--text-muted); font-size: .95rem; line-height: 1.45; }
+    .print-hint { font-size: .8rem; }
+    .print-section { display: flex; flex-direction: column; gap: 10px; }
+    .print-section h2 { font-size: 1rem; }
+    .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+    .select-all {
+      background: none; border: none; padding: 0;
+      color: var(--text-muted); font: inherit; font-size: .8rem; font-weight: 700;
+      text-decoration: underline; text-underline-offset: 3px; cursor: pointer;
+    }
+    .result-list { display: flex; flex-direction: column; gap: 10px; }
+    .result-link {
+      display: flex; flex-direction: column; gap: 2px;
+      padding: 14px 16px; border-radius: 8px;
+      background: var(--grey); color: var(--white); text-decoration: none;
+      border: 2px solid var(--grey2);
+    }
+    .result-link:active { transform: scale(.98); }
+    .result-title { font-weight: 800; }
+    .result-sub { color: var(--text-muted); font-size: .8rem; }
+    .tips { color: var(--text-muted); font-size: .85rem; line-height: 1.5; padding-left: 18px; }
+  </style>
+  <script src="/static/js/umami-normalize.js?v=20261016-umami-norm"></script>
+  <script defer src="https://stats.emberisegelleneskartyak.hu/script.js" data-website-id="3a36dfac-359e-4e1c-afda-27530984c903" data-before-send="umamiBeforeSend"></script>
+</head>
+<body>
+  <main class="page print-page">
+    <a class="back-link" href="/">Vissza a főoldalra</a>
+
+    <section class="print-header">
+      <div class="logo">Nyomtatható kártyák</div>
+      <p class="print-lead">Válaszd ki a csomagokat, és kapsz hozzájuk nyomtatható PDF-eket. Nyomtasd ki A4-es lapra, és vágd szét a vonalak mentén – a kártyák összeérnek, így egy vágással két kártya válik el. Ha egy kártya több csomagban is benne van, csak egyszer kerül bele.</p>
+    </section>
+
+    <section class="print-section">
+      <div class="section-head">
+        <h2>Kártyacsomagok</h2>
+        <button class="select-all" id="selectAllBtn" type="button">Mind kijelölése</button>
+      </div>
+      <div class="select-group" id="editionList">
+        <p class="print-hint">Betöltés…</p>
+      </div>
+      <p class="print-hint">A számok csomagonként értendők; ha egy kártya több kijelölt csomagban is szerepel, csak egyszer nyomtatjuk ki.</p>
+    </section>
+
+    <section class="print-section">
+      <h2>Kártyák egy A4-es oldalon</h2>
+      <div class="seg-control" id="perPageSeg">
+        <button type="button" data-val="9" class="active">9 kártya</button>
+        <button type="button" data-val="18">18 kártya</button>
+      </div>
+      <p class="print-hint" id="perPageHint"></p>
+    </section>
+
+    <button class="btn btn-primary" id="generateBtn" type="button" disabled>PDF-ek elkészítése</button>
+    <div id="printError" class="error-msg"></div>
+
+    <section class="print-section hidden" id="resultSection" aria-live="polite">
+      <h2>Letöltés</h2>
+      <div class="result-list" id="resultList"></div>
+      <p class="print-hint">A linkek 24 óráig érvényesek.</p>
+      <ul class="tips">
+        <li>Nyomtatásnál válaszd a <strong>tényleges méret</strong> (100%) beállítást, ne az „oldalhoz igazítást”, különben a kártyák mérete eltér.</li>
+        <li>Vastagabb papírra (160–250 g/m²) nyomtatva sokkal jobb kártyákat kapsz.</li>
+        <li>A sarkokat vágás után sarokkerekítővel lekerekítheted.</li>
+      </ul>
+    </section>
+  </main>
+
+  <script>
+    const PER_PAGE_HINT = {
+      9: 'Szabványos kártyaméret (63 × 88 mm), álló A4-es oldal.',
+      18: 'Kisebb kártyák (44 × 62 mm), fekvő A4-es oldal – feleannyi papír.',
+    };
+    const editionList = document.getElementById('editionList');
+    const generateBtn = document.getElementById('generateBtn');
+    const errorEl = document.getElementById('printError');
+    const resultSection = document.getElementById('resultSection');
+    let perPage = 9;
+    let busy = false;
+
+    function selectedIds() {
+      return [...editionList.querySelectorAll('input:checked')]
+        .map(input => parseInt(input.closest('.select-option').dataset.id, 10));
+    }
+
+    function update() {
+      editionList.querySelectorAll('.select-option').forEach(el => {
+        el.classList.toggle('selected', el.querySelector('input').checked);
+      });
+      generateBtn.disabled = busy || selectedIds().length === 0;
+      resultSection.classList.add('hidden');   // links belong to the old choice
+      errorEl.textContent = '';
+    }
+
+    function editionRow(edition) {
+      const row = document.createElement('div');
+      row.className = 'select-option';
+      row.dataset.id = edition.id;
+      const label = document.createElement('label');
+      label.className = 'edition-choice';
+      const input = document.createElement('input');
+      input.type = 'checkbox';
+      const text = document.createElement('span');
+      text.textContent = edition.name + ' ';
+      const hint = document.createElement('span');
+      hint.className = 'edition-hint';
+      hint.textContent = `(${edition.black_count} fekete, ${edition.white_count} fehér)`;
+      text.append(hint);
+      label.append(input, text);
+      const link = document.createElement('a');
+      link.className = 'edition-cards-link';
+      link.href = `/kartyak?edition=${encodeURIComponent(edition.id)}`;
+      link.textContent = 'Kártyák';
+      row.append(label, link);
+      return row;
+    }
+
+    async function loadEditions() {
+      try {
+        const res = await fetch('/api/editions');
+        if (!res.ok) throw new Error();
+        const editions = await res.json();
+        editionList.innerHTML = '';
+        editions.forEach(edition => editionList.append(editionRow(edition)));
+      } catch {
+        editionList.innerHTML = '<p class="print-hint">Nem sikerült betölteni a csomagokat. Frissítsd az oldalt.</p>';
+      }
+    }
+
+    editionList.addEventListener('change', update);
+
+    document.getElementById('selectAllBtn').addEventListener('click', () => {
+      const inputs = [...editionList.querySelectorAll('input')];
+      const all = inputs.every(input => input.checked);
+      inputs.forEach(input => { input.checked = !all; });
+      update();
+    });
+
+    document.querySelectorAll('#perPageSeg button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        perPage = parseInt(btn.dataset.val, 10);
+        document.querySelectorAll('#perPageSeg button').forEach(b => b.classList.toggle('active', b === btn));
+        document.getElementById('perPageHint').textContent = PER_PAGE_HINT[perPage];
+        update();
+      });
+    });
+    document.getElementById('perPageHint').textContent = PER_PAGE_HINT[perPage];
+
+    function renderResults(files) {
+      const list = document.getElementById('resultList');
+      list.innerHTML = '';
+      files.forEach(file => {
+        const link = document.createElement('a');
+        link.className = 'result-link';
+        link.href = file.url;
+        link.setAttribute('download', '');
+        const title = document.createElement('span');
+        title.className = 'result-title';
+        title.textContent = `⬇ ${file.label}`;
+        const sub = document.createElement('span');
+        sub.className = 'result-sub';
+        sub.textContent = `${file.cards} kártya, ${file.pages} oldal – PDF`;
+        link.append(title, sub);
+        list.append(link);
+      });
+      resultSection.classList.remove('hidden');
+      resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    generateBtn.addEventListener('click', async () => {
+      const ids = selectedIds();
+      if (!ids.length || busy) return;
+      busy = true;
+      generateBtn.disabled = true;
+      generateBtn.textContent = 'Készül…';
+      errorEl.textContent = '';
+      try {
+        const res = await fetch('/api/print', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ edition_ids: ids, per_page: perPage }),
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) throw new Error(data?.detail || 'Nem sikerült elkészíteni a PDF-eket.');
+        renderResults(data.files);
+      } catch (err) {
+        errorEl.textContent = err.message || 'Nem sikerült elkészíteni a PDF-eket.';
+      } finally {
+        busy = false;
+        generateBtn.textContent = 'PDF-ek elkészítése';
+        generateBtn.disabled = selectedIds().length === 0;
+      }
+    });
+
+    loadEditions();
+  </script>
+</body>
+</html>

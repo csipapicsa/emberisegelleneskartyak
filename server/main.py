@@ -10,6 +10,7 @@ import random
 import re
 import string
 import time
+from collections import deque
 from contextlib import asynccontextmanager
 from contextlib import suppress
 
@@ -27,6 +28,7 @@ from server.db import (
 )
 from server import card_search
 from server import edition_display
+from server import print_cards
 from server.messages_db import get_conn as get_msg_conn, ensure_tables as ensure_msg_tables, \
     save_message, save_card_idea, get_chat_messages, post_chat_message, \
     get_community_cards, list_card_ideas, vote_card_idea, purge_expired_data, \
@@ -750,6 +752,100 @@ async def api_card_feedback(request: Request):
     return {"ok": True}
 
 
+PRINT_MAX_BODY_BYTES = 4096
+PRINT_MAX_EDITIONS = 200
+# Rendering is CPU work in a worker thread: one at a time, so a burst of
+# requests can't starve the game, and at most PRINT_RATE_LIMIT renders per
+# IP per PRINT_RATE_WINDOW seconds. The IPs live in memory only.
+PRINT_RATE_LIMIT = 20
+PRINT_RATE_WINDOW = 3600
+_print_semaphore = asyncio.Semaphore(1)
+_print_requests: dict[str, deque] = {}
+
+
+def _print_rate_limited(ip: str | None) -> bool:
+    if not ip:
+        return False
+    now = time.monotonic()
+    times = _print_requests.setdefault(ip, deque())
+    while times and now - times[0] > PRINT_RATE_WINDOW:
+        times.popleft()
+    if len(times) >= PRINT_RATE_LIMIT:
+        return True
+    times.append(now)
+    for key in [k for k, v in _print_requests.items() if not v]:
+        del _print_requests[key]
+    return False
+
+
+def _render_print(edition_ids: list[int], per_page: int) -> dict:
+    print_cards.cleanup()   # so files go after 24 h even without the timer
+    return print_cards.render_print_set(edition_ids, per_page=per_page)
+
+
+@app.post("/api/print")
+async def api_print(request: Request):
+    """Render the printable PDFs for the editions picked on /nyomtatas and
+    return their download links (valid for 24 hours)."""
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > PRINT_MAX_BODY_BYTES:
+                raise HTTPException(413, "Túl nagy kérés")
+        except ValueError:
+            raise HTTPException(400, "Érvénytelen kérés")
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        raise HTTPException(400, "Érvénytelen JSON")
+    if not isinstance(body, dict):
+        raise HTTPException(400, "Érvénytelen kérés")
+    edition_ids = body.get("edition_ids")
+    per_page = body.get("per_page", print_cards.DEFAULT_PER_PAGE)
+    if (not isinstance(edition_ids, list) or not edition_ids or len(edition_ids) > PRINT_MAX_EDITIONS
+            or any(type(e) is not int for e in edition_ids)):
+        raise HTTPException(400, "Válassz legalább egy kártyacsomagot.")
+    if type(per_page) is not int or per_page not in print_cards.LAYOUTS:
+        raise HTTPException(400, "Érvénytelen oldalankénti kártyaszám.")
+
+    ip = _client_ip(request)
+    if _print_rate_limited(ip):
+        raise HTTPException(429, "Túl sok generálás. Próbáld újra egy óra múlva.")
+    async with _print_semaphore:
+        result = await asyncio.to_thread(_render_print, sorted(set(edition_ids)), per_page)
+    files = [
+        {
+            "variant": variant,
+            "label": print_cards.VARIANT_LABELS[variant],
+            "url": f"/api/print/{printed.path.name}",
+            "cards": printed.cards,
+            "pages": printed.pages,
+        }
+        for variant, printed in result.items() if printed is not None
+    ]
+    if not files:
+        raise HTTPException(400, "A kiválasztott csomagokban nincs nyomtatható kártya.")
+    log_event(
+        "print_generated",
+        ip=ip,
+        user_agent=request.headers.get("user-agent"),
+        extra={"edition_ids": sorted(set(edition_ids)), "per_page": per_page},
+    )
+    return {"files": files}
+
+
+@app.get("/api/print/{name}")
+async def api_print_file(name: str):
+    """Download a PDF made by /api/print. Only names print_cards makes are
+    served, from its output folder only."""
+    if not print_cards.FILE_NAME_RE.fullmatch(name):
+        raise HTTPException(404, "Nincs ilyen fájl.")
+    path = print_cards.OUTPUT_DIR / name
+    if not path.is_file():
+        raise HTTPException(404, "Ez a fájl már lejárt. Generáld újra a /nyomtatas oldalon.")
+    return FileResponse(path, media_type="application/pdf", filename=name)
+
+
 # ── WebSocket ─────────────────────────────────────────────────────────────────
 
 async def _evict_from_other_rooms(session_id: str, current_room_code: str) -> None:
@@ -1239,6 +1335,7 @@ async def serve_html(full_path: str):
         "kartyaszavazas.html": "kartyaszavazas.html",
         "kartyak": "cardlist.html",
         "visszajelzes": "visszajelzes.html",
+        "nyomtatas": "nyomtatas.html",
         "adatkezeles": "adatkezeles.html",
         "adatkezeles.html": "adatkezeles.html",
     }

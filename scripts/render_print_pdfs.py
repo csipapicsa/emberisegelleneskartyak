@@ -97,8 +97,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     started = time.monotonic()
     result = print_cards.render_print_set(args.edition_ids, per_page=args.per_page)
-    for variant, path in result.items():
-        print(f"{variant:>15}: {path or '(nincs ilyen kártya)'}")
+    for variant, printed in result.items():
+        if printed is None:
+            print(f"{variant:>15}: (nincs ilyen kártya)")
+        else:
+            print(f"{variant:>15}: {printed.cards} kártya, {printed.pages} oldal  {printed.path}")
     print(f"{time.monotonic() - started:.1f}s", file=sys.stderr)
     return 0
 

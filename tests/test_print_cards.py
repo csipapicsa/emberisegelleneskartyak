@@ -196,12 +196,16 @@ def test_render_print_set_writes_three_pdfs_with_hashed_names(master, tmp_path):
     out = tmp_path / "print"
     result = print_cards.render_print_set([1, 4], out)
     assert set(result) == {"white", "black", "black_on_white"}
-    for variant, path in result.items():
+    for variant, printed in result.items():
         prefix = print_cards.VARIANTS[variant][0]
-        assert re.fullmatch(rf"{prefix}-9-[0-9a-f]{{16}}\.pdf", path.name)
-        assert path.read_bytes().startswith(b"%PDF")
-        assert stat.S_IMODE(path.stat().st_mode) == 0o644
-    assert len({p.name for p in result.values()}) == 3
+        assert re.fullmatch(rf"{prefix}-9-[0-9a-f]{{16}}\.pdf", printed.path.name)
+        assert print_cards.FILE_NAME_RE.fullmatch(printed.path.name)
+        assert printed.path.read_bytes().startswith(b"%PDF")
+        assert stat.S_IMODE(printed.path.stat().st_mode) == 0o644
+    assert len({p.path.name for p in result.values()}) == 3
+    # Piros + Kék: 2 black and 3 white cards (card 3 is in both), 1 page each.
+    assert (result["black"].cards, result["white"].cards) == (2, 3)
+    assert {p.pages for p in result.values()} == {1}
     assert not list(out.glob("*.tmp"))
 
 
@@ -214,7 +218,7 @@ def test_pdf_page_count_follows_cards_per_page(tmp_path, per_page, pages):
 
 
 @pytest.mark.parametrize("per_page", [9, 18])
-def test_card_grid_fits_the_page_without_overlap(per_page):
+def test_cards_touch_in_a_grid_that_fits_the_page(per_page):
     layout = print_cards.LAYOUTS[per_page]
     page_w, page_h = layout.pagesize
     boxes = []
@@ -225,11 +229,12 @@ def test_card_grid_fits_the_page_without_overlap(per_page):
         assert x + layout.card_w <= page_w - 4 * print_cards.mm
         assert y + layout.card_h <= page_h - 4 * print_cards.mm
         boxes.append((x, y))
-    for i, (x1, y1) in enumerate(boxes):
-        for x2, y2 in boxes[i + 1:]:
-            apart_x = abs(x1 - x2) >= layout.card_w + layout.gap - 0.01
-            apart_y = abs(y1 - y2) >= layout.card_h + layout.gap - 0.01
-            assert apart_x or apart_y
+    # Neighbours share an edge exactly: one cut separates two cards.
+    xs = sorted({round(x, 6) for x, _ in boxes})
+    ys = sorted({round(y, 6) for _, y in boxes})
+    assert len(xs) == layout.columns and len(ys) == layout.rows
+    assert all(abs(b - a - layout.card_w) < 1e-6 for a, b in zip(xs, xs[1:]))
+    assert all(abs(b - a - layout.card_h) < 1e-6 for a, b in zip(ys, ys[1:]))
 
 
 def test_eighteen_per_page_is_landscape_with_smaller_cards():
@@ -255,25 +260,25 @@ def test_cards_carry_only_their_text_and_pick_label(monkeypatch, tmp_path):
 
 def test_same_selection_reuses_the_file_and_restarts_its_clock(master, tmp_path):
     out = tmp_path / "print"
-    first = print_cards.render_print_set([1, 4], out)["white"]
+    first = print_cards.render_print_set([1, 4], out)["white"].path
     old = time.time() - 3600
     os.utime(first, (old, old))
-    second = print_cards.render_print_set([4, 1], out)["white"]  # order doesn't matter
+    second = print_cards.render_print_set([4, 1], out)["white"].path  # order doesn't matter
     assert second == first
     assert second.stat().st_mtime > old + 3000
 
 
 def test_different_selection_gets_a_different_file(master, tmp_path):
     out = tmp_path / "print"
-    both = print_cards.render_print_set([1, 4], out)["white"]
-    kek = print_cards.render_print_set([4], out)["white"]
+    both = print_cards.render_print_set([1, 4], out)["white"].path
+    kek = print_cards.render_print_set([4], out)["white"].path
     assert both != kek
     assert len(list(out.glob("feher-kartyak-*.pdf"))) == 2
 
 
 def test_nine_and_eighteen_per_page_are_separate_files(master, tmp_path):
-    nine = print_cards.render_print_set([1], tmp_path, per_page=9)["black"]
-    eighteen = print_cards.render_print_set([1], tmp_path, per_page=18)["black"]
+    nine = print_cards.render_print_set([1], tmp_path, per_page=9)["black"].path
+    eighteen = print_cards.render_print_set([1], tmp_path, per_page=18)["black"].path
     assert nine != eighteen
     assert re.fullmatch(r"fekete-kartyak-18-[0-9a-f]{16}\.pdf", eighteen.name)
     assert _pages(eighteen) == 1
@@ -287,7 +292,7 @@ def test_unsupported_cards_per_page_is_refused(master, tmp_path):
 def test_white_only_selection_has_no_black_pdfs(master, tmp_path):
     result = print_cards.render_print_set([4], tmp_path)
     assert result["black"] is None and result["black_on_white"] is None
-    assert result["white"].exists()
+    assert result["white"].path.exists()
 
 
 def test_file_name_changes_with_text_pick_and_layout(monkeypatch):
@@ -381,3 +386,18 @@ def test_long_text_stays_above_the_pick_label(monkeypatch, tmp_path, per_page):
     [label_y] = labels
     # The last text line's descenders stay clear of the label's top.
     assert min(texts) - 0.25 * layout.max_font > label_y + layout.pick_font
+
+
+@pytest.mark.parametrize("variant", list(print_cards.VARIANTS))
+def test_every_card_gets_a_square_cut_line_on_its_edge(monkeypatch, tmp_path, variant):
+    from reportlab.pdfgen.canvas import Canvas
+    rects, rounded = [], []
+    real_rect = Canvas.rect
+    monkeypatch.setattr(Canvas, "rect", lambda self, *a, **k: (rects.append((a, k)), real_rect(self, *a, **k)))
+    monkeypatch.setattr(Canvas, "roundRect", lambda self, *a, **k: rounded.append(a))
+    cards = [{"id": i, "text": f"Kártya {i}", "pick": 1} for i in range(5)]
+    print_cards.render_pdf(cards, tmp_path / "x.pdf", variant, 9)
+    cut_lines = [a for a, k in rects if k.get("stroke") == 1 and k.get("fill") == 0]
+    expected = [(*print_cards._card_origin(i, NINE), NINE.card_w, NINE.card_h) for i in range(5)]
+    assert cut_lines == expected
+    assert rounded == []

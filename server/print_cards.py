@@ -10,9 +10,11 @@ For a selection of editions three PDFs are made:
 
 Two sizes (LAYOUTS): 9 cards of 63 × 88 mm (standard playing-card size, so
 sleeves fit) on a portrait A4 page, or 18 cards of 44 × 62 mm (the same shape
-at 70 %) on a landscape one. Corners are rounded and there's a gap between the
-cards, so every card can be cut out on its own outline. Each card is printed
-once: packs overlap, so the cards are de-duplicated by id and by text.
+at 70 %) on a landscape one. The cards touch, with a thin grey line on every
+edge: one straight cut separates two cards, so a page needs only a few cuts
+along the grid lines. That's why the corners are square — a corner rounder
+can round them after cutting. Each card is printed once: packs overlap, so
+the cards are de-duplicated by id and by text.
 
 Files go to OUTPUT_DIR and are named after a hash of what's on them, e.g.
 ``feher-kartyak-9-3f9c0a1b2c3d4e5f.pdf``. The same selection on the same
@@ -48,11 +50,18 @@ MAX_AGE_SECONDS = 24 * 60 * 60
 
 # Bump when the look changes, so files rendered with the old layout get new
 # names instead of being reused.
-LAYOUT_VERSION = 3
+LAYOUT_VERSION = 4
 
 FONT_NAME = "CardFont"
 FONT_PATH = Path(__file__).resolve().parent / "fonts" / "DejaVuSans-Bold.ttf"
 LEADING = 1.22
+
+
+@dataclass(frozen=True)
+class PrintFile:
+    path: Path
+    cards: int
+    pages: int
 
 
 @dataclass(frozen=True)
@@ -64,8 +73,6 @@ class Layout:
     rows: int
     card_w: float
     card_h: float
-    radius: float
-    gap: float
     padding: float
     frame_w: float          # black frame on the ink-saving black cards
     max_font: float
@@ -73,20 +80,20 @@ class Layout:
     pick_font: float        # "Játssz ki 2 kártyát" at the bottom
 
 
-def _layout(per_page: int, pagesize, columns: int, rows: int, scale: float, gap: float) -> Layout:
+def _layout(per_page: int, pagesize, columns: int, rows: int, scale: float) -> Layout:
     """A layout whose card is the 63 × 88 mm one scaled by `scale`."""
     return Layout(
         per_page=per_page, pagesize=pagesize, columns=columns, rows=rows,
-        card_w=63 * mm * scale, card_h=88 * mm * scale, radius=3.5 * mm * scale,
-        gap=gap, padding=6 * mm * scale, frame_w=2 * mm * scale,
+        card_w=63 * mm * scale, card_h=88 * mm * scale,
+        padding=6 * mm * scale, frame_w=2 * mm * scale,
         max_font=round(14 * scale * 2) / 2, min_font=max(5.0, round(6 * scale * 2) / 2),
         pick_font=round(8 * scale * 2) / 2,
     )
 
 
 LAYOUTS = {
-    9: _layout(9, A4, 3, 3, 1.0, 4 * mm),
-    18: _layout(18, landscape(A4), 6, 3, 0.7, 3 * mm),
+    9: _layout(9, A4, 3, 3, 1.0),
+    18: _layout(18, landscape(A4), 6, 3, 0.7),
 }
 DEFAULT_PER_PAGE = 9
 
@@ -96,7 +103,14 @@ VARIANTS = {
     "black":          ("fekete-kartyak",               "Black", (0, 0, 0), (1, 1, 1), False),
     "black_on_white": ("fekete-kartyak-tintatakarekos", "Black", (1, 1, 1), (0, 0, 0), True),
 }
-CUT_LINE_GREY = (0.6, 0.6, 0.6)
+# What the /nyomtatas page calls each file.
+VARIANT_LABELS = {
+    "white": "Fehér kártyák",
+    "black": "Fekete kártyák – fekete háttérrel",
+    "black_on_white": "Fekete kártyák – tintatakarékos (fehér háttér, fekete keret)",
+}
+CUT_LINE_GREY = (0.6, 0.6, 0.6)   # visible on white and on black
+CUT_LINE_W = 0.5
 PDF_TITLE = "Emberiség Ellenes Kártyák – nyomtatható kártyák"
 
 
@@ -264,31 +278,26 @@ def layout_card(card: dict, layout: Layout, frame: bool = False) -> tuple[float,
 
 def _card_origin(slot: int, layout: Layout) -> tuple[float, float]:
     page_w, page_h = layout.pagesize
-    grid_w = layout.columns * layout.card_w + (layout.columns - 1) * layout.gap
-    grid_h = layout.rows * layout.card_h + (layout.rows - 1) * layout.gap
-    left = (page_w - grid_w) / 2
-    top = (page_h + grid_h) / 2
+    left = (page_w - layout.columns * layout.card_w) / 2
+    top = (page_h + layout.rows * layout.card_h) / 2
     col, row = slot % layout.columns, slot // layout.columns
-    return (left + col * (layout.card_w + layout.gap),
-            top - (row + 1) * layout.card_h - row * layout.gap)
+    return left + col * layout.card_w, top - (row + 1) * layout.card_h
 
 
 def _draw_card(c: canvas.Canvas, card: dict, x: float, y: float, layout: Layout, fill, ink, frame: bool) -> None:
-    w, h, r = layout.card_w, layout.card_h, layout.radius
+    w, h = layout.card_w, layout.card_h
     c.setFillColorRGB(*fill)
     if frame:
         # Stroke centred on a path inset by half its width, so the frame's
-        # outer edge is exactly the cut line.
+        # outer edge is exactly the cut line. Two touching cards make a
+        # double-width band with the cut line in its middle, which forgives
+        # a slightly crooked cut.
         half = layout.frame_w / 2
         c.setStrokeColorRGB(0, 0, 0)
         c.setLineWidth(layout.frame_w)
-        c.roundRect(x + half, y + half, w - layout.frame_w, h - layout.frame_w, r - half, stroke=1, fill=1)
-    elif fill == (1, 1, 1):
-        c.setStrokeColorRGB(*CUT_LINE_GREY)
-        c.setLineWidth(0.4)
-        c.roundRect(x, y, w, h, r, stroke=1, fill=1)
+        c.rect(x + half, y + half, w - layout.frame_w, h - layout.frame_w, stroke=1, fill=1)
     else:
-        c.roundRect(x, y, w, h, r, stroke=0, fill=1)
+        c.rect(x, y, w, h, stroke=0, fill=1)
 
     inset, _width, _height = text_box(card, layout, frame)
     size, lines, _fits = layout_card(card, layout, frame)
@@ -303,6 +312,11 @@ def _draw_card(c: canvas.Canvas, card: dict, x: float, y: float, layout: Layout,
     if label:
         c.setFont(FONT_NAME, layout.pick_font)
         c.drawRightString(x + w - inset, y + inset, label)
+
+    # Cut line last, on top of the fill and frame. Touching cards share it.
+    c.setStrokeColorRGB(*CUT_LINE_GREY)
+    c.setLineWidth(CUT_LINE_W)
+    c.rect(x, y, w, h, stroke=1, fill=0)
 
 
 def render_pdf(cards: list[dict], path: Path, variant: str, per_page: int = DEFAULT_PER_PAGE) -> None:
@@ -332,13 +346,23 @@ def file_name(variant: str, cards: list[dict], per_page: int = DEFAULT_PER_PAGE)
     return f"{prefix}-{per_page}-{digest}.pdf"
 
 
+# Exactly the names file_name() makes, so a download URL can't name any
+# other file.
+FILE_NAME_RE = re.compile(
+    "(?:%s)-(?:%s)-[0-9a-f]{16}\\.pdf" % (
+        "|".join(re.escape(prefix) for prefix, *_ in VARIANTS.values()),
+        "|".join(str(n) for n in LAYOUTS),
+    )
+)
+
+
 def render_print_set(
     edition_ids: list[int], output_dir: Path | None = None, per_page: int = DEFAULT_PER_PAGE,
-) -> dict[str, Path | None]:
+) -> dict[str, PrintFile | None]:
     """Render (or reuse) the three PDFs for a selection of editions, with
     per_page (9 or 18) cards on a page.
 
-    Returns variant → file path, or None for a variant with no cards (a
+    Returns variant → PrintFile, or None for a variant with no cards (a
     white-only pack has no black PDFs). Synchronous and CPU-bound: call it
     from a worker thread, not the event loop.
     """
@@ -348,7 +372,7 @@ def render_print_set(
     output_dir.mkdir(parents=True, exist_ok=True)
     black, white = collect_cards(edition_ids)
     by_type = {"Black": black, "White": white}
-    result: dict[str, Path | None] = {}
+    result: dict[str, PrintFile | None] = {}
     for variant, (_prefix, card_type, *_rest) in VARIANTS.items():
         cards = by_type[card_type]
         if not cards:
@@ -369,7 +393,7 @@ def render_print_set(
             except BaseException:
                 Path(tmp).unlink(missing_ok=True)
                 raise
-        result[variant] = path
+        result[variant] = PrintFile(path, len(cards), math.ceil(len(cards) / per_page))
     return result
 
 
