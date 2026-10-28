@@ -400,20 +400,28 @@ def test_every_card_gets_a_square_cut_line_on_its_edge(monkeypatch, tmp_path, va
     cut_lines = [a for a, k in rects if k.get("stroke") == 1 and k.get("fill") == 0]
     expected = [(*print_cards._card_origin(i, NINE), NINE.card_w, NINE.card_h) for i in range(5)]
     assert cut_lines == expected
-    assert rounded == []
+    # Only the tiny corner card may be rounded, never a card's own edge.
+    assert all(a[2] < NINE.card_w / 5 for a in rounded)
 
 
-def test_only_ink_saving_black_cards_get_the_black_corner_mark(monkeypatch, tmp_path):
+def test_only_ink_saving_black_cards_get_the_tiny_black_card(monkeypatch, tmp_path):
     from reportlab.pdfgen.canvas import Canvas
-    real_rect = Canvas.rect
+    real_round = Canvas.roundRect
     for variant in print_cards.VARIANTS:
-        rects = []
-        monkeypatch.setattr(Canvas, "rect", lambda self, *a, **k: (rects.append((a, k)), real_rect(self, *a, **k)))
+        marks = []
+        monkeypatch.setattr(Canvas, "roundRect", lambda self, *a, **k: (marks.append((a, k)), real_round(self, *a, **k)))
         print_cards.render_pdf([{"id": 1, "text": "Mi ez?", "pick": 2}], tmp_path / "x.pdf", variant, 9)
         x, y = print_cards._card_origin(0, NINE)
         inset = NINE.padding + NINE.frame_w
-        mark = ((x + inset, y + inset, NINE.mark_w, NINE.mark_h), {"stroke": 0, "fill": 1})
-        assert (mark in rects) == (variant == "black_on_white"), variant
+        mark = ((x + inset, y + inset, NINE.mark_w, NINE.mark_h, NINE.mark_radius), {"stroke": 0, "fill": 1})
+        assert marks == ([mark] if variant == "black_on_white" else []), variant
+
+
+@pytest.mark.parametrize("per_page", [9, 18])
+def test_corner_mark_is_an_upright_card_shape(per_page):
+    layout = print_cards.LAYOUTS[per_page]
+    assert layout.mark_h > layout.mark_w
+    assert abs(layout.mark_w / layout.mark_h - layout.card_w / layout.card_h) < 1e-9
 
 
 @pytest.mark.parametrize("per_page", [9, 18])

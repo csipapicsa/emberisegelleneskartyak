@@ -5,7 +5,7 @@ For a selection of editions three PDFs are made:
 
 - white cards (black text on white),
 - black cards (white text on black),
-- black cards on white with a thick black frame and a small black mark in
+- black cards on white with a thick black frame and a tiny black card in
   the bottom-left corner, to save ink. Printed on plain paper every card
   has a white back, so the frame and the mark keep them apart from white
   cards in a shuffled deck.
@@ -52,7 +52,7 @@ MAX_AGE_SECONDS = 24 * 60 * 60
 
 # Bump when the look changes, so files rendered with the old layout get new
 # names instead of being reused.
-LAYOUT_VERSION = 5
+LAYOUT_VERSION = 6
 
 FONT_NAME = "CardFont"
 FONT_PATH = Path(__file__).resolve().parent / "fonts" / "DejaVuSans-Bold.ttf"
@@ -77,8 +77,9 @@ class Layout:
     card_h: float
     padding: float
     frame_w: float          # black frame on the ink-saving black cards
-    mark_w: float           # ...and the small black mark bottom-left
+    mark_w: float           # ...and the tiny black card bottom-left
     mark_h: float
+    mark_radius: float
     max_font: float
     min_font: float
     pick_font: float        # "Játssz ki 2 kártyát" at the bottom
@@ -90,7 +91,8 @@ def _layout(per_page: int, pagesize, columns: int, rows: int, scale: float) -> L
         per_page=per_page, pagesize=pagesize, columns=columns, rows=rows,
         card_w=63 * mm * scale, card_h=88 * mm * scale,
         padding=6 * mm * scale, frame_w=2 * mm * scale,
-        mark_w=7 * mm * scale, mark_h=3.5 * mm * scale,
+        # Upright, in a card's own 63:88 shape, so it reads as "a black card".
+        mark_w=3.6 * mm * scale, mark_h=3.6 * mm * 88 / 63 * scale, mark_radius=0.6 * mm * scale,
         max_font=round(14 * scale * 2) / 2, min_font=max(5.0, round(6 * scale * 2) / 2),
         pick_font=round(8 * scale * 2) / 2,
     )
@@ -323,7 +325,7 @@ def _draw_card(c: canvas.Canvas, card: dict, x: float, y: float, layout: Layout,
         c.drawRightString(x + w - inset, y + inset, label)
     if frame:
         c.setFillColorRGB(0, 0, 0)
-        c.rect(x + inset, y + inset, layout.mark_w, layout.mark_h, stroke=0, fill=1)
+        c.roundRect(x + inset, y + inset, layout.mark_w, layout.mark_h, layout.mark_radius, stroke=0, fill=1)
 
     # Cut line last, on top of the fill and frame. Touching cards share it.
     c.setStrokeColorRGB(*CUT_LINE_GREY)
