@@ -401,3 +401,29 @@ def test_every_card_gets_a_square_cut_line_on_its_edge(monkeypatch, tmp_path, va
     expected = [(*print_cards._card_origin(i, NINE), NINE.card_w, NINE.card_h) for i in range(5)]
     assert cut_lines == expected
     assert rounded == []
+
+
+def test_only_ink_saving_black_cards_get_the_black_corner_mark(monkeypatch, tmp_path):
+    from reportlab.pdfgen.canvas import Canvas
+    real_rect = Canvas.rect
+    for variant in print_cards.VARIANTS:
+        rects = []
+        monkeypatch.setattr(Canvas, "rect", lambda self, *a, **k: (rects.append((a, k)), real_rect(self, *a, **k)))
+        print_cards.render_pdf([{"id": 1, "text": "Mi ez?", "pick": 2}], tmp_path / "x.pdf", variant, 9)
+        x, y = print_cards._card_origin(0, NINE)
+        inset = NINE.padding + NINE.frame_w
+        mark = ((x + inset, y + inset, NINE.mark_w, NINE.mark_h), {"stroke": 0, "fill": 1})
+        assert (mark in rects) == (variant == "black_on_white"), variant
+
+
+@pytest.mark.parametrize("per_page", [9, 18])
+def test_long_text_stays_above_the_corner_mark(monkeypatch, tmp_path, per_page):
+    texts = []
+    from reportlab.pdfgen.canvas import Canvas
+    monkeypatch.setattr(Canvas, "drawString", lambda self, x, y, text, *a, **k: texts.append(y))
+    long_card = {"id": 1, "pick": 1, "text": "Hajnali kettő a soha nem alvó városban. " * 4}
+    print_cards.render_pdf([long_card], tmp_path / "x.pdf", "black_on_white", per_page)
+    layout = print_cards.LAYOUTS[per_page]
+    _x, y = print_cards._card_origin(0, layout)
+    mark_top = y + layout.padding + layout.frame_w + layout.mark_h
+    assert min(texts) - 0.25 * layout.max_font > mark_top

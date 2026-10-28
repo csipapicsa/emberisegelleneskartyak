@@ -5,8 +5,10 @@ For a selection of editions three PDFs are made:
 
 - white cards (black text on white),
 - black cards (white text on black),
-- black cards on white with a thick black frame, to save ink. The frame keeps
-  them apart from white cards once cut.
+- black cards on white with a thick black frame and a small black mark in
+  the bottom-left corner, to save ink. Printed on plain paper every card
+  has a white back, so the frame and the mark keep them apart from white
+  cards in a shuffled deck.
 
 Two sizes (LAYOUTS): 9 cards of 63 × 88 mm (standard playing-card size, so
 sleeves fit) on a portrait A4 page, or 18 cards of 44 × 62 mm (the same shape
@@ -50,7 +52,7 @@ MAX_AGE_SECONDS = 24 * 60 * 60
 
 # Bump when the look changes, so files rendered with the old layout get new
 # names instead of being reused.
-LAYOUT_VERSION = 4
+LAYOUT_VERSION = 5
 
 FONT_NAME = "CardFont"
 FONT_PATH = Path(__file__).resolve().parent / "fonts" / "DejaVuSans-Bold.ttf"
@@ -75,6 +77,8 @@ class Layout:
     card_h: float
     padding: float
     frame_w: float          # black frame on the ink-saving black cards
+    mark_w: float           # ...and the small black mark bottom-left
+    mark_h: float
     max_font: float
     min_font: float
     pick_font: float        # "Játssz ki 2 kártyát" at the bottom
@@ -86,6 +90,7 @@ def _layout(per_page: int, pagesize, columns: int, rows: int, scale: float) -> L
         per_page=per_page, pagesize=pagesize, columns=columns, rows=rows,
         card_w=63 * mm * scale, card_h=88 * mm * scale,
         padding=6 * mm * scale, frame_w=2 * mm * scale,
+        mark_w=7 * mm * scale, mark_h=3.5 * mm * scale,
         max_font=round(14 * scale * 2) / 2, min_font=max(5.0, round(6 * scale * 2) / 2),
         pick_font=round(8 * scale * 2) / 2,
     )
@@ -262,9 +267,13 @@ def _pick_label(card: dict) -> str:
 
 def text_box(card: dict, layout: Layout, frame: bool) -> tuple[float, float, float]:
     """(inset, width, height) of the area the card's text may fill. The
-    bottom line is kept free for the pick label when there is one."""
+    bottom line is kept free for the pick label and, on framed cards, the
+    black mark."""
     inset = layout.padding + (layout.frame_w if frame else 0)
-    bottom = inset + (layout.pick_font * 2 if _pick_label(card) else 0)
+    reserved = layout.pick_font * 2 if _pick_label(card) else 0
+    if frame:
+        reserved = max(reserved, layout.mark_h + layout.pick_font)
+    bottom = inset + reserved
     return inset, layout.card_w - 2 * inset, layout.card_h - inset - bottom
 
 
@@ -312,6 +321,9 @@ def _draw_card(c: canvas.Canvas, card: dict, x: float, y: float, layout: Layout,
     if label:
         c.setFont(FONT_NAME, layout.pick_font)
         c.drawRightString(x + w - inset, y + inset, label)
+    if frame:
+        c.setFillColorRGB(0, 0, 0)
+        c.rect(x + inset, y + inset, layout.mark_w, layout.mark_h, stroke=0, fill=1)
 
     # Cut line last, on top of the fill and frame. Touching cards share it.
     c.setStrokeColorRGB(*CUT_LINE_GREY)
