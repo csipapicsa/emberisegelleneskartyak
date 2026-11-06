@@ -43,3 +43,16 @@ Kész
 [x] AdSense tulajdonjog igazolva meta taggel, /ads.txt route
 [x] also-banner hirdetési egység létrehozva
 [x] Umami útvonal-normalizálás: /room/:code, /game/:code, /join?code=xxxx (élesben ellenőrizve 2026-10-16)
+
+Mentések felülvizsgálata (2026-11-06)
+A napi mentés: emberisegellenes-db-backup.timer, 03:05 → scripts/backup_databases.py, 30 nap megőrzés.
+Minden *.db-t ment az adatmappa gyökerében és a database/ alatt. backups/ most 181 MB.
+[ ] Nem használt DB-k: cards.db, cards_safety_2026_07_11.db, cards_safety_2026_07_27.db
+    (card_master.db váltotta őket, a kód nem olvassa). Napi 30 példány, ~52 MB.
+    Döntés: egyszer archiválni, utána törölni, és kivenni a mentésből.
+[ ] Glob helyett kifejezett lista: melyik DB-t mentjük és miért.
+[ ] card_master.db csak feltöltéskor változik: 12 példány (65 MB), ebből 4 különböző.
+    Csak akkor menteni, ha változott (hash).
+[ ] A konténeres átállás (Phase 2.4) után az adat /srv/eek/prod alatt lesz:
+    a mentés EEK_DATA_DIR-rel fusson oda, és legyen visszaállítási próba.
+[ ] Offsite másolat: most minden mentés ugyanazon a szerveren van.
