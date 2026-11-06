@@ -102,7 +102,18 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: requirements*.txt
-      - run: python -m pip install "$(grep -oE '^pip-audit==[^ ]+' requirements-dev.txt)"
+      - run: >-
+          python -m pip install "$(grep -oE '^pip-audit==[^ ]+' requirements-dev.txt)"
+          "$(grep -oE '^pip-tools==[^ ]+' requirements-dev.txt)"
+      - name: Lock files match requirements*.in
+        run: |
+          # pip-compile keeps existing pins, so lock files that are in sync come out unchanged.
+          for f in requirements requirements-dev; do
+            pip-compile -q --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url "$f.in" -o "$f.txt"
+          done
+          git diff --exit-code -- requirements.txt requirements-dev.txt \
+            || { echo "::error::Lock files are out of date. Regenerate them with pip-compile (see requirements.in)."; exit 1; }
+      # The lock files pin every installed package, so this audits exactly what the image and CI install.
       - run: python -m pip_audit -r requirements.txt -r requirements-dev.txt --progress-spinner off
 
   test:

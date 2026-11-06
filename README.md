@@ -46,7 +46,7 @@ flowchart LR
 ```bash
 git clone https://github.com/csipapicsa/emberisegelleneskartyak.git && cd emberisegelleneskartyak
 python3.11 -m venv venv
-venv/bin/pip install -r requirements-dev.txt
+venv/bin/pip install -r requirements-dev.txt   # lock file: every package pinned with hashes
 venv/bin/python scripts/make_sample_db.py     # made-up cards; the real card texts are not in the repo
 venv/bin/uvicorn server.main:app --port 8010
 ```
