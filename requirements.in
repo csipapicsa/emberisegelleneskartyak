@@ -1,7 +1,7 @@
 # Direct runtime dependencies. requirements.txt is generated from this file and pins every package
 # (including dependencies of dependencies) with hashes:
 #   pip-compile --generate-hashes --allow-unsafe requirements.in
-fastapi==0.136.0
-uvicorn[standard]==0.44.0
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
 reportlab==5.1.0           # printable card PDFs (server/print_cards.py)
 pyphen==0.18.1             # Hungarian hyphenation on printed cards
