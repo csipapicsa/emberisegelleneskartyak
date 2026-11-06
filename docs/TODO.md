@@ -78,10 +78,10 @@ Következő lépések, sorrendben (2026-11-06, a projekt-review alapján)
     [ ] Visszaállítási gyakorlat: előző image élesbe, majd vissza.
     [ ] Mentés-visszaállítási próba: mentésből ideiglenes mappába, PRAGMA integrity_check,
         az app elindul a visszaállított adattal.
-    [ ] Lemez: 93%-on áll. /opt/local_llm (6,7 GB, nem használja semmi), pip-cache-ek, régi image-ek.
+    [x] Lemez: 93% → 84% (/opt/local_llm modelljei törölve). Még szabadítható: pip-cache-ek, régi image-ek (~5 GB).
     [ ] CI deploy-ellenőrzés: merge után megvárni, hogy a staging /healthz az új commitot mutassa
         (GitHub environment "staging").
-[ ] 2. ML-életciklus a gépi játékossal: docs/ml/roadmap.md (GCP-n tanítás, saját MLflow szerver,
+[ ] 2. ML-életciklus a gépi játékossal: docs/ml/roadmap.md, lépésenként: docs/ml/implementation-plan.md (GCP-n tanítás, saját MLflow szerver,
        kiszolgálás a saját szerveren). Mérföldkövek: MLflow szerver → helyi pipeline → ugyanaz Cloud Run
        Jobként → model service + bot + promóció/visszaállítás → monitorozás.
 [ ] 3. Konténer-image sérülékenységvizsgálat (Trivy), előbb csak riport. A Dependabot PR-okkal együtt.
