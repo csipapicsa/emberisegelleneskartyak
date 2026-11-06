@@ -259,3 +259,37 @@ def test_delete_room_and_chat_purges_only_that_room(chat_file):
         assert main_mod.get_room(CODE) is None
     finally:
         delete_room("OTHR")
+
+
+# ── startup cleanup ───────────────────────────────────────────────────────────
+
+def test_importing_the_app_does_not_touch_chat_db(tmp_path):
+    """Importing server.main used to wipe room chat at import time, so merely
+    running the tests on the server deleted live rooms' chat."""
+    import os
+    import subprocess
+    import sys
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = {**os.environ, "EEK_DATA_DIR": str(tmp_path)}
+    subprocess.run([sys.executable, "-c", "import server.main"], cwd=repo_root, env=env, check=True)
+    assert not (tmp_path / "chat.db").exists()
+
+
+def test_app_startup_creates_tables_and_wipes_orphaned_room_chat(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    db_path = str(tmp_path / "chat.db")
+    monkeypatch.setattr(chat_db, "DB_PATH", db_path)
+    conn = chat_db.get_conn()
+    chat_db.ensure_tables(conn)
+    chat_db.post_message(conn, "1234", "Feri", "a room from the previous process")
+    conn.close()
+
+    monkeypatch.setenv("EEK_DISABLE_ROOM_CLEANUP", "1")
+    with TestClient(main_mod.app):
+        pass
+
+    conn = sqlite3.connect(db_path)
+    try:
+        assert conn.execute("SELECT count(*) FROM room_chat_messages").fetchone()[0] == 0
+    finally:
+        conn.close()

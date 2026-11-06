@@ -9,6 +9,8 @@ The game has been live since April 2026; changes before this file are in the git
 ## [Unreleased]
 
 ### Added
+- `EEK_DATA_DIR`: all runtime data (databases, generated PDFs) can live outside the code directory, the
+  prerequisite for running the app in a container with a data volume. Default unchanged.
 - End-to-end browser test (Playwright): three players create, join and play a round; runs as its own CI
   job and locally in the Playwright container (`scripts/e2e_in_container.sh`).
 - Coverage gate in CI (branch coverage of `server/` and `scripts/`, minimum 75%), with a coverage table on
@@ -20,6 +22,9 @@ The game has been live since April 2026; changes before this file are in the git
 - GPL-3.0-or-later license, `pyproject.toml`, pinned `requirements.txt` and `requirements-dev.txt`.
 
 ### Changed
+- Leftover room chat is wiped at app startup instead of at import time: importing `server.main` (as the tests
+  do) used to delete the room chat of the live site's data directory. Tests now also redirect every
+  writable database to a temp directory.
 - `/admin/stats` takes the key as the HTTP Basic Auth password instead of a `?key=` URL parameter, so it no
   longer ends up in the nginx and uvicorn access logs or the browser history.
 - The `/admin/stats` key comes from the `EEK_ADMIN_STATS_KEY` environment variable and the page stays closed

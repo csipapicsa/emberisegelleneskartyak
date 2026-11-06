@@ -16,7 +16,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 RETENTION_DAYS = 30
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+# The data directory: EEK_DATA_DIR when the app runs with its data outside the code (a container
+# volume), otherwise the repository root, as server/paths.py does.
+PROJECT_ROOT = Path(os.environ.get("EEK_DATA_DIR") or Path(__file__).resolve().parents[1])
 # Subdirectories whose databases are backed up too, e.g. the uploaded
 # database/card_master.db (the game's card source).
 DATABASE_SUBDIRS = ("database",)

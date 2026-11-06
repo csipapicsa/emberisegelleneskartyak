@@ -140,6 +140,23 @@ async def _room_cleanup_task() -> None:
                 logger.exception("room cleanup failed for room %s; continuing", code)
 
 
+def _reset_room_chat() -> None:
+    """Ensure chat.db tables exist and wipe leftover room chat. Room chat is scoped to in-memory rooms,
+    which are all gone on process start, so any leftover rows are orphaned. Runs at app startup, not at
+    import: importing server.main (as the tests do) must not delete anything. Chat is a side feature:
+    if its storage is broken, the game must still boot."""
+    try:
+        conn = chat_db.get_conn()
+        try:
+            chat_db.ensure_tables(conn)
+            conn.execute("DELETE FROM room_chat_messages")
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("chat.db unavailable at startup; chat will be degraded")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     startup_conn = get_msg_conn()
@@ -151,6 +168,7 @@ async def lifespan(app: FastAPI):
         startup_conn.close()
     from server.analytics import init_analytics
     init_analytics(migrate_privacy=True)
+    _reset_room_chat()
 
     flush_stop = asyncio.Event()
     flush_task = asyncio.create_task(_card_seen_flush_task(flush_stop))
@@ -172,20 +190,6 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-
-# Ensure chat.db tables exist. Room chat is scoped to in-memory rooms, which
-# are all gone on process start, so any leftover rows are orphaned — wipe them.
-# Chat is a side feature: if its storage is broken, the game must still boot.
-try:
-    _chat_startup_conn = chat_db.get_conn()
-    try:
-        chat_db.ensure_tables(_chat_startup_conn)
-        _chat_startup_conn.execute("DELETE FROM room_chat_messages")
-        _chat_startup_conn.commit()
-    finally:
-        _chat_startup_conn.close()
-except Exception:
-    logger.exception("chat.db unavailable at startup; chat will be degraded")
 
 
 @app.get("/api/chat")

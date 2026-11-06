@@ -1,14 +1,15 @@
 from __future__ import annotations
 
-import os
 import sqlite3
+
+from server.paths import DATA_DIR
 
 # card_master.db is built offline (translation + review on the dev machine)
 # and uploaded as a whole file, so the server only ever reads it. Use only
 # the game_cards and edition_status views, editions and card_editions — the
 # other tables belong to the translation pipeline. game_cards already filters to validated,
 # non-skipped, non-merged cards and holds the Hungarian text.
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "database", "card_master.db")
+DB_PATH = str(DATA_DIR / "database" / "card_master.db")
 
 
 def get_conn() -> sqlite3.Connection:

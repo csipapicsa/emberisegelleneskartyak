@@ -45,8 +45,9 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
 from server import card_search, db, messages_db
+from server.paths import DATA_DIR
 
-OUTPUT_DIR = Path(__file__).resolve().parent.parent / "generated" / "print"
+OUTPUT_DIR = DATA_DIR / "generated" / "print"
 MAX_AGE_SECONDS = 24 * 60 * 60
 
 # Bump when the look changes, so files rendered with the old layout get new
