@@ -14,6 +14,7 @@ database/card_seen.db
 *.db-shm
 backups/
 docs/security/
+docs/private/
 
 # OS / editor
 .DS_Store
