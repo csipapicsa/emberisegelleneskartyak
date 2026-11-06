@@ -40,8 +40,9 @@ def isolated_runtime_data(tmp_path, monkeypatch):
     on the server is the live site's data. A test can still patch a path itself; its setattr runs later
     and wins. The card database is opened read-only and stays where it is.
     """
-    from server import analytics, chat_db, messages_db, print_cards
+    from server import analytics, chat_db, gameplay_log, messages_db, print_cards
     monkeypatch.setattr(messages_db, "DB_PATH", str(tmp_path / "messages.db"))
+    monkeypatch.setattr(gameplay_log, "DB_PATH", tmp_path / "gameplay.db")
     monkeypatch.setattr(chat_db, "DB_PATH", str(tmp_path / "chat.db"))
     monkeypatch.setattr(analytics, "DB_PATH", tmp_path / "analytics.db")
     monkeypatch.setattr(print_cards, "OUTPUT_DIR", tmp_path / "generated" / "print")

@@ -8,7 +8,7 @@ import time
 from collections import Counter
 from typing import TYPE_CHECKING
 
-from server import card_seen
+from server import card_seen, gameplay_log
 from server.analytics import log_event
 from server.deck import build_deck, deal_hand, draw_black, draw_card, reshuffle_into_deck
 from server.room import Room
@@ -112,6 +112,7 @@ async def start_game(room: Room, black_cards: list[dict], white_cards: list[dict
         player.swaps_remaining = room.round_total
         player.hand = deal_hand(room.white_deck, 10)
 
+    gameplay_log.game_started(room)
     await manager.broadcast(room.code, {"event": "game_started"})
     await start_round(room, manager)
 
@@ -134,6 +135,7 @@ async def start_round(room: Room, manager: ConnectionManager) -> None:
 
     room.current_black = draw_black(room.black_deck)
     room.round_start_time = time.time()
+    gameplay_log.round_started(room)
 
     if room.voting_mode == "czar":
         connected = {sid for sid, player in room.players.items() if player.connected}
@@ -202,6 +204,7 @@ async def reveal_cards(room: Room, manager: ConnectionManager) -> None:
 
     # Inactivity kick: any connected player who failed to submit this round is
     # kicked. Disconnected players are left alone (they may reconnect).
+    gameplay_log.submissions_closed(room)
     kicked = await _kick_inactive_players(room, manager)
 
     # Aborted by inactivity sweep (not enough players left to continue).
@@ -225,6 +228,7 @@ async def reveal_cards(room: Room, manager: ConnectionManager) -> None:
 
     # No submissions at all — skip round
     if not submissions:
+        gameplay_log.round_ended(room, gameplay_log.NO_SUBMISSIONS)
         await manager.broadcast(room.code, {"event": "round_skipped"})
         room.next_czar()
         await start_round(room, manager)
@@ -232,6 +236,7 @@ async def reveal_cards(room: Room, manager: ConnectionManager) -> None:
 
     random.shuffle(submissions)
     room._last_submissions = submissions
+    gameplay_log.revealed(room, [s["session_id"] for s in submissions])
     room.cards_revealed = True
     room.phase = "revealed"
 
@@ -259,6 +264,7 @@ async def czar_pick(room: Room, winner_session_id: str, manager: ConnectionManag
     winner = room.players.get(winner_session_id)
     if winner:
         winner.score += 1.0
+    gameplay_log.round_ended(room, gameplay_log.DECIDED, {room.czar_session_id: winner_session_id})
     await _end_round(room, [winner_session_id], manager)
 
 
@@ -285,10 +291,11 @@ async def tally_votes(room: Room, manager: ConnectionManager) -> None:
     if room.phase != "revealed" or room.finished:
         return
     if not room.votes:
-        room.next_czar()
-        await start_round(room, manager)
+        # Like a czar who doesn't pick: no point, and the hands are refilled for the next round.
+        await skip_revealed_round(room, manager)
         return
 
+    gameplay_log.round_ended(room, gameplay_log.DECIDED, dict(room.votes))
     counts = Counter(room.votes.values())
     max_votes = max(counts.values())
     winners = [sid for sid, c in counts.items() if c == max_votes]
@@ -307,6 +314,8 @@ async def skip_revealed_round(room: Room, manager: ConnectionManager) -> None:
         return
     room.phase = "round_ending"
     _cancel_timer(room)
+    any_submitted = any(p.submitted_cards for p in room.players.values())
+    gameplay_log.round_ended(room, gameplay_log.NO_DECISION if any_submitted else gameplay_log.NO_SUBMISSIONS)
 
     for player in room.players.values():
         room.discard_pile.extend(player.submitted_cards)

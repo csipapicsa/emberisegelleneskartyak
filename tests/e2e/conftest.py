@@ -6,6 +6,7 @@ card database next to it).
 
 With EEK_E2E_BASE_URL set, the tests run against that server instead of starting one; CI uses this to
 test the container image itself. That server must have the sample cards and no secrets configured.
+EEK_E2E_DATA_DIR tells the tests where that server's data directory is, so they can check what it wrote.
 
 When Playwright or its Chromium is missing these tests are skipped, so a plain `pytest` still works on a
 machine without browsers. The CI e2e job sets EEK_E2E_REQUIRED=1, which turns that skip into a failure.
@@ -19,6 +20,7 @@ import sys
 import time
 import urllib.request
 from collections.abc import Iterator
+from pathlib import Path
 from urllib.parse import urlparse
 
 import pytest
@@ -40,10 +42,12 @@ def _free_port() -> int:
 
 
 @pytest.fixture(scope="session")
-def server_url(tmp_path_factory) -> Iterator[str]:
+def server(tmp_path_factory) -> Iterator[tuple[str, Path | None]]:
+    """(base URL, the server's data directory or None if it isn't reachable from here)."""
     external = os.environ.get("EEK_E2E_BASE_URL")
     if external:
-        yield external.rstrip("/")
+        data = os.environ.get("EEK_E2E_DATA_DIR")
+        yield external.rstrip("/"), Path(data) if data else None
         return
     data_dir = tmp_path_factory.mktemp("data")
     subprocess.run(
@@ -76,13 +80,23 @@ def server_url(tmp_path_factory) -> Iterator[str]:
             if proc.poll() is not None or time.monotonic() > deadline:
                 pytest.fail(f"server did not start:\n{log_path.read_text()}")
             time.sleep(0.2)
-        yield url
+        yield url, data_dir
     finally:
         proc.terminate()
         try:
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
+
+
+@pytest.fixture(scope="session")
+def server_url(server) -> str:
+    return server[0]
+
+
+@pytest.fixture(scope="session")
+def server_data_dir(server) -> Path | None:
+    return server[1]
 
 
 @pytest.fixture(scope="session")

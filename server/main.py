@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 
-from server import card_search, card_seen, chat_db, edition_display, print_cards
+from server import card_search, card_seen, chat_db, edition_display, gameplay_log, print_cards
 from server import game as game_logic
 from server.analytics import get_stats, log_event
 from server.db import (
@@ -64,6 +64,9 @@ def _delete_room_and_chat(code: str) -> None:
     """Drop the in-memory room and its chat history together — chat is only
     ever meant to outlive the room it belongs to, never longer. Chat storage
     is a side concern: if it's unavailable, the room still has to go."""
+    room = get_room(code)
+    if room:
+        gameplay_log.room_closed(room)
     delete_room(code)
     try:
         conn = chat_db.get_conn()
@@ -169,6 +172,7 @@ async def lifespan(app: FastAPI):
     from server.analytics import init_analytics
     init_analytics(migrate_privacy=True)
     _reset_room_chat()
+    gameplay_log.init()
 
     flush_stop = asyncio.Event()
     flush_task = asyncio.create_task(_card_seen_flush_task(flush_stop))
@@ -187,6 +191,7 @@ async def lifespan(app: FastAPI):
     finally:
         flush_stop.set()
         await flush_task
+        await asyncio.to_thread(gameplay_log.shutdown)
 
 
 app = FastAPI(lifespan=lifespan)
@@ -1065,6 +1070,7 @@ async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
         if len(selected) != pick or len(set(card_ids)) != len(card_ids):
             await manager.send(room_code, session_id, {"event": "error", "message": f"Pontosan {pick} kártyát kell beküldeni."})
             return
+        gameplay_log.submitted(room, session_id, list(player.hand), selected)
         player.submitted_cards = selected
         for c in selected:
             player.hand.remove(c)
@@ -1086,6 +1092,7 @@ async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
             return
         player.hand.extend(player.submitted_cards)
         player.submitted_cards = []
+        gameplay_log.withdrawn(room, session_id)
         await manager.send(room_code, session_id, {"event": "hand_update", "hand": player.hand})
         await manager.broadcast(room_code, {
             "event": "submission_withdrawn",
@@ -1130,6 +1137,7 @@ async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
         room.discard_pile.append(old)
         player.hand.append(new_card)
         player.swaps_remaining -= 1
+        gameplay_log.hand_changed(room, session_id, [old], [new_card])
         await manager.send(room_code, session_id, {"event": "hand_update", "hand": player.hand})
 
     elif event == "request_new_hand":
@@ -1137,6 +1145,7 @@ async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
         if not player or room.phase != "submitting" or player.submitted_cards:
             return
         from server.deck import draw_card, reshuffle_into_deck
+        old_hand = player.hand
         room.discard_pile.extend(player.hand)
         player.hand = []
         if not room.white_deck:
@@ -1149,6 +1158,7 @@ async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
             card = draw_card(room.white_deck)
             if card:
                 player.hand.append(card)
+        gameplay_log.hand_changed(room, session_id, old_hand, player.hand)
         await manager.send(room_code, session_id, {"event": "hand_update", "hand": player.hand})
         await manager.send(room_code, session_id, {"event": "new_hand_dealt"})
 

@@ -11,6 +11,7 @@ htmlcov/
 analytics.db
 messages.db
 chat.db
+gameplay.db
 database/card_seen.db
 *.db-journal
 *.db-wal

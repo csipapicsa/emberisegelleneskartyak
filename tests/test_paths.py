@@ -12,11 +12,12 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PRINT_PATHS = """
 import json
 from scripts import backup_databases
-from server import analytics, card_seen, chat_db, db, messages_db, print_cards
+from server import analytics, card_seen, chat_db, db, gameplay_log, messages_db, print_cards
 print(json.dumps({
     "analytics": str(analytics.DB_PATH),
     "card_seen": str(card_seen.DB_PATH),
     "chat": str(chat_db.DB_PATH),
+    "gameplay": str(gameplay_log.DB_PATH),
     "card_master": str(db.DB_PATH),
     "messages": str(messages_db.DB_PATH),
     "print_output": str(print_cards.OUTPUT_DIR),
@@ -28,6 +29,7 @@ EXPECTED = {  # relative to the data directory: the same layout the live server 
     "analytics": "analytics.db",
     "card_seen": "database/card_seen.db",
     "chat": "chat.db",
+    "gameplay": "gameplay.db",
     "card_master": "database/card_master.db",
     "messages": "messages.db",
     "print_output": "generated/print",
