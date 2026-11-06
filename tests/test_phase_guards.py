@@ -29,9 +29,6 @@ async def test_submit_blocked_in_revealed_phase():
     mgr = FakeManager()
     await game_logic.start_game(room, make_black_cards(10), make_white_cards(60), mgr)
 
-    czar = room.czar_session_id
-    non_czar = [s for s in sids if s != czar]
-
     for sid in sids:
         room.players[sid].submitted_cards = [room.players[sid].hand.pop()]
     await game_logic.reveal_cards(room, mgr)

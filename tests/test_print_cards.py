@@ -7,6 +7,7 @@ import os
 import re
 import stat
 import time
+from itertools import pairwise
 
 import pytest
 from reportlab.pdfbase import pdfmetrics
@@ -134,7 +135,7 @@ def test_long_word_is_hyphenated_at_full_size():
             assert fits and size == layout.max_font, (layout.per_page, text, size)
             assert lines[0].endswith("-")
             # Removing the inserted hyphens gives the text back.
-            assert "".join(l[:-1] if l.endswith("-") else l + " " for l in lines).strip() == text
+            assert "".join(ln[:-1] if ln.endswith("-") else ln + " " for ln in lines).strip() == text
 
 
 def test_hyphenation_points_are_hungarian_syllable_breaks():
@@ -233,8 +234,8 @@ def test_cards_touch_in_a_grid_that_fits_the_page(per_page):
     xs = sorted({round(x, 6) for x, _ in boxes})
     ys = sorted({round(y, 6) for _, y in boxes})
     assert len(xs) == layout.columns and len(ys) == layout.rows
-    assert all(abs(b - a - layout.card_w) < 1e-6 for a, b in zip(xs, xs[1:]))
-    assert all(abs(b - a - layout.card_h) < 1e-6 for a, b in zip(ys, ys[1:]))
+    assert all(abs(b - a - layout.card_w) < 1e-6 for a, b in pairwise(xs))
+    assert all(abs(b - a - layout.card_h) < 1e-6 for a, b in pairwise(ys))
 
 
 def test_eighteen_per_page_is_landscape_with_smaller_cards():
@@ -410,7 +411,10 @@ def test_only_ink_saving_black_cards_get_the_tiny_black_card(monkeypatch, tmp_pa
     real_round = Canvas.roundRect
     for variant in print_cards.VARIANTS:
         marks = []
-        monkeypatch.setattr(Canvas, "roundRect", lambda self, *a, **k: (marks.append((a, k)), real_round(self, *a, **k)))
+        monkeypatch.setattr(
+            Canvas, "roundRect",
+            lambda self, *a, marks=marks, **k: (marks.append((a, k)), real_round(self, *a, **k)),
+        )
         print_cards.render_pdf([{"id": 1, "text": "Mi ez?", "pick": 2}], tmp_path / "x.pdf", variant, 9)
         x, y = print_cards._card_origin(0, NINE)
         inset = NINE.padding + NINE.frame_w

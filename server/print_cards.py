@@ -227,7 +227,7 @@ def wrap(text: str, size: float, width: float) -> tuple[list[str], bool]:
                     continue
                 head = f"{line}{joiner}" if line else ""
                 while not fits(head + piece):
-                    split = _hyphenate(piece, lambda first: fits(head + first))
+                    split = _hyphenate(piece, lambda first, head=head: fits(head + first))
                     if split is None:
                         if head:  # no point fits after the line's words: start a fresh line
                             lines.append(line)
@@ -361,12 +361,9 @@ def file_name(variant: str, cards: list[dict], per_page: int = DEFAULT_PER_PAGE)
 
 # Exactly the names file_name() makes, so a download URL can't name any
 # other file.
-FILE_NAME_RE = re.compile(
-    "(?:%s)-(?:%s)-[0-9a-f]{16}\\.pdf" % (
-        "|".join(re.escape(prefix) for prefix, *_ in VARIANTS.values()),
-        "|".join(str(n) for n in LAYOUTS),
-    )
-)
+_PREFIXES = "|".join(re.escape(prefix) for prefix, *_ in VARIANTS.values())
+_SIZES = "|".join(str(n) for n in LAYOUTS)
+FILE_NAME_RE = re.compile(rf"(?:{_PREFIXES})-(?:{_SIZES})-[0-9a-f]{{16}}\.pdf")
 
 
 def render_print_set(

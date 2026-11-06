@@ -383,7 +383,7 @@ async def _close_room_with_notice(code: str, reason: str = "admin_left") -> None
     await manager.broadcast(code, {"event": "room_closed", "reason": reason})
     # Force-disconnect each socket so the client navigates away cleanly.
     room_sockets = manager._sockets.get(code, {})
-    for sid, ws in list(room_sockets.items()):
+    for ws in list(room_sockets.values()):
         try:
             await ws.close(code=4002)
         except Exception:
@@ -613,12 +613,12 @@ async def api_card_ideas(request: Request):
             if int(content_length) > CARD_IDEA_MAX_BODY_BYTES:
                 raise HTTPException(413, "Túl nagy kérés")
         except ValueError:
-            raise HTTPException(400, "Érvénytelen kérés")
+            raise HTTPException(400, "Érvénytelen kérés") from None
 
     try:
         body = await request.json()
     except json.JSONDecodeError:
-        raise HTTPException(400, "Érvénytelen JSON")
+        raise HTTPException(400, "Érvénytelen JSON") from None
 
     card_type, text = _validate_card_idea_payload(body)
 
@@ -666,7 +666,7 @@ async def api_vote_card_idea(idea_id: int, request: Request):
     try:
         body = await request.json()
     except json.JSONDecodeError:
-        raise HTTPException(400, "Érvénytelen JSON")
+        raise HTTPException(400, "Érvénytelen JSON") from None
     vote = body.get("vote") if isinstance(body, dict) else None
     if vote not in ("like", "dislike"):
         raise HTTPException(400, "Érvénytelen szavazat")
@@ -733,12 +733,12 @@ async def api_card_feedback(request: Request):
             if int(content_length) > CARD_FEEDBACK_MAX_BODY_BYTES:
                 raise HTTPException(413, "Túl nagy kérés")
         except ValueError:
-            raise HTTPException(400, "Érvénytelen kérés")
+            raise HTTPException(400, "Érvénytelen kérés") from None
 
     try:
         body = await request.json()
     except json.JSONDecodeError:
-        raise HTTPException(400, "Érvénytelen JSON")
+        raise HTTPException(400, "Érvénytelen JSON") from None
     if not isinstance(body, dict):
         raise HTTPException(400, "Érvénytelen kérés")
     card_id = body.get("card_id")
@@ -800,11 +800,11 @@ async def api_print(request: Request):
             if int(content_length) > PRINT_MAX_BODY_BYTES:
                 raise HTTPException(413, "Túl nagy kérés")
         except ValueError:
-            raise HTTPException(400, "Érvénytelen kérés")
+            raise HTTPException(400, "Érvénytelen kérés") from None
     try:
         body = await request.json()
     except json.JSONDecodeError:
-        raise HTTPException(400, "Érvénytelen JSON")
+        raise HTTPException(400, "Érvénytelen JSON") from None
     if not isinstance(body, dict):
         raise HTTPException(400, "Érvénytelen kérés")
     edition_ids = body.get("edition_ids")
