@@ -69,10 +69,34 @@ Konténer / staging — teendők (2026-11-06)
     így a következő kör 9 lappal indul (a rákövetkező kör helyrehozza).
 [ ] Staging: a Umami-szkript a staging forgalmát is az éles statisztikába számolja.
 
-Phase 2 — elhalasztva (MLflow előbb)
-[ ] 2.4 Éles átköltöztetése konténerbe (eek user, /srv/eek/prod, :prod tag). BIZTONSÁG: ez zárja le
-    a P7-et: a játék most adminuser_developer-ként fut, aki wheel tag → egy kódfuttatási hiba = root.
-    A régi service maradjon visszaállításnak; a backup és cleanup timer EEK_DATA_DIR-rel menjen.
-[ ] CI deploy-ellenőrzés: merge után megvárni, hogy a staging /healthz az új commitot mutassa
-    (GitHub environment "staging").
-[ ] 2.5 Promote workflow (:main → :prod), docs/runbooks/deploy.md, visszaállítási gyakorlat.
+Következő lépések, sorrendben (2026-11-06, a projekt-review alapján)
+[ ] 1. Éles átköltöztetése konténerbe (Phase 2.4): eek user, /srv/eek/prod, :prod tag.
+       BIZTONSÁG: ez zárja le a P7-et (a játék most wheel tag userként fut → kódfuttatási hiba = root).
+       RENDBETÉTEL: minden adat /srv/eek/prod alá kerül, a kódmappában nem marad adatbázis.
+       A régi service maradjon visszaállításnak; a backup és cleanup timer EEK_DATA_DIR-rel menjen.
+    [ ] Promote workflow (:main → :prod) és docs/runbooks/deploy.md: merge → staging → éles, visszaállítás.
+    [ ] Visszaállítási gyakorlat: előző image élesbe, majd vissza.
+    [ ] Mentés-visszaállítási próba: mentésből ideiglenes mappába, PRAGMA integrity_check,
+        az app elindul a visszaállított adattal.
+    [ ] CI deploy-ellenőrzés: merge után megvárni, hogy a staging /healthz az új commitot mutassa
+        (GitHub environment "staging").
+[ ] 2. MLflow demó a gameplay.db adataiból (cél: az MLflow kipróbálása, nem a legjobb modell).
+[ ] 3. Konténer-image sérülékenységvizsgálat (Trivy), előbb csak riport. A Dependabot PR-okkal együtt.
+[ ] 4. Metrikák: kérésszám, 5xx arány, p95 válaszidő, aktív WebSocket-kapcsolatok → Prometheus →
+       Grafana, egy riasztással. Az MLflow után, nem vele egy időben.
+[ ] 5. Kis WebSocket terheléses teszt (10 → 25 → 50 kliens): hol az első szűk keresztmetszet.
+[ ] README: "Engineering decisions" szakasz (miért SQLite, miért egy processzben a szobák, mik a
+    korlátok, mit véd a CI és mit nem) + architektúraábra.
+
+Projekt-higiénia (2026-11-06)
+[ ] docs/ rendezése:
+    - analitika.md törlése: 1525 sor Python-kód .md néven.
+    - Elavult: PROJECT_STRUCTURE.md, PROGRESS.md (júniusi állapot) → frissített docs/architecture.md,
+      a történet a worklogs/ alá.
+    - Lezárt tervek és egyszeri jegyzetek (BUGFIX_timer_freeze.md, *_PLAN.md, adsense terv) →
+      worklogs/ vagy docs/private/.
+    - Témák szerinti mappák (operations/, features/, ml/), egységes kisbetűs fájlnevek, docs/README.md
+      tartalomjegyzékkel. Az áttekintő doksik angolul (portfólió), a játékszövegek maradnak magyarul.
+[ ] Élő mappa (/opt): cards.db, cards_safety_*.db, duplicate_cards.csv archiválása és törlése, az üres
+    cron/ törlése, backups/ a kódmappán kívülre. A 2.4-es átköltöztetéssel együtt.
+[ ] Megfontolni: a teendők GitHub Issues-ba költöztetése (a repóban látható, iparági gyakorlat).
