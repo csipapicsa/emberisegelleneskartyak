@@ -2,6 +2,7 @@
 """The /nyomtatas page's API: POST /api/print renders the printable PDFs for
 the picked editions, GET /api/print/<name> downloads one."""
 from __future__ import annotations
+
 import os
 import pathlib
 

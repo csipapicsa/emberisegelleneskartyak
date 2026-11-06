@@ -52,6 +52,7 @@ def test_adsense_ownership_meta_only_on_homepage():
 
 def test_ads_txt_served_at_root():
     from fastapi.testclient import TestClient
+
     from server.main import app
 
     res = TestClient(app).get("/ads.txt")

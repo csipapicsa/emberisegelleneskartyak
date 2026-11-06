@@ -10,7 +10,6 @@ import hashlib
 import hmac
 import os
 
-
 PRIVACY_HMAC_SECRET_ENV = "EEK_PRIVACY_HMAC_SECRET"
 
 
@@ -29,5 +28,5 @@ def pseudonymize_ip(ip: str, purpose: str) -> str:
         raise PrivacyConfigurationError(
             f"{PRIVACY_HMAC_SECRET_ENV} must be configured before using IP-based features."
         )
-    message = f"{purpose}:{ip.strip()}".encode("utf-8")
+    message = f"{purpose}:{ip.strip()}".encode()
     return hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()

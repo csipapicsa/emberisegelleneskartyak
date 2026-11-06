@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from scripts import backup_databases
 
@@ -22,10 +22,10 @@ def test_run_backs_up_every_top_level_database_and_prunes_expired(tmp_path):
     backup_dir.mkdir()
     expired = backup_dir / "old--20200101T000000Z.db"
     make_database(expired, "old")
-    old_timestamp = (datetime.now(timezone.utc) - timedelta(days=31)).timestamp()
+    old_timestamp = (datetime.now(UTC) - timedelta(days=31)).timestamp()
     os.utime(expired, (old_timestamp, old_timestamp))
 
-    created, deleted = backup_databases.run(tmp_path, now=datetime.now(timezone.utc))
+    created, deleted = backup_databases.run(tmp_path, now=datetime.now(UTC))
 
     assert len(created) == 2
     assert deleted == [expired]
@@ -45,7 +45,7 @@ def test_run_backs_up_databases_in_the_database_subdir(tmp_path):
     make_database(tmp_path / "card_master.db", "top")
     (tmp_path / "database").mkdir()
     make_database(tmp_path / "database" / "card_master.db", "uploaded")
-    now = datetime(2026, 10, 25, 12, 0, tzinfo=timezone.utc)
+    now = datetime(2026, 10, 25, 12, 0, tzinfo=UTC)
 
     created, _ = backup_databases.run(tmp_path, now=now)
 

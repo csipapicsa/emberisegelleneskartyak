@@ -3,10 +3,11 @@
 Unit tests for the room-scoped ConnectionManager.
 No WebSocket objects needed — we use a tiny stub.
 """
-import pytest
-import asyncio
-from server.room import create_room, delete_room, Player
 
+import pytest
+
+from server.main import ConnectionManager
+from server.room import Player, create_room, delete_room
 
 # ── Minimal WebSocket stub ────────────────────────────────────────────────────
 
@@ -26,11 +27,6 @@ class FakeWS:
     async def close(self, code=None):
         self.closed = True
         self.close_code = code
-
-
-# ── Import the real ConnectionManager ────────────────────────────────────────
-
-from server.main import ConnectionManager
 
 
 CODE_A = "CONA"
@@ -133,8 +129,8 @@ async def test_broadcast_reaches_all_players_in_room(mgr):
 
 @pytest.mark.asyncio
 async def test_broadcast_does_not_reach_other_room(mgr):
-    room_a = create_room(CODE_A, "s1", "u1")
-    room_b = create_room(CODE_B, "s2", "u2")
+    create_room(CODE_A, "s1", "u1")
+    create_room(CODE_B, "s2", "u2")
 
     ws_a, ws_b = FakeWS(), FakeWS()
     await mgr.connect(CODE_A, "s1", ws_a)

@@ -16,6 +16,7 @@ size and colour as proba-*.pdf, and lists any card whose text doesn't fit
 without cutting a word. Run it after uploading a new card_master.db.
 """
 from __future__ import annotations
+
 import argparse
 import sys
 import time

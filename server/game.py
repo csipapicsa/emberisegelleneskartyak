@@ -1,6 +1,7 @@
 # servers/game.py
 
 from __future__ import annotations
+
 import asyncio
 import random
 import time
@@ -8,9 +9,9 @@ from collections import Counter
 from typing import TYPE_CHECKING
 
 from server import card_seen
+from server.analytics import log_event
 from server.deck import build_deck, deal_hand, draw_black, draw_card, reshuffle_into_deck
 from server.room import Room
-from server.analytics import log_event
 
 if TYPE_CHECKING:
     from server.main import ConnectionManager
@@ -49,7 +50,7 @@ def _remove_player(room: Room, session_id: str) -> None:
             room.votes.pop(vsid, None)
 
 
-async def _kick_inactive_players(room: Room, manager: "ConnectionManager") -> list[str]:
+async def _kick_inactive_players(room: Room, manager: ConnectionManager) -> list[str]:
     """Kick connected players who didn't submit this round.
     Returns the list of session_ids that were kicked. If the room becomes
     unplayable, broadcasts game_aborted and sets room.finished.
@@ -96,7 +97,7 @@ async def _kick_inactive_players(room: Room, manager: "ConnectionManager") -> li
     return kicked
 
 
-async def start_game(room: Room, black_cards: list[dict], white_cards: list[dict], manager: "ConnectionManager") -> None:
+async def start_game(room: Room, black_cards: list[dict], white_cards: list[dict], manager: ConnectionManager) -> None:
     room.started = True
     room.round_num = 0
     room.czar_index = 0
@@ -115,7 +116,7 @@ async def start_game(room: Room, black_cards: list[dict], white_cards: list[dict
     await start_round(room, manager)
 
 
-async def start_round(room: Room, manager: "ConnectionManager") -> None:
+async def start_round(room: Room, manager: ConnectionManager) -> None:
     if room.finished:
         return
 
@@ -167,7 +168,7 @@ async def start_round(room: Room, manager: "ConnectionManager") -> None:
         room.timer_task = asyncio.create_task(_timer_task(room, room.round_num, manager))
 
 
-async def _timer_task(room: Room, round_num: int, manager: "ConnectionManager") -> None:
+async def _timer_task(room: Room, round_num: int, manager: ConnectionManager) -> None:
     remaining = room.timer_seconds
     while remaining > 0:
         await asyncio.sleep(1)
@@ -186,7 +187,7 @@ async def _timer_task(room: Room, round_num: int, manager: "ConnectionManager") 
         await reveal_cards(room, manager)
 
 
-async def reveal_cards(room: Room, manager: "ConnectionManager") -> None:
+async def reveal_cards(room: Room, manager: ConnectionManager) -> None:
     if room.phase != "submitting":
         return
 
@@ -250,7 +251,7 @@ async def reveal_cards(room: Room, manager: "ConnectionManager") -> None:
         room.timer_task = asyncio.create_task(_timer_task(room, room.round_num, manager))
 
 
-async def czar_pick(room: Room, winner_session_id: str, manager: "ConnectionManager") -> None:
+async def czar_pick(room: Room, winner_session_id: str, manager: ConnectionManager) -> None:
     if room.voting_mode != "czar" or room.phase != "revealed":
         return
     if room.prevent_self_vote and len(room.players) > 1 and room.czar_session_id == winner_session_id:
@@ -261,7 +262,7 @@ async def czar_pick(room: Room, winner_session_id: str, manager: "ConnectionMana
     await _end_round(room, [winner_session_id], manager)
 
 
-async def cast_vote(room: Room, voter_sid: str, winner_sid: str, manager: "ConnectionManager") -> None:
+async def cast_vote(room: Room, voter_sid: str, winner_sid: str, manager: ConnectionManager) -> None:
     if room.voting_mode != "vote" or room.phase != "revealed":
         return
     if voter_sid in room.votes:
@@ -280,7 +281,7 @@ async def cast_vote(room: Room, voter_sid: str, winner_sid: str, manager: "Conne
         await tally_votes(room, manager)
 
 
-async def tally_votes(room: Room, manager: "ConnectionManager") -> None:
+async def tally_votes(room: Room, manager: ConnectionManager) -> None:
     if room.phase != "revealed" or room.finished:
         return
     if not room.votes:
@@ -300,7 +301,7 @@ async def tally_votes(room: Room, manager: "ConnectionManager") -> None:
     await _end_round(room, winners, manager)
 
 
-async def skip_revealed_round(room: Room, manager: "ConnectionManager") -> None:
+async def skip_revealed_round(room: Room, manager: ConnectionManager) -> None:
     """Finish a revealed round without awarding a point."""
     if room.phase not in ("submitting", "revealed") or room.finished:
         return
@@ -330,7 +331,7 @@ async def skip_revealed_round(room: Room, manager: "ConnectionManager") -> None:
     await start_round(room, manager)
 
 
-async def _end_round(room: Room, winners: list[str], manager: "ConnectionManager") -> None:
+async def _end_round(room: Room, winners: list[str], manager: ConnectionManager) -> None:
     if room.phase not in ("revealed", "submitting") or room.finished:
         return
     room.phase = "round_ending"
@@ -367,7 +368,7 @@ async def _end_round(room: Room, winners: list[str], manager: "ConnectionManager
     await start_round(room, manager)
 
 
-async def handle_disconnect(room: Room, session_id: str, manager: "ConnectionManager") -> None:
+async def handle_disconnect(room: Room, session_id: str, manager: ConnectionManager) -> None:
     player = room.players.get(session_id)
     if not player:
         return

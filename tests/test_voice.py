@@ -1,8 +1,11 @@
 # tests/test_voice.py
 """Server-side tests for per-user voice mute/unmute event handling."""
 from __future__ import annotations
-import pytest
+
 from unittest.mock import patch
+
+import pytest
+
 from server.main import _handle_message
 from server.room import delete_room
 from tests.helpers import FakeManager, make_room

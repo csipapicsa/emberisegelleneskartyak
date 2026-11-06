@@ -89,6 +89,7 @@ async def test_start_game_counts_hands_and_first_black_card():
 
 def test_app_shutdown_flushes_pending_counts(monkeypatch, tmp_path):
     from fastapi.testclient import TestClient
+
     from server import analytics, messages_db
     from server.main import app
 

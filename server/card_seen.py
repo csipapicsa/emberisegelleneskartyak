@@ -19,11 +19,12 @@ single b-tree probe. Community cards are counted under their offset ids
 (COMMUNITY_ID_OFFSET), so they never collide with card_master.db ids.
 """
 from __future__ import annotations
+
 import logging
 import os
 import sqlite3
 from collections import Counter
-from typing import Iterable
+from collections.abc import Iterable
 
 logger = logging.getLogger(__name__)
 

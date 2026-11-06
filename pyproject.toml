@@ -17,3 +17,18 @@ markers = [
     # CI runs on scripts/make_sample_db.py's made-up cards and deselects these.
     "local_data: needs the real database/card_master.db; deselected in CI (-m \"not local_data\")",
 ]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120          # only used to wrap long import lines; E501 (line too long) is not enforced
+
+[tool.ruff.lint]
+# Listed explicitly: ruff's default rule set changes between releases, so relying on it would let a
+# ruff upgrade turn CI red without any code change. The version is pinned in requirements-dev.txt.
+select = [
+    "E4", "E7", "E9",  # pycodestyle: statements, imports, syntax errors
+    "F",               # pyflakes: unused/undefined names, redefinitions
+    "B",               # flake8-bugbear: likely bugs (loop-variable closures, broad assertRaises, ...)
+    "I",               # isort: import order
+    "UP",              # pyupgrade: modern syntax for the target Python
+]

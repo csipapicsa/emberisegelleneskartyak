@@ -5,10 +5,10 @@ These are the bugs that burned us before: submitting in the wrong phase,
 double-reveals, double-end-rounds, etc.
 """
 import pytest
-from server.room import delete_room
-from server import game as game_logic
-from tests.helpers import FakeManager, make_room, make_white_cards, make_black_cards
 
+from server import game as game_logic
+from server.room import delete_room
+from tests.helpers import FakeManager, make_black_cards, make_room, make_white_cards
 
 CODE = "PH"
 
@@ -28,9 +28,6 @@ async def test_submit_blocked_in_revealed_phase():
     room, sids = make_room(CODE, n_players=3, voting_mode="czar")
     mgr = FakeManager()
     await game_logic.start_game(room, make_black_cards(10), make_white_cards(60), mgr)
-
-    czar = room.czar_session_id
-    non_czar = [s for s in sids if s != czar]
 
     for sid in sids:
         room.players[sid].submitted_cards = [room.players[sid].hand.pop()]

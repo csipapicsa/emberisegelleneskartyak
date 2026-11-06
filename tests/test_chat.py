@@ -7,15 +7,16 @@ event (available to approved *and* pending players), history delivered on
 join/reconnect, and that deleting a room purges its chat rows.
 """
 from __future__ import annotations
+
 import sqlite3
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 from server import chat_db
 from server import main as main_mod
 from server.room import Player, create_room, delete_room
 from tests.helpers import FakeManager, make_room
-
 
 CODE = "CHAT"
 

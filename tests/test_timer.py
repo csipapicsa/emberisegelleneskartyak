@@ -6,13 +6,14 @@ Key invariants:
   - stale timer from old round ignores current room state
   - timer expiry triggers reveal_cards (submitting) or tally_votes (revealed+vote)
 """
-import pytest
 import asyncio
-from unittest.mock import patch, AsyncMock
-from server.room import delete_room
-from server import game as game_logic
-from tests.helpers import FakeManager, make_room, make_white_cards, make_black_cards
+from unittest.mock import patch
 
+import pytest
+
+from server import game as game_logic
+from server.room import delete_room
+from tests.helpers import FakeManager, make_black_cards, make_room, make_white_cards
 
 CODE = "TMR"
 

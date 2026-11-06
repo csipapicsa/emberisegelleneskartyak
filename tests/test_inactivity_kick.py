@@ -2,12 +2,12 @@
 when the submitting phase ends (i.e. inside `reveal_cards`).
 Standalone (1-player) rooms are exempt."""
 from __future__ import annotations
+
 import pytest
 
-from server.room import delete_room, Player
 from server import game as game_logic
-from tests.helpers import FakeManager, make_room, make_white_cards, make_black_cards
-
+from server.room import delete_room
+from tests.helpers import FakeManager, make_black_cards, make_room, make_white_cards
 
 CODE = "KCK"
 

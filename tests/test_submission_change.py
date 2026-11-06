@@ -3,11 +3,10 @@ from __future__ import annotations
 
 import pytest
 
-from server.room import delete_room
 from server import game as game_logic
 from server import main as main_mod
-from tests.helpers import FakeManager, make_room, make_white_cards, make_black_cards
-
+from server.room import delete_room
+from tests.helpers import FakeManager, make_black_cards, make_room, make_white_cards
 
 CODE = "CHG"
 

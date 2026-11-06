@@ -1,6 +1,7 @@
 # server/main.py
 
 from __future__ import annotations
+
 import asyncio
 import hmac
 import ipaddress
@@ -12,37 +13,42 @@ import re
 import string
 import time
 from collections import deque
-from contextlib import asynccontextmanager
-from contextlib import suppress
+from contextlib import asynccontextmanager, suppress
 
-from fastapi import FastAPI, Request, WebSocket, HTTPException
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
 
+from server import card_search, card_seen, chat_db, edition_display, print_cards
+from server import game as game_logic
+from server.analytics import get_stats, log_event
 from server.db import (
-    get_conn,
-    get_editions,
-    get_edition_name,
     get_cards_for_edition,
     get_cards_for_editions,
+    get_conn,
+    get_edition_name,
+    get_editions,
     get_playable_cards,
 )
-from server import card_search
-from server import edition_display
-from server import print_cards
-from server.messages_db import get_conn as get_msg_conn, ensure_tables as ensure_msg_tables, \
-    save_message, save_card_idea, get_chat_messages, post_chat_message, \
-    get_community_cards, list_card_ideas, vote_card_idea, purge_expired_data, \
-    add_card_feedback, \
-    COMMUNITY_EDITION_ID, COMMUNITY_EDITION_NAME
-from server import chat_db
-from server import card_seen
-from server.session import create_or_get_session
-from server.room import create_room, get_room, delete_room, Player
-from server import game as game_logic
-from server.voice import generate_turn_credentials, validate_signal, check_ice_rate
-from server.analytics import log_event, get_stats
+from server.messages_db import (
+    COMMUNITY_EDITION_ID,
+    COMMUNITY_EDITION_NAME,
+    add_card_feedback,
+    get_chat_messages,
+    get_community_cards,
+    list_card_ideas,
+    post_chat_message,
+    purge_expired_data,
+    save_card_idea,
+    save_message,
+    vote_card_idea,
+)
+from server.messages_db import ensure_tables as ensure_msg_tables
+from server.messages_db import get_conn as get_msg_conn
 from server.privacy import PrivacyConfigurationError, pseudonymize_ip
+from server.room import Player, create_room, delete_room, get_room
+from server.session import create_or_get_session
+from server.voice import check_ice_rate, generate_turn_credentials, validate_signal
 
 logger = logging.getLogger(__name__)
 
@@ -377,7 +383,7 @@ async def _close_room_with_notice(code: str, reason: str = "admin_left") -> None
     await manager.broadcast(code, {"event": "room_closed", "reason": reason})
     # Force-disconnect each socket so the client navigates away cleanly.
     room_sockets = manager._sockets.get(code, {})
-    for sid, ws in list(room_sockets.items()):
+    for ws in list(room_sockets.values()):
         try:
             await ws.close(code=4002)
         except Exception:
@@ -607,12 +613,12 @@ async def api_card_ideas(request: Request):
             if int(content_length) > CARD_IDEA_MAX_BODY_BYTES:
                 raise HTTPException(413, "Túl nagy kérés")
         except ValueError:
-            raise HTTPException(400, "Érvénytelen kérés")
+            raise HTTPException(400, "Érvénytelen kérés") from None
 
     try:
         body = await request.json()
     except json.JSONDecodeError:
-        raise HTTPException(400, "Érvénytelen JSON")
+        raise HTTPException(400, "Érvénytelen JSON") from None
 
     card_type, text = _validate_card_idea_payload(body)
 
@@ -660,7 +666,7 @@ async def api_vote_card_idea(idea_id: int, request: Request):
     try:
         body = await request.json()
     except json.JSONDecodeError:
-        raise HTTPException(400, "Érvénytelen JSON")
+        raise HTTPException(400, "Érvénytelen JSON") from None
     vote = body.get("vote") if isinstance(body, dict) else None
     if vote not in ("like", "dislike"):
         raise HTTPException(400, "Érvénytelen szavazat")
@@ -727,12 +733,12 @@ async def api_card_feedback(request: Request):
             if int(content_length) > CARD_FEEDBACK_MAX_BODY_BYTES:
                 raise HTTPException(413, "Túl nagy kérés")
         except ValueError:
-            raise HTTPException(400, "Érvénytelen kérés")
+            raise HTTPException(400, "Érvénytelen kérés") from None
 
     try:
         body = await request.json()
     except json.JSONDecodeError:
-        raise HTTPException(400, "Érvénytelen JSON")
+        raise HTTPException(400, "Érvénytelen JSON") from None
     if not isinstance(body, dict):
         raise HTTPException(400, "Érvénytelen kérés")
     card_id = body.get("card_id")
@@ -794,11 +800,11 @@ async def api_print(request: Request):
             if int(content_length) > PRINT_MAX_BODY_BYTES:
                 raise HTTPException(413, "Túl nagy kérés")
         except ValueError:
-            raise HTTPException(400, "Érvénytelen kérés")
+            raise HTTPException(400, "Érvénytelen kérés") from None
     try:
         body = await request.json()
     except json.JSONDecodeError:
-        raise HTTPException(400, "Érvénytelen JSON")
+        raise HTTPException(400, "Érvénytelen JSON") from None
     if not isinstance(body, dict):
         raise HTTPException(400, "Érvénytelen kérés")
     edition_ids = body.get("edition_ids")

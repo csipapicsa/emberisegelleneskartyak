@@ -1,8 +1,7 @@
 # tests/test_deck.py
 """Unit tests for deck operations."""
-import pytest
-from server.deck import build_deck, deal_hand, draw_card, draw_black, least_seen_shuffle, reshuffle_into_deck
-from tests.helpers import make_white_cards, make_black_cards
+from server.deck import build_deck, deal_hand, draw_black, draw_card, least_seen_shuffle, reshuffle_into_deck
+from tests.helpers import make_black_cards, make_white_cards
 
 
 def test_build_deck_preserves_all_cards():

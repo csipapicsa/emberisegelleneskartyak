@@ -1,12 +1,13 @@
 # tests/test_messages.py
 """Unit and HTTP tests for the global chat message wall."""
 from __future__ import annotations
+
 import json
 import sqlite3
-import pytest
 from unittest.mock import patch
-from fastapi import HTTPException, Request
 
+import pytest
+from fastapi import HTTPException, Request
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -88,7 +89,7 @@ def test_ensure_tables_creates_card_ideas_table_with_vote_counters(db):
 
 
 def test_post_and_retrieve_message(db):
-    from server.messages_db import post_chat_message, get_chat_messages
+    from server.messages_db import get_chat_messages, post_chat_message
     post_chat_message(db, "Feri", "Helló világ!")
     msgs = get_chat_messages(db)
     assert len(msgs) == 1
@@ -97,7 +98,7 @@ def test_post_and_retrieve_message(db):
 
 
 def test_messages_returned_in_chronological_order(db):
-    from server.messages_db import post_chat_message, get_chat_messages
+    from server.messages_db import get_chat_messages, post_chat_message
     post_chat_message(db, "Alice", "Első üzenet")
     post_chat_message(db, "Bob", "Második üzenet")
     msgs = get_chat_messages(db)
@@ -106,7 +107,7 @@ def test_messages_returned_in_chronological_order(db):
 
 
 def test_xss_escaped_in_message(db):
-    from server.messages_db import post_chat_message, get_chat_messages
+    from server.messages_db import get_chat_messages, post_chat_message
     post_chat_message(db, "Hacker<script>", "<img src=x onerror=alert(1)>")
     msgs = get_chat_messages(db)
     # html.escape converts < and > — the raw tag markers must not appear
@@ -115,13 +116,13 @@ def test_xss_escaped_in_message(db):
 
 
 def test_empty_message_not_saved(db):
-    from server.messages_db import post_chat_message, get_chat_messages
+    from server.messages_db import get_chat_messages, post_chat_message
     post_chat_message(db, "Feri", "")
     assert get_chat_messages(db) == []
 
 
 def test_empty_username_not_saved(db):
-    from server.messages_db import post_chat_message, get_chat_messages
+    from server.messages_db import get_chat_messages, post_chat_message
     post_chat_message(db, "", "Valami")
     assert get_chat_messages(db) == []
 
@@ -141,20 +142,20 @@ def test_purge_expired_data_removes_old_contact_messages(db):
 
 
 def test_whitespace_only_not_saved(db):
-    from server.messages_db import post_chat_message, get_chat_messages
+    from server.messages_db import get_chat_messages, post_chat_message
     post_chat_message(db, "   ", "   ")
     assert get_chat_messages(db) == []
 
 
 def test_username_truncated_to_24_chars(db):
-    from server.messages_db import post_chat_message, get_chat_messages
+    from server.messages_db import get_chat_messages, post_chat_message
     post_chat_message(db, "A" * 100, "Üzenet")
     msgs = get_chat_messages(db)
     assert len(msgs[0]["username"]) <= 24
 
 
 def test_message_truncated_to_500_chars(db):
-    from server.messages_db import post_chat_message, get_chat_messages
+    from server.messages_db import get_chat_messages, post_chat_message
     post_chat_message(db, "Feri", "X" * 1000)
     msgs = get_chat_messages(db)
     assert len(msgs[0]["message"]) <= 500
@@ -173,7 +174,7 @@ def test_old_messages_purged_on_read(db):
 
 
 def test_messages_within_30_days_kept(db):
-    from server.messages_db import post_chat_message, get_chat_messages
+    from server.messages_db import get_chat_messages, post_chat_message
     post_chat_message(db, "Feri", "Friss üzenet")
     # Also insert one 29 days old — should survive
     db.execute(
@@ -189,7 +190,7 @@ def test_messages_within_30_days_kept(db):
 
 
 def test_limit_respected(db):
-    from server.messages_db import post_chat_message, get_chat_messages
+    from server.messages_db import get_chat_messages, post_chat_message
     for i in range(60):
         post_chat_message(db, "User", f"Üzenet {i}")
     msgs = get_chat_messages(db, limit=10)
@@ -197,7 +198,7 @@ def test_limit_respected(db):
 
 
 def test_limit_returns_most_recent(db):
-    from server.messages_db import post_chat_message, get_chat_messages
+    from server.messages_db import get_chat_messages, post_chat_message
     for i in range(10):
         post_chat_message(db, "User", f"Üzenet {i}")
     # limit=5 should return the last 5, oldest-first within that window
@@ -207,7 +208,7 @@ def test_limit_returns_most_recent(db):
 
 
 def test_get_messages_returns_created_at_field(db):
-    from server.messages_db import post_chat_message, get_chat_messages
+    from server.messages_db import get_chat_messages, post_chat_message
     post_chat_message(db, "Feri", "Teszt")
     msgs = get_chat_messages(db)
     assert "created_at" in msgs[0]
@@ -424,7 +425,7 @@ async def test_post_card_idea_malformed_json_returns_400(api_db):
 
 @pytest.mark.asyncio
 async def test_post_card_idea_oversized_body_returns_413(api_db):
-    from server.main import api_card_ideas, CARD_IDEA_MAX_BODY_BYTES
+    from server.main import CARD_IDEA_MAX_BODY_BYTES, api_card_ideas
     request = make_raw_request(
         b"{}",
         {

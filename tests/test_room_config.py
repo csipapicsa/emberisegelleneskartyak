@@ -7,7 +7,6 @@ from server import main as main_mod
 from server.room import Player, create_room, delete_room
 from tests.helpers import FakeManager
 
-
 CODE = "CFG"
 
 

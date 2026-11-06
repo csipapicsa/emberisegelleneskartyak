@@ -1,6 +1,7 @@
 from __future__ import annotations
-import sqlite3
+
 import os
+import sqlite3
 
 # card_master.db is built offline (translation + review on the dev machine)
 # and uploaded as a whole file, so the server only ever reads it. Use only

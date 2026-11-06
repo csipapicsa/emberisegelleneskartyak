@@ -1,23 +1,24 @@
 # tests/test_community_edition.py
 """Unit and HTTP tests for the "Ti küldtétek" community edition + per-IP voting."""
 from __future__ import annotations
+
 import json
 import sqlite3
-import pytest
 from unittest.mock import patch
+
+import pytest
 from fastapi import HTTPException, Request
 
 from server.messages_db import (
-    ensure_tables,
-    save_card_idea,
-    get_community_cards,
-    list_card_ideas,
-    vote_card_idea,
     COMMUNITY_EDITION_ID,
     COMMUNITY_ID_OFFSET,
+    ensure_tables,
+    get_community_cards,
+    list_card_ideas,
+    save_card_idea,
+    vote_card_idea,
 )
 from server.privacy import pseudonymize_ip
-
 
 # ── Fixtures & helpers ────────────────────────────────────────────────────────
 
@@ -348,7 +349,7 @@ async def test_api_vote_valid_returns_counts(api_db):
 
 @pytest.mark.asyncio
 async def test_api_vote_persists_per_ip_across_calls(api_db):
-    from server.main import api_vote_card_idea, api_list_card_ideas
+    from server.main import api_list_card_ideas, api_vote_card_idea
     idea_id = seed_idea("white", "IP-alapú.")
     await api_vote_card_idea(idea_id, json_request({"vote": "like"}, {"x-real-ip": "8.8.8.8"}))
     # Same IP listing sees its own vote

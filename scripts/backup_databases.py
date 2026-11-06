@@ -12,9 +12,8 @@ import fcntl
 import os
 import sqlite3
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-
 
 RETENTION_DAYS = 30
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -50,7 +49,7 @@ def prune_old_backups(backup_dir: Path, now: datetime) -> list[Path]:
     cutoff = now - timedelta(days=RETENTION_DAYS)
     deleted: list[Path] = []
     for path in backup_dir.glob("*.db"):
-        modified_at = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+        modified_at = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
         if modified_at < cutoff:
             path.unlink()
             deleted.append(path)
@@ -59,7 +58,7 @@ def prune_old_backups(backup_dir: Path, now: datetime) -> list[Path]:
 
 def run(project_root: Path, now: datetime | None = None) -> tuple[list[Path], list[Path]]:
     """Create one timestamped backup per database and purge expired files."""
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     backup_dir = project_root / "backups"
     backup_dir.mkdir(mode=0o700, exist_ok=True)
     os.chmod(backup_dir, 0o700)

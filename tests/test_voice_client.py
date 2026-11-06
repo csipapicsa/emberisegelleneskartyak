@@ -7,19 +7,25 @@ These exercise voice.js directly against stubbed DOM/WebRTC objects; this
 wrapper keeps them in the same `pytest` run as everything else.
 """
 from __future__ import annotations
+
+import glob
 import os
 import shutil
 import subprocess
+
 import pytest
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-JS_TEST_DIR = os.path.join(REPO_ROOT, "tests", "js")
+# Explicit files, not the directory: Node 21+ reads --test arguments as glob
+# patterns, and the directory form behaves differently across versions.
+JS_TEST_FILES = sorted(glob.glob(os.path.join(REPO_ROOT, "tests", "js", "*.test.js")))
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
 def test_voice_client_suite():
+    assert JS_TEST_FILES, "no tests/js/*.test.js files found"
     result = subprocess.run(
-        ["node", "--test", JS_TEST_DIR],
+        ["node", "--test", *JS_TEST_FILES],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
