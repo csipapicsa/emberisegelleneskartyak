@@ -14,9 +14,11 @@ import string
 import time
 from collections import deque
 from contextlib import asynccontextmanager, suppress
+from typing import Annotated
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket
+from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 
 from server import card_search, card_seen, chat_db, edition_display, print_cards
@@ -1189,16 +1191,25 @@ def _admin_key_ok(key: str) -> bool:
     """True if `key` matches the configured admin key.
 
     Fails closed: with no key configured the stats page is never served, so a
-    server missing the env file can't be opened with an empty ?key=.
+    server missing the env file can't be opened with an empty password.
     """
     expected = os.environ.get(ADMIN_STATS_KEY_ENV, "")
     return bool(expected) and hmac.compare_digest(key.encode(), expected.encode())
 
 
-@app.get("/admin/stats", response_class=HTMLResponse)
-async def admin_stats(key: str = ""):
-    if not _admin_key_ok(key):
-        raise HTTPException(403, "Forbidden")
+# The key travels as the HTTP Basic Auth password, in the Authorization header.
+# A query parameter (?key=...) would be written to the nginx and uvicorn access
+# logs and the browser history; headers are not. Any username is accepted.
+_admin_basic = HTTPBasic(auto_error=False)
+
+
+def _require_admin(credentials: Annotated[HTTPBasicCredentials | None, Depends(_admin_basic)]) -> None:
+    if credentials is None or not _admin_key_ok(credentials.password):
+        raise HTTPException(401, "Unauthorized", headers={"WWW-Authenticate": 'Basic realm="Statisztika"'})
+
+
+@app.get("/admin/stats", response_class=HTMLResponse, dependencies=[Depends(_require_admin)])
+async def admin_stats():
     s = get_stats()
     c = s["counts"]
 

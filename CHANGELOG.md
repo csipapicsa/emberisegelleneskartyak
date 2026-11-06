@@ -20,6 +20,8 @@ The game has been live since April 2026; changes before this file are in the git
 - GPL-3.0-or-later license, `pyproject.toml`, pinned `requirements.txt` and `requirements-dev.txt`.
 
 ### Changed
+- `/admin/stats` takes the key as the HTTP Basic Auth password instead of a `?key=` URL parameter, so it no
+  longer ends up in the nginx and uvicorn access logs or the browser history.
 - The `/admin/stats` key comes from the `EEK_ADMIN_STATS_KEY` environment variable and the page stays closed
   without it (it was hardcoded).
 - Deployment templates moved to `deploy/`; dated session notes moved to `docs/worklogs/`.
