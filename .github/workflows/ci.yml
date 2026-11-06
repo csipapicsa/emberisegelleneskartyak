@@ -187,6 +187,7 @@ jobs:
         env:
           EEK_E2E_REQUIRED: "1"
           EEK_E2E_BASE_URL: http://127.0.0.1:8010
+          EEK_E2E_DATA_DIR: ci-data  # the container's /data, so the test can check the gameplay log
       - name: Container log
         if: ${{ !cancelled() }}
         run: docker logs app

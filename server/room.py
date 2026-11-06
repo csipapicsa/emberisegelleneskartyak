@@ -51,6 +51,7 @@ class Room:
     round_start_time: float | None = None
     votes: dict[str, str] = field(default_factory=dict)  # voter_sid → winner_sid
     timer_task: object = field(default=None, repr=False)  # asyncio.Task | None
+    gameplay: object = field(default=None, repr=False)  # gameplay_log.GameLog | None
 
     @property
     def czar_session_id(self) -> str | None:

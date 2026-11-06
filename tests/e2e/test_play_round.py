@@ -7,8 +7,12 @@ czar's pick.
 from __future__ import annotations
 
 import re
+import sqlite3
+import time
 
 import pytest
+
+from server.gameplay_log import unpack_ids
 
 # Skipped (not an import error) where Playwright isn't installed; see conftest.py.
 expect = pytest.importorskip("playwright.sync_api").expect
@@ -33,7 +37,22 @@ def submit_cards(page) -> None:
     expect(modal).to_be_hidden()
 
 
-def test_three_players_play_a_round(new_player):
+def logged_round(data_dir) -> sqlite3.Connection:
+    """The gameplay log is written by a background thread; wait until the round is in."""
+    path = data_dir / "gameplay.db"
+    deadline = time.monotonic() + 10
+    while True:
+        if path.exists():
+            conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+            if conn.execute("SELECT name FROM sqlite_master WHERE name = 'round'").fetchone() and \
+                    conn.execute("SELECT 1 FROM round WHERE outcome = 0").fetchone():
+                return conn
+            conn.close()
+        assert time.monotonic() < deadline, "the round never reached gameplay.db"
+        time.sleep(0.2)
+
+
+def test_three_players_play_a_round(new_player, server_data_dir):
     admin, *others = players = [new_player(name) for name in NAMES]
 
     # Admin creates the room.
@@ -94,3 +113,25 @@ def test_three_players_play_a_round(new_player):
     assert len(set(labels)) == 1, labels
     czar_name = NAMES[players.index(czar)]
     assert any(name in labels[0] for name in NAMES if name != czar_name), labels[0]
+
+    # The round is in the anonymous gameplay log: three hands with their picks, the shown order, and the
+    # czar's pick as a single vote for another seat.
+    if server_data_dir is None:
+        return  # an external server whose data directory isn't reachable (CI sets EEK_E2E_DATA_DIR)
+    conn = logged_round(server_data_dir)
+    (game_id,) = conn.execute("SELECT MAX(game_id) FROM game").fetchone()
+    czar_seat, outcome, eligible, shown, black = conn.execute(
+        "SELECT czar, outcome, eligible, shown, black FROM round WHERE game_id = ? AND round_no = 1", (game_id,)
+    ).fetchone()
+    (pick,) = conn.execute("SELECT pick FROM card_text WHERE text_id = ?", (black,)).fetchone()
+    assert (outcome, eligible) == (0, 1)
+    assert sorted(unpack_ids(shown)) == [0, 1, 2]
+    decisions = conn.execute("SELECT hand, picks FROM decision WHERE game_id = ? AND round_no = 1",
+                             (game_id,)).fetchall()
+    assert len(decisions) == 3
+    for hand, picks in decisions:
+        assert len(unpack_ids(hand)) == 10 and len(unpack_ids(picks)) == pick
+    ((voter, target),) = conn.execute("SELECT voter, target FROM vote WHERE game_id = ? AND round_no = 1",
+                                      (game_id,)).fetchall()
+    assert voter == czar_seat != target
+    conn.close()

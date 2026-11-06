@@ -1,6 +1,7 @@
 # Gameplay logging for machine learning: data spec
 
-**Status:** draft for review, not implemented yet.
+**Status:** implemented in [server/gameplay_log.py](../../server/gameplay_log.py), tests in
+[tests/test_gameplay_log.py](../../tests/test_gameplay_log.py).
 **Goal:** record every decision players make in a round, so that models can later learn which white card
 a player picks for a black card, and which card the others reward. Background and the modelling plan:
 [emberisegellenes_kartyak_learning_data_collection.md](../emberisegellenes_kartyak_learning_data_collection.md).
@@ -150,10 +151,14 @@ text index dropped. A year of play stays under 20 MB.
 
 ## Write path
 
-1. The game calls small, synchronous hooks (`game_started`, `hand_changed`, `submitted`, `revealed`, `voted`,
-   `round_ended`) that only append to the room's in-memory buffer.
+1. The game calls small, synchronous hooks (`game_started`, `round_started`, `hand_changed`, `submitted`,
+   `withdrawn`, `submissions_closed`, `revealed`, `round_ended`, `room_closed`) that only update the room's
+   in-memory state. `submissions_closed` runs before inactive players are kicked, so their hands are still
+   logged.
 2. At `round_ended`, the round's rows go to a background writer, which commits them in one transaction:
-   a round is either completely in the log or not at all. A room closed mid-round is written with outcome 3.
+   a round is either completely in the log or not at all. Each batch carries its own card texts, game and
+   seat rows (insert-if-missing), so one failed write loses that round and nothing else. A room closed
+   mid-round is written with outcome 3.
 3. The writer catches and logs its own errors; a full disk or a locked file never reaches the game.
 4. `EEK_GAMEPLAY_LOG=0` turns logging off without a deploy.
 

@@ -56,3 +56,13 @@ def test_run_backs_up_databases_in_the_database_subdir(tmp_path):
     con = sqlite3.connect(tmp_path / "backups" / "database__card_master--20261025T120000Z.db")
     assert con.execute("SELECT value FROM values_table").fetchone()[0] == "uploaded"
     con.close()
+
+
+def test_gameplay_log_is_backed_up(tmp_path):
+    """The ML training data (server/gameplay_log.py) sits in the data directory root (tests/test_paths.py),
+    so the daily backup picks it up with the other databases."""
+    from server import gameplay_log
+
+    gameplay_log.init(tmp_path / "gameplay.db")
+    gameplay_log.shutdown()
+    assert tmp_path / "gameplay.db" in backup_databases.sqlite_databases(tmp_path)
