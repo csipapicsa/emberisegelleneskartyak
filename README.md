@@ -60,7 +60,7 @@ Without them the IP-based features (card idea voting, visitor statistics) and th
 
 ```bash
 venv/bin/python -m pytest                      # everything
-venv/bin/python -m pytest -m "not local_data"  # what CI runs: no real card database needed
+venv/bin/python -m pytest -m "not local_data" --cov  # what CI runs: sample cards, coverage gate
 venv/bin/python -m ruff check server tests scripts
 ```
 

@@ -129,4 +129,9 @@ jobs:
       - name: JavaScript tests
         run: node --test tests/js/*.test.js
       # local_data tests need the real card database; see pyproject.toml.
-      - run: python -m pytest -m "not local_data"
+      # --cov enforces fail_under from pyproject.toml: the job fails if coverage drops below it.
+      - run: python -m pytest -m "not local_data" --cov
+      # Coverage table on the run's summary page, also when the gate fails.
+      - name: Coverage summary
+        if: ${{ !cancelled() }}
+        run: python -m coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY" || true

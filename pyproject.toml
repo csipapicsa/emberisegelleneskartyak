@@ -18,6 +18,17 @@ markers = [
     "local_data: needs the real database/card_master.db; deselected in CI (-m \"not local_data\")",
 ]
 
+[tool.coverage.run]
+source = ["server", "scripts"]
+branch = true
+
+[tool.coverage.report]
+# A ratchet, not a target: set just under the measured total (76% on 2026-11-06) so coverage can't
+# quietly drop. Raise it when tests are added. CI runs: pytest -m "not local_data" --cov
+fail_under = 75
+show_missing = true
+skip_covered = true
+
 [tool.ruff]
 target-version = "py311"
 line-length = 120          # only used to wrap long import lines; E501 (line too long) is not enforced
