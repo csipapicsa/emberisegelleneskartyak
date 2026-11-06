@@ -15,38 +15,33 @@ Design rules:
   the stored votes, so they aren't stored.
 - **The game never waits for the log,** and a logging error never breaks a game.
 - **Humans and models stay separable,** so a model never learns from an older model by accident.
+- **Anonymous.** No player identifiers at all: the goal is a working MLflow pipeline on real data, not
+  per-player personalization. Most games come from groups that play once anyway (60 days of room
+  statistics: 92% of hosts played on a single day).
 
 ## What is recorded
 
 | Moment in the game | Recorded |
 |---|---|
 | Game starts | settings (czar or voting, own card votable, rounds, timer, packs), app version |
-| A player first appears in a game | seat number, pseudonymous device and place ID, human or which model |
+| A player first appears in a game | seat number, human or which model |
 | Card swap / new hand | which cards left the hand, which came in |
 | Player submits | final hand in display order, the picked cards in blank order |
 | Cards are revealed | the order the submissions were shown in |
 | Czar picks / players vote | who voted for which submission (a czar pick is a single vote) |
 | Round ends | black card, czar, outcome, number of players who could vote |
 
-Not recorded: usernames, chat, voice, raw IP addresses, raw session IDs, user agents, time spent looking at
-cards or mouse movement.
+Not recorded: anything that identifies a player or device (usernames, IP addresses or their hashes,
+session IDs, user agents), chat, voice, the exact start time, time spent looking at cards, mouse movement.
 
 ## Identifiers
 
 - **Card text (`text_id`).** One ID per distinct card text, not per card. When a translation is reviewed or
   edited, the new wording gets a new `text_id`, so every round keeps exactly the text that was on screen.
   `card_id` links back to the card catalogue.
-- **Player (`player_id`).** From the browser's persistent `eek_session_id`, keyed-hashed. One ID per device.
-  The IP address can't identify players: friends in one room share a Wi-Fi network.
-- **Place (`place_id`).** From the IP address, keyed-hashed. A group signal ("same household or party"),
-  useful for clustering.
-- **Seat.** A player's number within one game (0, 1, 2, ...). Rounds, decisions and votes refer to seats,
-  which are 1 byte; `game_player` maps seats to players.
+- **Seat.** A player's number within one game (0, 1, 2, ...). It links one player's hands, picks and votes
+  across the rounds of a game, and means nothing outside it. 1 byte per row.
 - **Model (`model_id`).** A model player's registered name and version (the MLflow model registry).
-
-Both hashes use `server/privacy.py` (HMAC-SHA256 with `EEK_PRIVACY_HMAC_SECRET` and a dedicated `"ml"`
-purpose, so they can't be matched with the hashes other features use), truncated to 16 bytes.
-The table stores the hash once; everything else refers to the small integer ID.
 
 ## Schema
 
@@ -64,14 +59,12 @@ CREATE TABLE card_text (
 );
 CREATE INDEX card_text_card ON card_text (card_id);
 
-CREATE TABLE player (player_id INTEGER PRIMARY KEY, device BLOB UNIQUE, first_seen INTEGER NOT NULL);
-CREATE TABLE place  (place_id  INTEGER PRIMARY KEY, ip     BLOB UNIQUE, first_seen INTEGER NOT NULL);
 CREATE TABLE model  (model_id  INTEGER PRIMARY KEY, name TEXT NOT NULL, version TEXT NOT NULL,
                      UNIQUE (name, version));
 
 CREATE TABLE game (
     game_id     INTEGER PRIMARY KEY,
-    started_at  INTEGER NOT NULL,       -- unix seconds
+    day         INTEGER NOT NULL,       -- start date as days since 1970-01-01 (no time of day)
     vote_mode   INTEGER NOT NULL,       -- 0 czar, 1 everyone votes
     self_vote   INTEGER NOT NULL,       -- 1 if a player may vote for their own card
     rounds      INTEGER NOT NULL,
@@ -83,9 +76,7 @@ CREATE TABLE game (
 CREATE TABLE game_player (
     game_id   INTEGER NOT NULL,
     seat      INTEGER NOT NULL,
-    player_id INTEGER,                  -- NULL for a model
-    place_id  INTEGER,
-    model_id  INTEGER,                  -- NULL for a human
+    model_id  INTEGER,                  -- NULL for a human player
     PRIMARY KEY (game_id, seat)
 ) WITHOUT ROWID;
 
@@ -138,15 +129,14 @@ CREATE TABLE vote (
 
 - **ID lists as varint BLOBs.** A hand is one BLOB of 10 `text_id`s, each LEB128-encoded (2 bytes while
   IDs stay below 16,384), instead of 10 rows. Order is kept for free, which covers display order.
-- **Seats instead of player IDs** in the per-round tables: 1 byte each.
+- **Seats** in the per-round tables: 1 byte each.
 - **`WITHOUT ROWID` tables keyed by game.** All rows of a game sit together on disk, so exporting or reading
   a game is one range scan.
-- **Hashes stored once,** as 16-byte BLOBs, not 64-character hex strings in every row.
 - **Card texts stored once** per wording; deduplicated in memory, so there's no index on the text itself.
 
 Measured with a prototype of this schema, one month of simulated play (10,000 rounds, 3 players each,
-30% vote mode) takes **about 1.7 MB**. The card catalogue adds a one-time 1.6 MB, about 1 MB with the
-text index dropped. A year of play is around 20 MB.
+30% vote mode) takes **about 1.5 MB**. The card catalogue adds a one-time 1.6 MB, about 1 MB with the
+text index dropped. A year of play stays under 20 MB.
 
 ### What is derived, not stored
 
@@ -170,25 +160,17 @@ text index dropped. A year of play is around 20 MB.
 The export for training (Parquet files read by the MLflow experiments) is a separate script, planned
 with the first model.
 
-## Privacy (GDPR)
+## Privacy
 
-Device and place hashes can't be turned back into a session ID or IP address, but they still count as
-personal data. Before logging goes live:
+The log holds no identifier, not even a hashed one, and the start time is kept to the day only, so it
+can't be matched to a room in the analytics database by timestamp. The data is anonymous. The
+adatkezelés page gets one sentence about it (anonymous game statistics: which cards are played and which
+win), with no new banner or setting.
 
-- **adatkezelés page:** a paragraph on what is logged, why (improving the game, training a computer
-  player), the legal basis (legitimate interest), and how long it's kept. It goes live together with the
-  logging.
-- **Retention:** the `device` and `ip` hashes are deleted after a fixed period (proposal: 12 months, set to
-  NULL). The integer IDs stay, so the gameplay data remains usable but can no longer be tied to a device.
-- **`EEK_PRIVACY_HMAC_SECRET` must not be rotated** while logging runs: a new secret gives every device a
-  new ID.
+## Known limits
 
-## Open questions
-
-1. Retention period for the hashes (12 months proposed).
-2. Opt-out: is the privacy notice enough, or should the page offer a "don't log my games" switch?
-3. Production reports `EEK_VERSION=dev` until it moves into the container (Phase 2.4), so `app_version` is
-   only meaningful from then on.
+- **No personalization across games.** A device ID could be added later; only data from then on would have it.
+- **`app_version`** is `dev` in production until it moves into the container (Phase 2.4).
 
 ## Done when
 
@@ -196,4 +178,4 @@ personal data. Before logging goes live:
 - The e2e browser test finds its full round in `gameplay.db`: hands, picks, shown order and the winning vote.
 - A test shows a logging failure doesn't interrupt a game.
 - The daily backup includes `gameplay.db`.
-- The adatkezelés update is live.
+- The adatkezelés sentence is live.
