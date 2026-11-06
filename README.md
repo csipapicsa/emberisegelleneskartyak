@@ -22,7 +22,8 @@ Personal project: designed, built and run by one developer on a self-managed Lin
 - **Privacy by design:** no raw IP addresses stored (purpose-bound HMAC pseudonyms), self-hosted analytics,
   log retention limits.
 - **Training data for a computer player:** every round's decisions go to an anonymous log
-  ([docs/ml/](docs/ml/gameplay-logging.md)), the input for a planned MLflow-tracked model.
+  ([docs/ml/](docs/ml/gameplay-logging.md)), the input for a computer player with a full ML lifecycle
+  ([roadmap](docs/ml/roadmap.md)): MLflow tracking and registry, training on GCP, serving on the own server.
 
 ## Architecture
 

@@ -78,9 +78,12 @@ Következő lépések, sorrendben (2026-11-06, a projekt-review alapján)
     [ ] Visszaállítási gyakorlat: előző image élesbe, majd vissza.
     [ ] Mentés-visszaállítási próba: mentésből ideiglenes mappába, PRAGMA integrity_check,
         az app elindul a visszaállított adattal.
+    [ ] Lemez: 93%-on áll. /opt/local_llm (6,7 GB, nem használja semmi), pip-cache-ek, régi image-ek.
     [ ] CI deploy-ellenőrzés: merge után megvárni, hogy a staging /healthz az új commitot mutassa
         (GitHub environment "staging").
-[ ] 2. MLflow demó a gameplay.db adataiból (cél: az MLflow kipróbálása, nem a legjobb modell).
+[ ] 2. ML-életciklus a gépi játékossal: docs/ml/roadmap.md (GCP-n tanítás, saját MLflow szerver,
+       kiszolgálás a saját szerveren). Mérföldkövek: MLflow szerver → helyi pipeline → ugyanaz Cloud Run
+       Jobként → model service + bot + promóció/visszaállítás → monitorozás.
 [ ] 3. Konténer-image sérülékenységvizsgálat (Trivy), előbb csak riport. A Dependabot PR-okkal együtt.
 [ ] 4. Metrikák: kérésszám, 5xx arány, p95 válaszidő, aktív WebSocket-kapcsolatok → Prometheus →
        Grafana, egy riasztással. Az MLflow után, nem vele egy időben.

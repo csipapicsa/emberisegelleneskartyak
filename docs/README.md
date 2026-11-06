@@ -14,6 +14,7 @@
 | [voice.md](features/voice.md) | WebRTC voice chat design (Hungarian) |
 | [ads/](features/ads/plan.md) | ad slot and analytics rollout plan, privacy notice text (Hungarian) |
 | **ml/** | |
+| [roadmap.md](ml/roadmap.md) | the computer player's ML lifecycle: architecture, milestones, evaluation |
 | [gameplay-logging.md](ml/gameplay-logging.md) | the anonymous gameplay log: what is recorded, schema, privacy |
 | [data-collection-plan.md](ml/data-collection-plan.md) | background: which data a computer player needs and why |
 | **worklogs/** | dated notes on finished work, including the original June 2026 specification |
