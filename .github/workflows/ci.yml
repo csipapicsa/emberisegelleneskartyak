@@ -131,7 +131,7 @@ jobs:
           cache: pip
           cache-dependency-path: requirements*.txt
       # The client-side JavaScript is tested under Node (tests/js/, and some pytest files run node directly).
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       - run: python -m pip install -r requirements-dev.txt
