@@ -352,6 +352,7 @@ def test_cleanup_script_uses_the_print_folder(tmp_path, monkeypatch, capsys):
 
 # ── every real card ───────────────────────────────────────────────────────────
 
+@pytest.mark.local_data
 def test_every_real_card_fits_both_sizes_without_cutting_a_word():
     """Runs on the real database/card_master.db, so a new upload with a card
     too long for a printed card fails here (see also

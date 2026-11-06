@@ -22,3 +22,11 @@ docs/private/
 
 # Printable card PDFs (server/print_cards.py), deleted after 24 hours
 generated/
+
+# Card content is not in the repository. Production uploads the real
+# database/card_master.db; development and CI use scripts/make_sample_db.py.
+database/card_master.db
+cards.db
+cards_safety_*.db
+duplicate_cards.csv
+docs/seo/*.pdf

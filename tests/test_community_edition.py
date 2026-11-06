@@ -316,8 +316,11 @@ def test_client_ip_unknown_when_no_client():
 # ── HTTP endpoints ────────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_api_editions_appends_community_edition():
+async def test_api_editions_appends_community_edition(api_db, monkeypatch):
+    from server import main as main_mod
     from server.main import api_editions
+    from tests.test_editions import make_master
+    monkeypatch.setattr(main_mod, "get_conn", make_master)
     editions = await api_editions()
     community = [e for e in editions if e["id"] == COMMUNITY_EDITION_ID]
     assert len(community) == 1
