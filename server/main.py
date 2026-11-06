@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager, suppress
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 
@@ -557,6 +557,29 @@ async def api_edition_cards(edition_id: int):
 @app.get("/api/config")
 async def api_config():
     return CONFIG
+
+
+# The commit the running code was built from; the container image sets it at build time.
+VERSION = os.environ.get("EEK_VERSION", "dev")
+
+
+@app.api_route("/healthz", methods=["GET", "HEAD"], include_in_schema=False)
+async def healthz():
+    """Health check for the container runtime and deploys: 200 when the app can serve a game, i.e. the
+    card database opens and has at least one playable pack. The version tells a deploy check which
+    commit is live. Errors aren't detailed here; they go to the log."""
+    try:
+        conn = get_conn()
+        try:
+            ok = len(get_editions(conn)) > 0
+        finally:
+            conn.close()
+    except Exception:
+        logger.exception("healthz: card database unavailable")
+        ok = False
+    if not ok:
+        return JSONResponse({"status": "error", "version": VERSION}, status_code=503)
+    return {"status": "ok", "version": VERSION}
 
 
 @app.get("/api/voice/credentials")

@@ -4,6 +4,9 @@ The server runs from the repository with EEK_DATA_DIR pointing at a temp directo
 sample card database, so the run gets its own databases and never touches the working copy's (or a real
 card database next to it).
 
+With EEK_E2E_BASE_URL set, the tests run against that server instead of starting one; CI uses this to
+test the container image itself. That server must have the sample cards and no secrets configured.
+
 When Playwright or its Chromium is missing these tests are skipped, so a plain `pytest` still works on a
 machine without browsers. The CI e2e job sets EEK_E2E_REQUIRED=1, which turns that skip into a failure.
 """
@@ -38,6 +41,10 @@ def _free_port() -> int:
 
 @pytest.fixture(scope="session")
 def server_url(tmp_path_factory) -> Iterator[str]:
+    external = os.environ.get("EEK_E2E_BASE_URL")
+    if external:
+        yield external.rstrip("/")
+        return
     data_dir = tmp_path_factory.mktemp("data")
     subprocess.run(
         [sys.executable, os.path.join(REPO_ROOT, "scripts", "make_sample_db.py"),

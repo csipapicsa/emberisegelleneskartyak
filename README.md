@@ -58,6 +58,18 @@ Optional settings come from environment variables (see [deploy/privacy.env.examp
 to a container volume; by default it stays in the repository root.
 Without them the IP-based features (card idea voting, visitor statistics) and the admin statistics page stay off.
 
+### With Docker or Podman
+
+```bash
+mkdir -p data && python3 scripts/make_sample_db.py --out data/database/card_master.db && chmod -R a+rwX data
+docker build -t emberisegellenes .
+docker run -p 127.0.0.1:8010:8010 -v ./data:/data emberisegellenes
+```
+
+The image runs as a non-root user and keeps all runtime data in the `/data` volume. Every merge to `main`
+publishes the tested image as `ghcr.io/csipapicsa/emberisegelleneskartyak:sha-<commit>` (and `:main`).
+`/healthz` reports whether the app can serve a game and which commit is running.
+
 ## Tests
 
 ```bash
@@ -70,7 +82,8 @@ venv/bin/python -m ruff check server tests scripts
 - About 400 pytest tests: game rules and phase transitions, timers, reconnects, API endpoints, privacy, backups.
 - JavaScript tests for the client code (hand swiping, voice chat, ads) run with `node --test tests/js/`, and pytest
   also runs them when Node is installed.
-- An end-to-end test drives three headless Chromium "phones" through a full round against a real server:
+- An end-to-end test drives three headless Chromium "phones" through a full round against a real server (in CI:
+  the production container image itself):
   create a room, join, admin approval, play cards, czar pick, winner on every screen. It runs in CI, in the
   Playwright container ([scripts/e2e_in_container.sh](scripts/e2e_in_container.sh)), or directly after
   `python -m playwright install --with-deps chromium`.

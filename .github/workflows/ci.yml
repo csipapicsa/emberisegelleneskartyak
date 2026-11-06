@@ -140,9 +140,13 @@ jobs:
   e2e:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    # Three headless Chromium "phones" play one round against a real server on the sample cards.
+    # Builds the production image and tests *it*: the container runs on the sample cards and three headless
+    # Chromium "phones" play one round against it. On main the tested image is handed to the publish job,
+    # so what gets published is exactly what was tested.
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    env:
+      IMAGE: emberisegellenes:ci
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -150,10 +154,64 @@ jobs:
           python-version: "3.11"
           cache: pip
           cache-dependency-path: requirements*.txt
+      - name: Build the image
+        run: docker build --build-arg GIT_SHA="${GITHUB_SHA::7}" -t "$IMAGE" .
+      - name: Start it on the sample cards
+        run: |
+          mkdir -p ci-data/database
+          python scripts/make_sample_db.py --out ci-data/database/card_master.db
+          chmod -R a+rwX ci-data  # the app runs as UID 10001 inside the container
+          docker run -d --name app -p 127.0.0.1:8010:8010 -v "$PWD/ci-data:/data" "$IMAGE"
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8010/healthz && break; sleep 1; done
+          echo
+          version=$(curl -sf http://127.0.0.1:8010/healthz | python -c 'import json,sys; print(json.load(sys.stdin)["version"])')
+          test "$version" = "${GITHUB_SHA::7}" || { echo "::error::healthz reports '$version', expected ${GITHUB_SHA::7}"; exit 1; }
       - run: python -m pip install -r requirements-dev.txt
       # The browser build that belongs to the pinned playwright package, plus the system libraries it needs.
       - run: python -m playwright install --with-deps --only-shell chromium
       # Without the browser the tests would skip; here a missing browser fails the job instead.
-      - run: python -m pytest tests/e2e
+      - name: End-to-end test against the container
+        run: python -m pytest tests/e2e
         env:
           EEK_E2E_REQUIRED: "1"
+          EEK_E2E_BASE_URL: http://127.0.0.1:8010
+      - name: Container log
+        if: ${{ !cancelled() }}
+        run: docker logs app
+      - name: Save the tested image for publishing
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: docker save "$IMAGE" | gzip > image.tar.gz
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        with:
+          name: image
+          path: image.tar.gz
+          retention-days: 1
+
+  publish:
+    # Pushes the image tested in e2e to GitHub's container registry, only from main and only when every
+    # check passed. The only job with write access (packages), and it runs no third-party code.
+    needs: [lint, test, audit, secret-scan, e2e]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REPO_IMAGE: ghcr.io/csipapicsa/emberisegelleneskartyak
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: image
+      - run: gunzip -c image.tar.gz | docker load
+      - name: Push sha-<commit> and main tags
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          for tag in "sha-${GITHUB_SHA::7}" main; do
+            docker tag emberisegellenes:ci "$REPO_IMAGE:$tag"
+            docker push "$REPO_IMAGE:$tag"
+          done
+          echo "Published $REPO_IMAGE:sha-${GITHUB_SHA::7} (also :main)" >> "$GITHUB_STEP_SUMMARY"
