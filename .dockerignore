@@ -1,0 +1,10 @@
+# Build context: only what the Dockerfile copies. Everything else stays out, including local databases,
+# the venv and private notes, so nothing personal can end up in an image by accident.
+*
+!requirements.txt
+!config.json
+!server/
+!static/
+!scripts/
+**/__pycache__
+**/*.pyc

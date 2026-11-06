@@ -9,6 +9,9 @@ The game has been live since April 2026; changes before this file are in the git
 ## [Unreleased]
 
 ### Added
+- Production container image (`Dockerfile`): non-root user, data in a `/data` volume, base image pinned by
+  digest, health check. CI tests the image itself end to end and publishes it to GHCR on every merge to `main`.
+- `/healthz`: 200 when the card database has a playable pack, 503 otherwise; reports the running commit.
 - `EEK_DATA_DIR`: all runtime data (databases, generated PDFs) can live outside the code directory, the
   prerequisite for running the app in a container with a data volume. Default unchanged.
 - End-to-end browser test (Playwright): three players create, join and play a round; runs as its own CI
