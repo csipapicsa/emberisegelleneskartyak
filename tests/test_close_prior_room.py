@@ -2,13 +2,15 @@
 must be closed immediately; remaining participants get a `room_closed`
 broadcast and the room is dropped from the store."""
 from __future__ import annotations
+
 import time
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 from fastapi import HTTPException
 
-from server.room import create_room, get_room, delete_room, _rooms
 from server import main as main_mod
+from server.room import _rooms, create_room, delete_room, get_room
 
 
 @pytest.fixture(autouse=True)

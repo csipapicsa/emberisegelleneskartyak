@@ -1,9 +1,9 @@
 # server/room.py
 
 from __future__ import annotations
+
 import time
 from dataclasses import dataclass, field
-from typing import Optional
 
 
 @dataclass
@@ -47,13 +47,13 @@ class Room:
     black_deck: list[dict] = field(default_factory=list)
     white_deck: list[dict] = field(default_factory=list)
     discard_pile: list[dict] = field(default_factory=list)
-    current_black: Optional[dict] = None
-    round_start_time: Optional[float] = None
+    current_black: dict | None = None
+    round_start_time: float | None = None
     votes: dict[str, str] = field(default_factory=dict)  # voter_sid → winner_sid
     timer_task: object = field(default=None, repr=False)  # asyncio.Task | None
 
     @property
-    def czar_session_id(self) -> Optional[str]:
+    def czar_session_id(self) -> str | None:
         if not self.join_order:
             return None
         return self.join_order[self.czar_index % len(self.join_order)]
@@ -73,7 +73,7 @@ class Room:
             return False
         return all(sid in self.votes for sid in connected)
 
-    def promote_next_admin(self) -> Optional[str]:
+    def promote_next_admin(self) -> str | None:
         for sid in self.join_order:
             if sid != self.admin_session_id and sid in self.players:
                 self.admin_session_id = sid
@@ -94,7 +94,7 @@ def create_room(code: str, admin_session_id: str, admin_username: str) -> Room:
     return room
 
 
-def get_room(code: str) -> Optional[Room]:
+def get_room(code: str) -> Room | None:
     return _rooms.get(code)
 
 

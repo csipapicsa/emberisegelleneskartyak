@@ -1,8 +1,9 @@
 # tests/helpers.py
 from __future__ import annotations
+
 from collections import defaultdict
-from server.room import Room, Player, create_room, delete_room
-from server import game as game_logic
+
+from server.room import Player, Room, create_room
 
 
 def make_white_cards(n: int, pick: int = 1) -> list[dict]:
@@ -18,7 +19,7 @@ def make_room(code: str = "TEST", n_players: int = 3,
               timer_seconds: int = 0,
               prevent_self_vote: bool = True) -> tuple[Room, list[str]]:
     """Create an in-memory room with n_players already approved."""
-    room = create_room(code, "sid_0", f"Player0")
+    room = create_room(code, "sid_0", "Player0")
     room.voting_mode = voting_mode
     room.round_total = round_total
     room.timer_seconds = timer_seconds

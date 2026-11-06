@@ -6,6 +6,7 @@ Run hourly by systemd/emberisegellenes-print-cleanup.timer:
     venv/bin/python -m scripts.cleanup_print_files
 """
 from __future__ import annotations
+
 import sys
 
 from server import print_cards

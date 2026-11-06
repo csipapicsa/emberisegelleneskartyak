@@ -12,6 +12,7 @@ becomes "Hetedik kiadás" like the listed ones. Which editions show up at all is
 decided by card_master.db: only packs with ``edition_status.complete = 1``.
 """
 from __future__ import annotations
+
 import re
 
 ORDER: list[tuple[str, str]] = [

@@ -1,8 +1,9 @@
 from __future__ import annotations
-import sqlite3
+
 import html
 import os
-from datetime import datetime, timezone
+import sqlite3
+from datetime import UTC, datetime
 
 from server.privacy import PrivacyConfigurationError, pseudonymize_ip
 
@@ -146,7 +147,7 @@ def _migrate_legacy_vote_ips(conn: sqlite3.Connection, *, enabled: bool) -> None
 
 def save_message(conn: sqlite3.Connection, name: str, email: str, message: str) -> None:
     purge_expired_data(conn)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     conn.execute(
         "INSERT INTO messages (name, email, message, created_at) VALUES (?, ?, ?, ?)",
         (name, email, message, now),
@@ -195,7 +196,7 @@ def save_card_idea(conn: sqlite3.Connection, card_type: str, text: str) -> bool:
     if not clean_text:
         return False
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     conn.execute(
         'INSERT INTO card_ideas (card_type, text, "like", dislike, created_at) VALUES (?, ?, 0, 0, ?)',
         (clean_type, clean_text, now),
@@ -316,7 +317,7 @@ def vote_card_idea(conn: sqlite3.Connection, idea_id: int, voter_hash: str, vote
         )
         my_vote = None
     else:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
         conn.execute(
             """
             INSERT INTO card_idea_votes (idea_id, voter_hash, vote, created_at)

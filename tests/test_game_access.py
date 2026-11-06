@@ -6,7 +6,6 @@ import pytest
 from server import main as main_mod
 from server.room import create_room, delete_room
 
-
 CODE = "ACC"
 
 

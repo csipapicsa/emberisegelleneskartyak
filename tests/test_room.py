@@ -1,8 +1,6 @@
 # tests/test_room.py
 """Unit tests for Room / Player dataclass methods."""
-import pytest
-from server.room import Room, Player, create_room, get_room, delete_room
-
+from server.room import Player, create_room, delete_room, get_room
 
 # ── create_room ───────────────────────────────────────────────────────────────
 

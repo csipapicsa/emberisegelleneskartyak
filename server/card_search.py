@@ -8,6 +8,7 @@ the typed words as one phrase rank first, then by where it starts, then
 shorter cards — so typing the start of a card puts it on top.
 """
 from __future__ import annotations
+
 import re
 import unicodedata
 

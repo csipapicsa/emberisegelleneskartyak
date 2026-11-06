@@ -8,7 +8,6 @@ from server import main as main_mod
 from server.room import delete_room
 from tests.helpers import FakeManager, make_black_cards, make_room, make_white_cards
 
-
 CODE = "REVL"
 
 

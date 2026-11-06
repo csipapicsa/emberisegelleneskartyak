@@ -3,10 +3,10 @@
 Unit tests for the room-scoped ConnectionManager.
 No WebSocket objects needed — we use a tiny stub.
 """
-import pytest
-import asyncio
-from server.room import create_room, delete_room, Player
 
+import pytest
+
+from server.room import Player, create_room, delete_room
 
 # ── Minimal WebSocket stub ────────────────────────────────────────────────────
 
@@ -31,7 +31,6 @@ class FakeWS:
 # ── Import the real ConnectionManager ────────────────────────────────────────
 
 from server.main import ConnectionManager
-
 
 CODE_A = "CONA"
 CODE_B = "CONB"

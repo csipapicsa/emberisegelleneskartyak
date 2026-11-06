@@ -12,16 +12,17 @@ The in-game lightbulb + websocket event this replaced is gone; feedback is
 only given on the dedicated page now.
 """
 from __future__ import annotations
+
 import sqlite3
-import pytest
 from unittest.mock import patch
 
+import pytest
 from fastapi.testclient import TestClient
 
-from server.messages_db import ensure_tables, add_card_feedback, COMMUNITY_ID_OFFSET
 from server import card_search
 from server import main as main_mod
 from server.db import get_playable_cards
+from server.messages_db import COMMUNITY_ID_OFFSET, add_card_feedback, ensure_tables
 from tests.test_editions import make_master
 
 

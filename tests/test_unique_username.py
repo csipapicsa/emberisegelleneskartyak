@@ -2,11 +2,11 @@
 The `_username_taken` helper is the gatekeeper for both the WS join path
 and admin approval."""
 from __future__ import annotations
+
 import pytest
 
-from server.room import create_room, delete_room, Player
 from server.main import _username_taken
-
+from server.room import Player, create_room, delete_room
 
 CODE = "UNQ"
 

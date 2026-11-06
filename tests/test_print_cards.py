@@ -2,9 +2,9 @@
 """Printable card PDFs (server/print_cards.py): which cards go in, text
 layout, file naming/reuse and the 24-hour cleanup."""
 from __future__ import annotations
+
 import os
 import re
-import sqlite3
 import stat
 import time
 

@@ -1,6 +1,7 @@
 # tests/conftest.py
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock
 
 
 def pytest_configure(config):
@@ -24,6 +25,7 @@ def isolated_card_seen(tmp_path, monkeypatch):
     """Every dealt card is counted in server.card_seen; keep tests from
     writing those counts into the real database/card_seen.db."""
     from collections import Counter
+
     from server import card_seen
     monkeypatch.setattr(card_seen, "DB_PATH", str(tmp_path / "card_seen.db"))
     monkeypatch.setattr(card_seen, "_pending", Counter())

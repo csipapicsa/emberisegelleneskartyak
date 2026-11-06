@@ -6,10 +6,11 @@ room itself: callers must purge a room's rows (delete_room_messages) whenever
 the in-memory Room is torn down, so nothing outlives the room it belongs to.
 """
 from __future__ import annotations
-import sqlite3
+
 import html
 import os
-from datetime import datetime, timezone
+import sqlite3
+from datetime import UTC, datetime
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "..", "chat.db")
 MAX_MESSAGE_LENGTH = 500
@@ -44,7 +45,7 @@ def post_message(conn: sqlite3.Connection, room_code: str, username: str, messag
     if not clean_user or not clean_msg:
         return None
 
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     cur = conn.execute(
         "INSERT INTO room_chat_messages (room_code, username, message, created_at) VALUES (?, ?, ?, ?)",
         (room_code, clean_user, clean_msg, now),

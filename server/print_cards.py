@@ -26,6 +26,7 @@ cleanup() deletes files older than MAX_AGE_SECONDS
 (scripts/cleanup_print_files.py, run by a systemd timer).
 """
 from __future__ import annotations
+
 import hashlib
 import json
 import math
@@ -43,9 +44,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
-from server import card_search
-from server import db
-from server import messages_db
+from server import card_search, db, messages_db
 
 OUTPUT_DIR = Path(__file__).resolve().parent.parent / "generated" / "print"
 MAX_AGE_SECONDS = 24 * 60 * 60

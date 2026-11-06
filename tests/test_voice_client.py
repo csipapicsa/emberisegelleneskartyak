@@ -7,9 +7,11 @@ These exercise voice.js directly against stubbed DOM/WebRTC objects; this
 wrapper keeps them in the same `pytest` run as everything else.
 """
 from __future__ import annotations
+
 import os
 import shutil
 import subprocess
+
 import pytest
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

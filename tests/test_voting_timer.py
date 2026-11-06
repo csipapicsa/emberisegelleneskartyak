@@ -1,14 +1,15 @@
 """Bug 7: entering the `revealed` phase starts a fresh timer for voting or
 czar selection."""
 from __future__ import annotations
+
 import asyncio
-import pytest
 from unittest.mock import patch
 
-from server.room import delete_room
-from server import game as game_logic
-from tests.helpers import FakeManager, make_room, make_white_cards, make_black_cards
+import pytest
 
+from server import game as game_logic
+from server.room import delete_room
+from tests.helpers import FakeManager, make_black_cards, make_room, make_white_cards
 
 CODE = "VTM"
 
