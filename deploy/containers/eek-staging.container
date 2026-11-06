@@ -1,0 +1,44 @@
+# Staging: runs whatever is tagged :main on GHCR, i.e. the latest commit on main that passed CI.
+# podman auto-update (see podman-auto-update.timer.d/) checks GHCR every 5 minutes; on a new image it
+# pulls it and restarts this unit. If the new container doesn't become healthy, the restart fails and
+# auto-update rolls back to the previous image.
+#
+# Rootless podman under the `eek` system user, managed by systemd through Quadlet. Installed root-owned,
+# so the service user can't change its own configuration (see deploy/containers/README.md):
+#   /etc/containers/systemd/users/<uid of eek>/eek-staging.container
+[Unit]
+Description=Emberiségellenes Kártyák, staging (follows :main)
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+ContainerName=eek-staging
+Image=ghcr.io/csipapicsa/emberisegelleneskartyak:main
+AutoUpdate=registry
+
+# Only nginx on this host can reach it (staging.emberisegelleneskartyak.hu).
+PublishPort=127.0.0.1:8011:8010
+
+# Runtime data. The host's eek user appears as the image's eek user (UID 10001) inside the container,
+# so the app owns its files. :Z gives the folder a private SELinux label.
+UserNS=keep-id:uid=10001,gid=10001
+Volume=/srv/eek/staging:/data:Z
+EnvironmentFile=/etc/eek/staging.env
+
+# "Started" means /healthz answered 200 (the image's HEALTHCHECK), not just "process running".
+# This is what lets auto-update notice a broken image and roll back.
+Notify=healthy
+HealthOnFailure=kill
+
+# Hardening: no Linux capabilities, no privilege gain, read-only filesystem apart from /data and /tmp.
+DropCapability=all
+NoNewPrivileges=true
+ReadOnly=true
+
+[Service]
+Restart=always
+# The first start downloads the image.
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

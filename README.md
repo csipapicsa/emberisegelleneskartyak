@@ -99,7 +99,7 @@ server/        FastAPI app: routes and WebSocket handler (main.py), game logic, 
 static/        frontend pages, CSS and JS, served by the app
 tests/         pytest suite; tests/js/ holds the Node tests for the client code
 scripts/       backups, cleanup jobs, sample card database
-deploy/        systemd units, nginx and logrotate templates, environment example
+deploy/        container (Quadlet) units, systemd timers, nginx and logrotate templates, environment example
 docs/          design notes, plans and dated worklogs (mostly in Hungarian)
 config.json    game settings (hand size, timer and round options, room limits)
 ```

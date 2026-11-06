@@ -9,6 +9,9 @@ The game has been live since April 2026; changes before this file are in the git
 ## [Unreleased]
 
 ### Added
+- Staging environment (`deploy/containers/`): rootless podman under a dedicated `eek` user, managed by
+  systemd through Quadlet. It follows the `:main` image via `podman auto-update` and rolls back when the new
+  container doesn't become healthy. nginx puts HTTPS and a password in front of it.
 - Production container image (`Dockerfile`): non-root user, data in a `/data` volume, base image pinned by
   digest, health check. CI tests the image itself end to end and publishes it to GHCR on every merge to `main`.
 - `/healthz`: 200 when the card database has a playable pack, 503 otherwise; reports the running commit.
