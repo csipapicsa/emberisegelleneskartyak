@@ -16,9 +16,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Dependencies first: this layer is rebuilt only when requirements.txt changes.
+# Dependencies first: this layer is rebuilt only when requirements.txt changes. The lock file pins every
+# package with its hash, so the build installs exactly what CI tested and audited.
 COPY requirements.txt .
-RUN pip install -r requirements.txt
+RUN pip install --require-hashes -r requirements.txt
 
 # Only what the app needs at runtime: no tests, docs or deploy files.
 COPY config.json .

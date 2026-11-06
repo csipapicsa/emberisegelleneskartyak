@@ -58,10 +58,19 @@ Minden *.db-t ment az adatmappa gyökerében és a database/ alatt. backups/ mos
 [ ] Offsite másolat: most minden mentés ugyanazon a szerveren van.
 
 Konténer / staging — teendők (2026-11-06)
-[ ] Függőségek zárolása: a requirements.txt csak a közvetlen csomagokat rögzíti, a többit minden build
-    a legújabbal tölti. Az image-ben starlette 1.10.0 / websockets 17.4 van, élesben 1.0.0 / 16.0.
-    Teljes lock fájl (hash-ekkel), az éles verziókra; frissítés Dependabot PR-ral.
+[x] Staging él: staging.emberisegelleneskartyak.hu, a :main image-et követi (podman auto-update, 5 perc)
+[x] Függőségek zárolása: requirements.in → requirements.txt (pip-compile, hash-ekkel), Dependabot.
+    Élesben starlette 1.0.0 futott, 5 ismert sérülékenységgel; a CI audit nem látta, mert nem a
+    telepített verziókat nézte.
 [ ] WebSocket: ha a böngészők egyszerre zárnak (e2e teszt vége), a websocket_endpoint ciklusa egy már
-    lezárt socketen hívja a receive-et → "Need to call accept first" traceback. Éles és image-verzióval is
-    előjön, a játékot nem rontja el. Elkapni és tesztet írni rá.
+    lezárt socketen hívja a receive-et → "Need to call accept first" traceback. A játékot nem rontja el.
+    Elkapni és tesztet írni rá.
 [ ] Staging: a Umami-szkript a staging forgalmát is az éles statisztikába számolja.
+
+Phase 2 — elhalasztva (MLflow előbb)
+[ ] 2.4 Éles átköltöztetése konténerbe (eek user, /srv/eek/prod, :prod tag). BIZTONSÁG: ez zárja le
+    a P7-et: a játék most adminuser_developer-ként fut, aki wheel tag → egy kódfuttatási hiba = root.
+    A régi service maradjon visszaállításnak; a backup és cleanup timer EEK_DATA_DIR-rel menjen.
+[ ] CI deploy-ellenőrzés: merge után megvárni, hogy a staging /healthz az új commitot mutassa
+    (GitHub environment "staging").
+[ ] 2.5 Promote workflow (:main → :prod), docs/runbooks/deploy.md, visszaállítási gyakorlat.
