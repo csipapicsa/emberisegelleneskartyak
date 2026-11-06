@@ -4,10 +4,6 @@ Mobile-first, multiplayer, Hungarian-language card game in the spirit of *Cards 
 
 Live at: **emberisegelleneskartyak.hu**
 
-### Stat: 
-
-https://emberisegelleneskartyak.hu/admin/stats?key=***REMOVED***
-
 ---
 
 ## Stack

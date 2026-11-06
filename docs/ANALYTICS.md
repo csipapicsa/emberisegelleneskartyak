@@ -6,7 +6,7 @@ Private, lightweight event tracking to understand real game usage. No external s
 
 ## Dashboard
 
-**URL:** `https://emberisegelleneskartyak.hu/admin/stats?key=***REMOVED***`
+**URL:** `https://emberisegelleneskartyak.hu/admin/stats?key=<EEK_ADMIN_STATS_KEY>` (the key is set in `/etc/emberisegellenes/privacy.env`)
 
 Shows:
 - Total counts per event type + game completion rate

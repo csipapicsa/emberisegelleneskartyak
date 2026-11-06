@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 import asyncio
+import hmac
 import ipaddress
 import json
 import logging
@@ -1175,9 +1176,22 @@ async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
 
 # ── Admin stats ───────────────────────────────────────────────────────────────
 
+ADMIN_STATS_KEY_ENV = "EEK_ADMIN_STATS_KEY"
+
+
+def _admin_key_ok(key: str) -> bool:
+    """True if `key` matches the configured admin key.
+
+    Fails closed: with no key configured the stats page is never served, so a
+    server missing the env file can't be opened with an empty ?key=.
+    """
+    expected = os.environ.get(ADMIN_STATS_KEY_ENV, "")
+    return bool(expected) and hmac.compare_digest(key.encode(), expected.encode())
+
+
 @app.get("/admin/stats", response_class=HTMLResponse)
 async def admin_stats(key: str = ""):
-    if key != "***REMOVED***":
+    if not _admin_key_ok(key):
         raise HTTPException(403, "Forbidden")
     s = get_stats()
     c = s["counts"]
@@ -1257,7 +1271,7 @@ async def admin_stats(key: str = ""):
 </head>
 <body>
 <h1>Statisztika</h1>
-<p class="subtitle">Csak neked — <a href="?key=***REMOVED***" style="color:var(--muted)">frissítés</a></p>
+<p class="subtitle">Csak neked — <a href="" style="color:var(--muted)">frissítés</a></p>
 
 <div class="section-label">Összesített</div>
 <div class="stat-grid">
