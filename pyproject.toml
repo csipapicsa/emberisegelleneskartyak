@@ -1,0 +1,19 @@
+[project]
+name = "emberisegellenes-kartyak"
+version = "1.0.0"
+description = "Mobile-first multiplayer party card game in Hungarian: FastAPI + WebSockets backend, vanilla JS frontend."
+readme = "README.md"
+license = "GPL-3.0-or-later"
+requires-python = ">=3.11,<3.12"
+authors = [{ name = "Gergo Gyori" }]
+# Exact, verified versions live in requirements.txt / requirements-dev.txt.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-ra --strict-markers"
+markers = [
+    # The translated card texts (database/card_master.db) are not in the repository.
+    # CI runs on scripts/make_sample_db.py's made-up cards and deselects these.
+    "local_data: needs the real database/card_master.db; deselected in CI (-m \"not local_data\")",
+]

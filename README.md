@@ -1,179 +1,87 @@
-# Emberiség Ellenes Kártyák
+# Emberiségellenes Kártyák
 
-Mobile-first, multiplayer, Hungarian-language card game in the spirit of *Cards Against Humanity*. Self-hosted FastAPI backend with a vanilla-JS frontend, served over WebSockets.
+A mobile-first, real-time multiplayer party card game in Hungarian, in the style of *Cards Against Humanity*.
+Players join a room from their phones, everyone answers a black prompt card with a white card from their hand,
+and the czar (or a group vote) picks the funniest answer.
 
-Live at: **emberisegelleneskartyak.hu**
+**Live:** [emberisegelleneskartyak.hu](https://emberisegelleneskartyak.hu) · about 30 games a day (November 2026)
 
----
+Personal project: designed, built and run by one developer on a self-managed Linux server.
 
-## Stack
+## Features
 
-- **Backend:** Python 3.11, FastAPI, uvicorn, FastAPI-native WebSockets
-- **Database:** SQLite (`cards.db`, `messages.db`)
-- **Frontend:** Vanilla JS + CSS (no framework, no build step)
-- **Process:** systemd unit (`emberisegellenes.service`), nginx reverse proxy, TLS
+- **Rooms and lobby:** 4-digit room codes, admin approval of joining players, card pack selection, round count and timer.
+- **Real-time game over WebSockets:** czar or voting mode, multi-pick prompts (pick 2 / pick 3), per-phase timers,
+  reconnect after a dropped connection, inactivity kick, anonymous reveal with the author shown after the pick.
+- **Card decks:** many overlapping packs, deduplicated per game. A least-seen weighted shuffle keeps rarely dealt
+  cards coming up.
+- **Community cards:** players submit and vote on card ideas; approved ones become a playable pack.
+- **Extras:** in-room text chat, WebRTC voice chat (TURN relay), printable card PDFs, card search and feedback.
+- **Privacy by design:** no raw IP addresses stored (purpose-bound HMAC pseudonyms), self-hosted analytics,
+  log retention limits.
 
----
+## Architecture
+
+```mermaid
+flowchart LR
+    B[Phone / browser<br>vanilla JS] -- HTTPS + WSS --> N[nginx<br>TLS, reverse proxy]
+    B -. WebRTC voice .-> T[coturn<br>TURN relay]
+    N --> A[FastAPI + uvicorn<br>systemd service]
+    A --> R[(In-memory rooms<br>game state)]
+    A --> C[(card_master.db<br>read-only cards)]
+    A --> M[(SQLite: messages, chat,<br>analytics, card_seen)]
+    S[systemd timers] --> BK[DB backups,<br>PDF cleanup]
+```
+
+- **Backend:** Python 3.11, FastAPI, native WebSockets. Game state lives in memory; one process serves everything.
+- **Frontend:** plain HTML, CSS and JavaScript, no framework and no build step.
+- **Data:** SQLite. The card database is built offline and uploaded as a file, which the app opens read-only.
+- **Operations:** systemd units and timers, nginx with Let's Encrypt, daily database backups. Templates are in
+  [deploy/](deploy/).
+
+## Quickstart
+
+```bash
+git clone <this repo> && cd emberisegelleneskartyak.hu
+python3.11 -m venv venv
+venv/bin/pip install -r requirements-dev.txt
+venv/bin/python scripts/make_sample_db.py     # made-up cards; the real card texts are not in the repo
+venv/bin/uvicorn server.main:app --port 8010
+```
+
+Open <http://localhost:8010>, create a room, and join it from a second browser window to play.
+
+Optional settings come from environment variables (see [deploy/privacy.env.example](deploy/privacy.env.example)).
+Without them the IP-based features (card idea voting, visitor statistics) and the admin statistics page stay off.
+
+## Tests
+
+```bash
+venv/bin/python -m pytest                      # everything
+venv/bin/python -m pytest -m "not local_data"  # what CI runs: no real card database needed
+```
+
+- About 400 pytest tests: game rules and phase transitions, timers, reconnects, API endpoints, privacy, backups.
+- JavaScript tests for the client code (hand swiping, voice chat, ads) run with `node --test tests/js/`, and pytest
+  also runs them when Node is installed.
+- Tests marked `local_data` check the real card database, for example that every card fits on a printed card.
 
 ## Project structure
 
 ```
-/opt/emberisegellenes_kartyak/
-├── server/                       # FastAPI backend
-│   ├── main.py                   # App entry: HTTP + WebSocket routes, static mounting
-│   ├── game.py                   # Round logic, czar rotation, timer, reconnect handling
-│   ├── room.py                   # In-memory Room / Player dataclasses + room store
-│   ├── deck.py                   # Shuffle, deal, draw, reshuffle
-│   ├── session.py                # UUID session token logic
-│   ├── feedback.py               # like / dislike / comment DB writes
-│   ├── messages_db.py            # Chat / message persistence
-│   ├── voice.py                  # Voice/mute signalling over WS
-│   └── db.py                     # SQLite connection, editions + cards queries
-├── static/                       # Frontend (served by FastAPI)
-│   ├── index.html                # Landing
-│   ├── join.html  create.html    # Join / create room flows
-│   ├── room.html                 # Lobby
-│   ├── game.html                 # Game screen
-│   ├── css/  js/                 # Stylesheets and client logic
-│   ├── robots.txt  sitemap.xml   # SEO
-│   └── og-image.png  news.json
-├── tests/                        # Pytest suite (see "Running tests" below)
-├── cards.db                      # Pre-populated card content (editions, cards)
-├── messages.db                   # Chat / feedback persistence
-├── config.json                   # Game tunables (hand size, timer options, etc.)
-├── requirements.txt              # Python deps
-├── pytest.ini                    # Pytest config (asyncio_mode = auto)
-├── emberisegellenes.service      # systemd unit (production)
-├── nginx_emberisegellenes.conf   # nginx reverse-proxy config
-├── PROGRESS.md                   # Historical build log
-├── PROJECT_STRUCTURE.md          # Detailed current structure/spec notes
-├── WIP_2026-06-02_bugfixes.md    # Completed bugfix-session notes
-└── venv/                         # Python virtualenv (Python 3.11)
+server/        FastAPI app: routes and WebSocket handler (main.py), game logic, rooms, deck, databases
+static/        frontend pages, CSS and JS, served by the app
+tests/         pytest suite; tests/js/ holds the Node tests for the client code
+scripts/       backups, cleanup jobs, sample card database
+deploy/        systemd units, nginx and logrotate templates, environment example
+docs/          design notes, plans and dated worklogs (mostly in Hungarian)
+config.json    game settings (hand size, timer and round options, room limits)
 ```
 
-### Database schema (`cards.db`)
+## License and card content
 
-```sql
-CREATE TABLE editions (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE);
-CREATE TABLE cards (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    text TEXT NOT NULL,
-    type TEXT NOT NULL CHECK(type IN ('Black','White')),
-    language TEXT NOT NULL CHECK(language IN ('HUN','ENG')),
-    pick INTEGER,                    -- NULL means 1
-    edition_id INTEGER NOT NULL REFERENCES editions(id)
-);
--- plus feedback_like, feedback_dislike, feedback_comment
-```
+The code is licensed under [GPL-3.0-or-later](LICENSE).
 
-Only `language = 'HUN'` and `pick = 1 OR pick IS NULL` cards are currently loaded into play.
-
----
-
-## Running the server
-
-Development (foreground):
-
-```bash
-cd /opt/emberisegellenes_kartyak
-venv/bin/uvicorn server.main:app --host 0.0.0.0 --port 8010
-```
-
-Port **8010** is used because 8000 is taken on this host. nginx forwards public traffic to 8010.
-
-Production (already configured on this server):
-
-```bash
-sudo systemctl restart emberisegellenes.service
-```
-
-After editing any `server/*.py`, the systemd service must be restarted — otherwise the live site keeps running stale code.
-
----
-
-## Running the tests
-
-Tests live in [tests/](tests/) and use **pytest** + **pytest-asyncio**. Configuration is in [pytest.ini](pytest.ini) (`asyncio_mode = auto`, `testpaths = tests`).
-
-From the project root, using the project venv:
-
-```bash
-cd /opt/emberisegellenes_kartyak
-venv/bin/pytest
-```
-
-Useful variants:
-
-```bash
-# Verbose, with short tracebacks
-venv/bin/pytest -v --tb=short
-
-# Just one file
-venv/bin/pytest tests/test_game_czar.py
-
-# Just one test
-venv/bin/pytest tests/test_timer.py::test_timer_task_stored_on_room
-
-# Match by name substring
-venv/bin/pytest -k "czar or vote"
-
-# Only list what would run (no execution)
-venv/bin/pytest --collect-only -q
-
-# Stop on first failure
-venv/bin/pytest -x
-```
-
-If `pytest` is not on your PATH, always prefix with `venv/bin/` — the system Python does **not** have the test dependencies installed.
-
-### Test files
-
-| File | Covers |
-|---|---|
-| `test_connection_manager.py` | WebSocket connection registry |
-| `test_deck.py` | Shuffle, deal, draw, reshuffle |
-| `test_disconnect.py` | Player drop / reconnect flow, czar-disconnect skip |
-| `test_game_czar.py` | Czar rotation and pick |
-| `test_game_vote.py` | Voting / submission flow |
-| `test_inactivity_kick.py` | Kick idle submit-phase players |
-| `test_messages.py` | Chat / messages DB |
-| `test_multi_pick.py` | Multi-pick cards (pick > 1) |
-| `test_phase_guards.py` | Round phase state-machine guards |
-| `test_room.py` | Room + admin promotion |
-| `test_standalone.py` | One-player standalone game flow |
-| `test_submission_change.py` | Submitted-card withdrawal + repeated full-hand refresh |
-| `test_timer.py` | Per-round timer task lifecycle |
-| `test_unique_username.py` | Case-insensitive unique usernames per room |
-| `test_voting_timer.py` | Fresh revealed-phase timer for vote/czar phases |
-| `test_voice.py` | Voice mute + ready signalling |
-
-`tests/conftest.py` and `tests/helpers.py` hold shared fixtures and a fake WebSocket helper.
-
----
-
-## First-time setup (fresh clone)
-
-```bash
-cd /opt/emberisegellenes_kartyak
-python3.11 -m venv venv
-venv/bin/pip install -r requirements.txt
-venv/bin/pytest          # sanity check
-venv/bin/uvicorn server.main:app --host 0.0.0.0 --port 8010
-```
-
-`cards.db` is checked in pre-populated, so no DB seeding step is required.
-
----
-
-## Notable gotchas
-
-- All `server/*.py` files use `from __future__ import annotations` for Python 3.11 compatibility — keep that line when adding new modules.
-- Rooms are **in-memory only**; restarting the server drops all active games.
-- Card `type` values are capitalized: `'Black'` / `'White'`.
-- One-player standalone games are allowed.
-- All connected players submit, including the czar.
-- Revealed phase gets a fresh timer in both voting mode and czar-pick mode. If the czar disconnects, times out, or is kicked while responsible for choosing, the round is skipped without points.
-- Players may request a full new hand repeatedly during the submitting phase until they submit. Per-card swap UI is currently dormant/commented out.
-- Public pages (`/`, `/robots.txt`, `/sitemap.xml`, HTML catch-all) must accept both `GET` and `HEAD` — social-media link scrapers issue `HEAD` first.
-- `touchmove` handlers in the hand UI are intentionally non-passive (`e.preventDefault()`) to suppress page scrolling during card swipes.
-- `fastapi.testclient.TestClient` hangs in this sandbox; endpoint tests call route functions directly where needed.
+The game is based on *Cards Against Humanity*, whose cards are licensed under
+[CC BY-NC-SA 2.0](https://creativecommons.org/licenses/by-nc-sa/2.0/). The translated card texts are not part of
+this repository. This project is not affiliated with Cards Against Humanity LLC.

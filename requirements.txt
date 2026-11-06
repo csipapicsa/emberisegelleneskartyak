@@ -1,6 +1,5 @@
-fastapi>=0.111.0
-uvicorn[standard]>=0.29.0
-reportlab>=4.0
-pyphen>=0.14
-pytest>=8.0
-pytest-asyncio>=0.23
+# Runtime dependencies, pinned to the versions running in production.
+fastapi==0.136.0
+uvicorn[standard]==0.44.0
+reportlab==5.1.0           # printable card PDFs (server/print_cards.py)
+pyphen==0.18.1             # Hungarian hyphenation on printed cards
