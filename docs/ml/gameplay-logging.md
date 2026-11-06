@@ -4,7 +4,7 @@
 [tests/test_gameplay_log.py](../../tests/test_gameplay_log.py).
 **Goal:** record every decision players make in a round, so that models can later learn which white card
 a player picks for a black card, and which card the others reward. Background and the modelling plan:
-[emberisegellenes_kartyak_learning_data_collection.md](../emberisegellenes_kartyak_learning_data_collection.md).
+[data-collection-plan.md](data-collection-plan.md).
 
 Design rules:
 

@@ -9,6 +9,9 @@ The game has been live since April 2026; changes before this file are in the git
 ## [Unreleased]
 
 ### Added
+- `docs/architecture.md` (components, game engine state machine, data, interfaces, delivery), a docs index,
+  an "Engineering decisions" section and the delivery pipeline in the README, `SECURITY.md` with private
+  vulnerability reporting.
 - Anonymous gameplay log (`server/gameplay_log.py`, spec in `docs/ml/gameplay-logging.md`): hands, picks,
   swaps, shown order and votes of every round go to `gameplay.db` as training data for a computer player.
   No player identifiers; written off the event loop, one transaction per round; `EEK_GAMEPLAY_LOG=0` turns it
@@ -42,6 +45,9 @@ The game has been live since April 2026; changes before this file are in the git
   only the direct dependencies were pinned. The lock file moves them to fixed versions.
 
 ### Changed
+- `docs/` reorganized into operations/, features/, ml/ and worklogs/; the outdated June specification and
+  progress notes moved to the worklogs as history. Removed a Python script saved as `docs/analitika.md` and the
+  empty `server/feedback.py`.
 - Leftover room chat is wiped at app startup instead of at import time: importing `server.main` (as the tests
   do) used to delete the room chat of the live site's data directory. Tests now also redirect every
   writable database to a temp directory.

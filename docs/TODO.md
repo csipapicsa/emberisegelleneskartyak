@@ -1,5 +1,5 @@
 AdSense — teendők (2026-10-16)
-Részletek: docs/adatkezeles_hirdetes_szoveg.md, docs/emberisegellenes_umami_adsense_fejlesztesi_terv.md
+Részletek: docs/features/ads/privacy-notice-text.md, docs/features/ads/plan.md
 
 Gergő
 [x] Auto ads kikapcsolva

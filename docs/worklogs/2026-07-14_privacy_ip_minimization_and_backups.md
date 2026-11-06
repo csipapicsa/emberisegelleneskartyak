@@ -115,7 +115,7 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now emberisegellenes-db-backup.timer
 ```
 
-Részletes leírás: `docs/BACKUPS.md`.
+Részletes leírás: `docs/operations/backups.md`.
 
 ## Incidens és korlátozás
 

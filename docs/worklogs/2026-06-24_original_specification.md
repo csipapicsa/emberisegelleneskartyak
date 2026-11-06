@@ -1,3 +1,6 @@
+> **Historical document:** the original specification as of June 2026, kept for the project history. The current design is in
+> [docs/architecture.md](../architecture.md).
+
 # Emberiség Ellenes Kártyák — Project Specification
 
 Mobile-first, online multiplayer card game based on Cards Against Humanity rules, self-hosted at `emberisegelleneskartyak.hu` (server IP: `109.199.104.168`).

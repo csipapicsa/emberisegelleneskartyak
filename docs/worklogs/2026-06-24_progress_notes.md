@@ -1,8 +1,11 @@
+> **Historical document:** the progress notes as of June 2026, kept for the project history. The current design is in
+> [docs/architecture.md](../architecture.md).
+
 # Emberiség Ellenes Kártyák — Historical Developer Progress Notes
 
 > Historical snapshot from the initial Claude build. The frontend and many bugfixes
 > have since been implemented. For current structure and behavior, use
-> [README.md](README.md) and [PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md).
+> [README.md](../../README.md) and [the original specification](2026-06-24_original_specification.md).
 
 ## Current Status Summary
 
