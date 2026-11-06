@@ -9,6 +9,8 @@ The game has been live since April 2026; changes before this file are in the git
 ## [Unreleased]
 
 ### Added
+- CI on GitHub Actions: lint (ruff), Python and JavaScript tests, gitleaks secret scan over the full history,
+  pip-audit; documentation-only PRs skip the slow jobs; weekly scheduled run.
 - `scripts/make_sample_db.py`: a card database with made-up cards, so a fresh clone and CI can run without the real
   card texts.
 - GPL-3.0-or-later license, `pyproject.toml`, pinned `requirements.txt` and `requirements-dev.txt`.

@@ -1,0 +1,132 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # Weekly, even without code changes: new vulnerabilities are published for dependencies we already pin,
+  # and the runner images change under us.
+  schedule:
+    - cron: "0 6 * * 1"  # Mondays 06:00 UTC
+  workflow_dispatch:      # "Run workflow" button in the Actions tab
+
+# Least privilege: the jobs only need to read the code.
+permissions:
+  contents: read
+
+# A new push to a PR cancels that PR's older, now-outdated run. Runs on main always finish.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  changes:
+    # Does this PR touch anything besides documentation? lint, audit and test only run if it does.
+    # Jobs skipped by an `if:` count as passed for required checks; skipping the whole workflow (paths-ignore)
+    # would leave the required checks waiting forever. This job is a required check itself: if it fails,
+    # the jobs after it are skipped, and without that requirement a skip would let the PR through.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.diff.outputs.code }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2  # the PR's merge preview and its parents
+      - id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          # Pushes to main, the weekly run and manual runs always run everything.
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # For a PR, HEAD is GitHub's merge preview; its first parent is the target branch.
+          changed=$(git diff --name-only HEAD^1 HEAD)
+          echo "Changed files:"
+          echo "$changed"
+          # Fail-safe: only docs/, *.md and LICENSE count as documentation; anything else (or an empty diff) is code.
+          if printf '%s\n' "$changed" | grep -qvE '^docs/|\.md$|^LICENSE$'; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Documentation-only change: lint, audit and test are skipped."
+          fi
+
+  lint:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      # Install only ruff, at the version pinned in requirements-dev.txt (one source of truth).
+      - run: python -m pip install "$(grep -oE '^ruff==[^ ]+' requirements-dev.txt)"
+      # "github" format turns findings into annotations on the PR's changed lines.
+      - run: python -m ruff check --output-format=github server tests scripts
+
+  secret-scan:
+    # Always runs: a secret pasted into a Markdown file is still a leak.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GITLEAKS_VERSION: "8.30.1"  # same version as used locally
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0  # the whole history, not just the latest commit: a secret stays in history once committed
+      - name: Install gitleaks (checksum verified)
+        run: |
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfLO "$base/$archive"
+          curl -sSfLO "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          sha256sum --check --ignore-missing "gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          tar -xzf "$archive" gitleaks
+      # --redact: CI logs of a public repo are public, so a found secret must not be printed in them.
+      - run: ./gitleaks git --redact --verbose .
+
+  audit:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      - run: python -m pip install "$(grep -oE '^pip-audit==[^ ]+' requirements-dev.txt)"
+      - run: python -m pip_audit -r requirements.txt -r requirements-dev.txt --progress-spinner off
+
+  test:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    # Production is a Linux server, so the tests run on Linux.
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+      # The client-side JavaScript is tested under Node (tests/js/, and some pytest files run node directly).
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - run: python -m pip install -r requirements-dev.txt
+      # The real card texts are not in the repository; the game runs on made-up sample cards.
+      - run: python scripts/make_sample_db.py
+      # Run on their own as well: pytest's wrapper skips them when node is missing, this step would fail instead.
+      - name: JavaScript tests
+        run: node --test tests/js/*.test.js
+      # local_data tests need the real card database; see pyproject.toml.
+      - run: python -m pytest -m "not local_data"

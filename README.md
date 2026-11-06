@@ -1,5 +1,7 @@
 # Emberiségellenes Kártyák
 
+[![CI](https://github.com/csipapicsa/emberisegelleneskartyak/actions/workflows/ci.yml/badge.svg)](https://github.com/csipapicsa/emberisegelleneskartyak/actions/workflows/ci.yml)
+
 A mobile-first, real-time multiplayer party card game in Hungarian, in the style of *Cards Against Humanity*.
 Players join a room from their phones, everyone answers a black prompt card with a white card from their hand,
 and the czar (or a group vote) picks the funniest answer.
@@ -59,12 +61,16 @@ Without them the IP-based features (card idea voting, visitor statistics) and th
 ```bash
 venv/bin/python -m pytest                      # everything
 venv/bin/python -m pytest -m "not local_data"  # what CI runs: no real card database needed
+venv/bin/python -m ruff check server tests scripts
 ```
 
 - About 400 pytest tests: game rules and phase transitions, timers, reconnects, API endpoints, privacy, backups.
 - JavaScript tests for the client code (hand swiping, voice chat, ads) run with `node --test tests/js/`, and pytest
   also runs them when Node is installed.
 - Tests marked `local_data` check the real card database, for example that every card fits on a printed card.
+- CI (GitHub Actions) runs on every pull request, on pushes to `main` and weekly: lint (ruff), tests (Python and
+  Node, on the sample cards), a secret scan over the full git history (gitleaks) and a dependency vulnerability
+  audit (pip-audit).
 
 ## Project structure
 
