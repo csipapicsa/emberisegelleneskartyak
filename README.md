@@ -61,15 +61,20 @@ Without them the IP-based features (card idea voting, visitor statistics) and th
 ```bash
 venv/bin/python -m pytest                      # everything
 venv/bin/python -m pytest -m "not local_data" --cov  # what CI runs: sample cards, coverage gate
+scripts/e2e_in_container.sh                    # browser end-to-end test in the Playwright container
 venv/bin/python -m ruff check server tests scripts
 ```
 
 - About 400 pytest tests: game rules and phase transitions, timers, reconnects, API endpoints, privacy, backups.
 - JavaScript tests for the client code (hand swiping, voice chat, ads) run with `node --test tests/js/`, and pytest
   also runs them when Node is installed.
+- An end-to-end test drives three headless Chromium "phones" through a full round against a real server:
+  create a room, join, admin approval, play cards, czar pick, winner on every screen. It runs in CI, in the
+  Playwright container ([scripts/e2e_in_container.sh](scripts/e2e_in_container.sh)), or directly after
+  `python -m playwright install --with-deps chromium`.
 - Tests marked `local_data` check the real card database, for example that every card fits on a printed card.
 - CI (GitHub Actions) runs on every pull request, on pushes to `main` and weekly: lint (ruff), tests (Python and
-  Node, on the sample cards), a secret scan over the full git history (gitleaks) and a dependency vulnerability
+  Node, on the sample cards) with a coverage gate, the browser end-to-end test, a secret scan over the full git history (gitleaks) and a dependency vulnerability
   audit (pip-audit).
 
 ## Project structure
