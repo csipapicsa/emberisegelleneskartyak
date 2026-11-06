@@ -56,3 +56,12 @@ Minden *.db-t ment az adatmappa gyökerében és a database/ alatt. backups/ mos
 [ ] A konténeres átállás (Phase 2.4) után az adat /srv/eek/prod alatt lesz:
     a mentés EEK_DATA_DIR-rel fusson oda, és legyen visszaállítási próba.
 [ ] Offsite másolat: most minden mentés ugyanazon a szerveren van.
+
+Konténer / staging — teendők (2026-11-06)
+[ ] Függőségek zárolása: a requirements.txt csak a közvetlen csomagokat rögzíti, a többit minden build
+    a legújabbal tölti. Az image-ben starlette 1.10.0 / websockets 17.4 van, élesben 1.0.0 / 16.0.
+    Teljes lock fájl (hash-ekkel), az éles verziókra; frissítés Dependabot PR-ral.
+[ ] WebSocket: ha a böngészők egyszerre zárnak (e2e teszt vége), a websocket_endpoint ciklusa egy már
+    lezárt socketen hívja a receive-et → "Need to call accept first" traceback. Éles és image-verzióval is
+    előjön, a játékot nem rontja el. Elkapni és tesztet írni rá.
+[ ] Staging: a Umami-szkript a staging forgalmát is az éles statisztikába számolja.
