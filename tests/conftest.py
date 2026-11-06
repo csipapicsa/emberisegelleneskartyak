@@ -30,3 +30,18 @@ def isolated_card_seen(tmp_path, monkeypatch):
     monkeypatch.setattr(card_seen, "DB_PATH", str(tmp_path / "card_seen.db"))
     monkeypatch.setattr(card_seen, "_pending", Counter())
     yield card_seen
+
+
+@pytest.fixture(autouse=True)
+def isolated_runtime_data(tmp_path, monkeypatch):
+    """Point every database the app writes (and the PDF output folder) at the test's temp directory.
+
+    Without this, tests that start the app wrote chat.db and messages.db into the data directory, which
+    on the server is the live site's data. A test can still patch a path itself; its setattr runs later
+    and wins. The card database is opened read-only and stays where it is.
+    """
+    from server import analytics, chat_db, messages_db, print_cards
+    monkeypatch.setattr(messages_db, "DB_PATH", str(tmp_path / "messages.db"))
+    monkeypatch.setattr(chat_db, "DB_PATH", str(tmp_path / "chat.db"))
+    monkeypatch.setattr(analytics, "DB_PATH", tmp_path / "analytics.db")
+    monkeypatch.setattr(print_cards, "OUTPUT_DIR", tmp_path / "generated" / "print")

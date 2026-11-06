@@ -5,11 +5,11 @@ import logging
 import os
 import sqlite3
 from datetime import datetime
-from pathlib import Path
 
+from server.paths import DATA_DIR
 from server.privacy import PrivacyConfigurationError, pseudonymize_ip
 
-DB_PATH = Path(__file__).parent.parent / "analytics.db"
+DB_PATH = DATA_DIR / "analytics.db"
 RETENTION_DAYS = 90
 logger = logging.getLogger(__name__)
 

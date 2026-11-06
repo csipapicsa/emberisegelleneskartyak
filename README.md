@@ -54,6 +54,8 @@ venv/bin/uvicorn server.main:app --port 8010
 Open <http://localhost:8010>, create a room, and join it from a second browser window to play.
 
 Optional settings come from environment variables (see [deploy/privacy.env.example](deploy/privacy.env.example)).
+`EEK_DATA_DIR` moves all runtime data (the SQLite databases and generated PDFs) out of the code directory, e.g.
+to a container volume; by default it stays in the repository root.
 Without them the IP-based features (card idea voting, visitor statistics) and the admin statistics page stay off.
 
 ## Tests

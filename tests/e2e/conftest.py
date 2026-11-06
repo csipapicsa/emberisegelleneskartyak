@@ -1,8 +1,8 @@
 """End-to-end fixtures: a real uvicorn server on the sample cards, driven by headless Chromium.
 
-The server runs from a copy of server/, static/ and config.json in a temp directory. Every SQLite path
-in server/ is relative to the code, so the run gets its own fresh databases and never touches the
-working copy (or a real card database next to it).
+The server runs from the repository with EEK_DATA_DIR pointing at a temp directory that holds a fresh
+sample card database, so the run gets its own databases and never touches the working copy's (or a real
+card database next to it).
 
 When Playwright or its Chromium is missing these tests are skipped, so a plain `pytest` still works on a
 machine without browsers. The CI e2e job sets EEK_E2E_REQUIRED=1, which turns that skip into a failure.
@@ -10,7 +10,6 @@ machine without browsers. The CI e2e job sets EEK_E2E_REQUIRED=1, which turns th
 from __future__ import annotations
 
 import os
-import shutil
 import socket
 import subprocess
 import sys
@@ -39,27 +38,24 @@ def _free_port() -> int:
 
 @pytest.fixture(scope="session")
 def server_url(tmp_path_factory) -> Iterator[str]:
-    app_dir = tmp_path_factory.mktemp("app")
-    for name in ("server", "static"):
-        shutil.copytree(os.path.join(REPO_ROOT, name), app_dir / name,
-                        ignore=shutil.ignore_patterns("__pycache__"))
-    shutil.copy(os.path.join(REPO_ROOT, "config.json"), app_dir / "config.json")
+    data_dir = tmp_path_factory.mktemp("data")
     subprocess.run(
         [sys.executable, os.path.join(REPO_ROOT, "scripts", "make_sample_db.py"),
-         "--out", str(app_dir / "database" / "card_master.db")],
+         "--out", str(data_dir / "database" / "card_master.db")],
         check=True, capture_output=True,
     )
 
     port = _free_port()
     url = f"http://127.0.0.1:{port}"
-    log_path = app_dir / "uvicorn.log"
+    log_path = data_dir / "uvicorn.log"
     # No privacy/TURN/admin secrets: IP-based features, voice and /admin/stats stay off, as in a fresh clone.
     env = {k: v for k, v in os.environ.items()
            if k not in ("EEK_PRIVACY_HMAC_SECRET", "TURN_SECRET", "EEK_ADMIN_STATS_KEY")}
+    env["EEK_DATA_DIR"] = str(data_dir)
     with open(log_path, "w") as log:
         proc = subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "server.main:app", "--host", "127.0.0.1", "--port", str(port)],
-            cwd=app_dir, env=env, stdout=log, stderr=subprocess.STDOUT,
+            cwd=REPO_ROOT, env=env, stdout=log, stderr=subprocess.STDOUT,
         )
     try:
         deadline = time.monotonic() + 30

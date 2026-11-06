@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import html
-import os
 import sqlite3
 from datetime import UTC, datetime
 
+from server.paths import DATA_DIR
 from server.privacy import PrivacyConfigurationError, pseudonymize_ip
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "messages.db")
+DB_PATH = str(DATA_DIR / "messages.db")
 CARD_IDEA_MAX_LENGTHS = {"white": 280, "black": 360}
 CONTACT_RETENTION_DAYS = 365
 VOTE_RETENTION_DAYS = 5 * 365

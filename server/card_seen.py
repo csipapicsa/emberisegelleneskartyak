@@ -21,14 +21,15 @@ single b-tree probe. Community cards are counted under their offset ids
 from __future__ import annotations
 
 import logging
-import os
 import sqlite3
 from collections import Counter
 from collections.abc import Iterable
 
+from server.paths import DATA_DIR
+
 logger = logging.getLogger(__name__)
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "database", "card_seen.db")
+DB_PATH = str(DATA_DIR / "database" / "card_seen.db")
 FLUSH_INTERVAL = 60
 
 _pending: Counter[int] = Counter()

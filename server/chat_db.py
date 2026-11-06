@@ -8,11 +8,12 @@ the in-memory Room is torn down, so nothing outlives the room it belongs to.
 from __future__ import annotations
 
 import html
-import os
 import sqlite3
 from datetime import UTC, datetime
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "chat.db")
+from server.paths import DATA_DIR
+
+DB_PATH = str(DATA_DIR / "chat.db")
 MAX_MESSAGE_LENGTH = 500
 HISTORY_LIMIT = 200
 
