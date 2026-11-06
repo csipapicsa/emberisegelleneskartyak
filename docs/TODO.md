@@ -65,6 +65,8 @@ Konténer / staging — teendők (2026-11-06)
 [ ] WebSocket: ha a böngészők egyszerre zárnak (e2e teszt vége), a websocket_endpoint ciklusa egy már
     lezárt socketen hívja a receive-et → "Need to call accept first" traceback. A játékot nem rontja el.
     Elkapni és tesztet írni rá.
+[ ] Szavazós mód: ha lejár az idő és senki nem szavazott, a tally_votes kihagyja a kézfeltöltést,
+    így a következő kör 9 lappal indul (a rákövetkező kör helyrehozza).
 [ ] Staging: a Umami-szkript a staging forgalmát is az éles statisztikába számolja.
 
 Phase 2 — elhalasztva (MLflow előbb)
