@@ -42,7 +42,7 @@ flowchart LR
 ## Quickstart
 
 ```bash
-git clone <this repo> && cd emberisegelleneskartyak.hu
+git clone https://github.com/csipapicsa/emberisegelleneskartyak.git && cd emberisegelleneskartyak
 python3.11 -m venv venv
 venv/bin/pip install -r requirements-dev.txt
 venv/bin/python scripts/make_sample_db.py     # made-up cards; the real card texts are not in the repo
