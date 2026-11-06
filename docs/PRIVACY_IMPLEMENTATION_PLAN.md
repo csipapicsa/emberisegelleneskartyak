@@ -16,7 +16,7 @@ valósághű, könnyen elérhető adatkezelési tájékoztató kiadása.
      szükségtelen azonosító mezők törlődnek.
 2. **Üzemeltetői konfiguráció** — telepítés előtt kötelező.
 - A szerveren jöjjön létre a `/etc/emberisegellenes/privacy.env` fájl a
-     `privacy.env.example` alapján, erős, titkos
+     `deploy/privacy.env.example` alapján, erős, titkos
      `EEK_PRIVACY_HMAC_SECRET` értékkel.
    - Ezt a titkot nem szabad commitolni, e-mailben küldeni vagy a nyilvános
      tájékoztatóba írni.
@@ -46,12 +46,12 @@ valósághű, könnyen elérhető adatkezelési tájékoztató kiadása.
   a beküldő személyéhez nem kapcsoljuk őket.
 - Kártyaötlet-szavazati HMAC: 5 év.
 - Nginx access- és error-logok: 14 nap; a hozzá tartozó logrotate-minta
-  `nginx_emberisegellenes.logrotate` néven szerepel a projektben.
+  `deploy/logrotate/emberisegellenes` néven szerepel a projektben.
 
 ## Kiadási ellenőrzőlista
 
 - [ ] A titkos HMAC-konfiguráció létrehozva a szerveren.
-- [ ] A `systemd/emberisegellenes.service.d/privacy.conf` drop-in bemásolva
+- [ ] A `deploy/systemd/emberisegellenes.service.d/privacy.conf` drop-in bemásolva
   `/etc/systemd/system/emberisegellenes.service.d/privacy.conf` alá; ez nem
   írja felül a meglévő TURN_SECRET-et.
 - [ ] A systemd és nginx konfiguráció ellenőrizve, majd újratöltve.

@@ -26,8 +26,8 @@ A systemd timer napi 03:05-kor fut, és kimaradt futást is pótol a következő
 induláskor. Telepítés:
 
 ```bash
-sudo install -m 644 /opt/emberisegellenes_kartyak/systemd/emberisegellenes-db-backup.service /etc/systemd/system/emberisegellenes-db-backup.service
-sudo install -m 644 /opt/emberisegellenes_kartyak/systemd/emberisegellenes-db-backup.timer /etc/systemd/system/emberisegellenes-db-backup.timer
+sudo install -m 644 /opt/emberisegellenes_kartyak/deploy/systemd/emberisegellenes-db-backup.service /etc/systemd/system/emberisegellenes-db-backup.service
+sudo install -m 644 /opt/emberisegellenes_kartyak/deploy/systemd/emberisegellenes-db-backup.timer /etc/systemd/system/emberisegellenes-db-backup.timer
 sudo systemctl daemon-reload
 sudo systemctl enable --now emberisegellenes-db-backup.timer
 ```

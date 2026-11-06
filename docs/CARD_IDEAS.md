@@ -64,7 +64,7 @@ The `"like"` and `dislike` counters default to `0`. They are present now so a la
 - The endpoint accepts only JSON objects with string `card_type` and string `text` values.
 - Malformed JSON and non-object JSON are rejected.
 - Oversized requests are rejected when `Content-Length` is present.
-- `nginx_emberisegellenes.conf` sets `client_max_body_size 16k;` so large request bodies can be rejected before reaching the app after nginx is reloaded with that config.
+- `deploy/nginx/emberisegellenes.conf` sets `client_max_body_size 16k;` so large request bodies can be rejected before reaching the app after nginx is reloaded with that config.
 - Empty submissions are rejected.
 - Text length is capped server-side: 280 characters for white cards, 360 for black cards.
 - ASCII control characters are stripped except newline, carriage return, and tab.
