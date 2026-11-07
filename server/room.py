@@ -39,6 +39,7 @@ class Room:
     phase: str = "lobby"  # lobby | submitting | revealed | round_ending | finished
     started: bool = False
     finished: bool = False
+    closed: bool = False  # deleted from memory (server/main.py); stops the round loop, see game.close_room
     round_num: int = 0
     cards_revealed: bool = False  # kept for compat; prefer phase checks
     created_at: float = field(default_factory=time.time)

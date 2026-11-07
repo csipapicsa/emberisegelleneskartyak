@@ -67,6 +67,7 @@ def _delete_room_and_chat(code: str) -> None:
     room = get_room(code)
     if room:
         gameplay_log.room_closed(room)
+        game_logic.close_room(room)
     delete_room(code)
     try:
         conn = chat_db.get_conn()

@@ -17,6 +17,14 @@ if TYPE_CHECKING:
     from server.main import ConnectionManager
 
 
+def close_room(room: Room) -> None:
+    """The room is being deleted: stop its round loop for good. The loop runs in background tasks that
+    hold their own reference to the room, so without this a running game kept playing its remaining
+    rounds to nobody after the room was gone (seen in gameplay.db by ml/validate.py, 2026-11-07)."""
+    room.closed = True
+    _cancel_timer(room)
+
+
 def _cancel_timer(room: Room) -> None:
     if room.timer_task and not room.timer_task.done():
         current = asyncio.current_task()
@@ -118,7 +126,7 @@ async def start_game(room: Room, black_cards: list[dict], white_cards: list[dict
 
 
 async def start_round(room: Room, manager: ConnectionManager) -> None:
-    if room.finished:
+    if room.finished or room.closed:
         return
 
     _cancel_timer(room)
@@ -174,7 +182,7 @@ async def _timer_task(room: Room, round_num: int, manager: ConnectionManager) ->
     remaining = room.timer_seconds
     while remaining > 0:
         await asyncio.sleep(1)
-        if room.round_num != round_num or room.phase not in ("submitting", "revealed"):
+        if room.closed or room.round_num != round_num or room.phase not in ("submitting", "revealed"):
             return
         remaining -= 1
         await manager.broadcast(room.code, {"event": "timer_tick", "seconds_remaining": remaining})
@@ -373,6 +381,8 @@ async def _end_round(room: Room, winners: list[str], manager: ConnectionManager)
         await manager.send(room.code, sid, {"event": "hand_update", "hand": player.hand})
 
     await asyncio.sleep(3)
+    if room.closed:  # deleted during the pause; _cancel_timer above couldn't stop the task we run in
+        return
     room.next_czar()
     await start_round(room, manager)
 
