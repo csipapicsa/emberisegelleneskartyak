@@ -61,11 +61,12 @@ jobs:
       - name: Build
         run: docker build -t "$IMAGE" deploy/mlflow
 
+      # --tmpfs /tmp: podman (on the server) adds a writable /tmp to read-only containers by itself; docker doesn't.
       - name: Start it with a login, hardened like on the server
         run: |
           mkdir -p ci-data && chmod a+rwx ci-data
           docker run -d --name mlflow -p 127.0.0.1:5000:5000 -v "$PWD/ci-data:/data" \
-            --init --read-only --cap-drop=ALL --security-opt no-new-privileges \
+            --init --read-only --tmpfs /tmp --cap-drop=ALL --security-opt no-new-privileges \
             -e MLFLOW_AUTH_ADMIN_PASSWORD="${CI_ADMIN#admin:}" \
             -e MLFLOW_FLASK_SERVER_SECRET_KEY=ci-secret-key \
             "$IMAGE"
