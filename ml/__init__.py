@@ -5,6 +5,11 @@ Plan: docs/ml/implementation-plan.md. Dependencies: requirements-ml.txt (not par
 from __future__ import annotations
 
 import os
+from pathlib import Path
+
+# Snapshots and the embeddings cache. Defaults to ml-data/ in the repository; the training image sets
+# EEK_ML_DATA_DIR to its /data volume, because the code folder in a container is read-only.
+DATA_DIR = Path(os.environ.get("EEK_ML_DATA_DIR") or Path(__file__).resolve().parents[1] / "ml-data")
 
 
 def lower_priority() -> str:

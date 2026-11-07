@@ -25,7 +25,7 @@ from datetime import date
 from pathlib import Path
 
 from ml import evaluate, features, lower_priority, train
-from ml.export import export, read_snapshot
+from ml.export import DEFAULT_OUT, export, read_snapshot
 from ml.validate import FIRST_LOG_DAY, validate_snapshot
 from server.gameplay_log import DB_PATH
 
@@ -36,7 +36,7 @@ DEFAULT_CONFIG = Path(__file__).with_name("pipeline.toml")
 @dataclass
 class Config:
     db: Path = DB_PATH
-    snapshots: Path = ROOT / "ml-data" / "snapshots"
+    snapshots: Path = DEFAULT_OUT
     first_day: int = FIRST_LOG_DAY  # days since 1970-01-01
     embeddings: list[str] = field(default_factory=lambda: list(features.EMBEDDING_MODELS))
     models: list[str] = field(default_factory=lambda: list(train.MODEL_TYPES))

@@ -1,0 +1,15 @@
+# Build context for Dockerfile.ml (BuildKit reads <Dockerfile>.dockerignore; podman: --ignorefile).
+# Only what the image copies, so no local database, snapshot or private note can end up in it.
+*
+!requirements-ml.txt
+!requirements-dev.txt
+!server/__init__.py
+!server/paths.py
+!server/gameplay_log.py
+!ml/
+!scripts/__init__.py
+!scripts/make_sample_gameplay_db.py
+!tests/__init__.py
+!tests/ml/
+**/__pycache__
+**/*.pyc

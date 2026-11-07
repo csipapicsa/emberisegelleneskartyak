@@ -162,3 +162,15 @@ def test_main(sample_db, tmp_path, capsys):
 def test_pack_ids_matches_what_the_export_decodes():
     assert export._ids(pack_ids([1, 300, 20000])) == [1, 300, 20000]
     assert export._ids(None) is None
+
+
+def test_git_commit_falls_back_to_the_image_version(monkeypatch):
+    """The training image has no git and no .git; its build puts the commit into EEK_VERSION."""
+    def no_git(*args, **kwargs):
+        raise FileNotFoundError("git")
+
+    monkeypatch.setattr(export.subprocess, "run", no_git)
+    monkeypatch.setenv("EEK_VERSION", "abc1234")
+    assert export._git_commit() == "abc1234"
+    monkeypatch.delenv("EEK_VERSION")
+    assert export._git_commit() is None

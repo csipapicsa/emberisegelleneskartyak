@@ -82,3 +82,13 @@ def test_lower_priority_puts_the_process_last():
     assert out[0] == "SCHED_IDLE, nice 19"
     assert out[1] == "True 19"
     assert callable(lower_priority)
+
+
+def test_data_dir_follows_eek_ml_data_dir(tmp_path):
+    """The training image points snapshots and the embeddings cache at its /data volume."""
+    code = ("from ml import export, features, pipeline; "
+            "print(export.DEFAULT_OUT, features.DEFAULT_CACHE, pipeline.load_config().snapshots, sep='|')")
+    env = {**os.environ, "EEK_ML_DATA_DIR": str(tmp_path)}
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True, env=env,
+                         cwd=os.path.dirname(os.path.dirname(os.path.dirname(__file__)))).stdout.strip()
+    assert out.split("|") == [str(tmp_path / "snapshots"), str(tmp_path / "embeddings"), str(tmp_path / "snapshots")]

@@ -64,6 +64,25 @@ venv-ml/bin/python -m ml.train                  # latest snapshot, MLflow experi
 Every ML process lowers its own CPU priority to the minimum (`ml.lower_priority()`: SCHED_IDLE, nice 19),
 so the live game always comes first.
 
+## Training image
+
+The same pipeline as a container: [Dockerfile.ml](../../Dockerfile.ml), published by
+[.github/workflows/ml-image.yml](../../.github/workflows/ml-image.yml) as
+`ghcr.io/csipapicsa/eek-ml-train:sha-<commit>` (and `:main`). This is what the GCP training job runs
+(milestone 3). Data lives in its `/data` volume: `gameplay.db`, `snapshots/`, `embeddings/` and the
+Hugging Face downloads. The embedding models aren't baked in; with the embeddings cache next to the
+snapshot, a job never loads them.
+
+```bash
+podman run --rm -v ./data:/data:Z --userns=keep-id:uid=10001,gid=10001 \
+    -e MLFLOW_TRACKING_URI -e MLFLOW_TRACKING_USERNAME -e MLFLOW_TRACKING_PASSWORD \
+    ghcr.io/csipapicsa/eek-ml-train:main python -m ml.train --snapshot /data/snapshots/<name>
+```
+
+Every MLflow run gets the tags `git_commit`, `snapshot_hash` and `image`, which are enough to rebuild it.
+Local builds: `podman build -f Dockerfile.ml --ignorefile Dockerfile.ml.dockerignore --target test .`
+(podman reuses cached layers even when `GIT_SHA` changes; CI uses docker, which doesn't).
+
 ## Sample data
 
 Everything runs on made-up games too, which is what the tests and CI use:

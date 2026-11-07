@@ -1,0 +1,115 @@
+name: ML training image
+
+# Builds the training image (Dockerfile.ml), runs the ML tests inside it, trains one tiny cycle on sample
+# data with it, and on main publishes it to GHCR as ghcr.io/csipapicsa/eek-ml-train:sha-<commit> (plus
+# :main). The same image runs on the server and as the GCP Cloud Run Job (implementation plan, milestone 3).
+on:
+  pull_request:
+    paths: &image-inputs
+      - "Dockerfile.ml"
+      - "Dockerfile.ml.dockerignore"
+      - "requirements-ml.txt"
+      - "requirements-dev.txt"
+      - "ml/**"
+      - "server/__init__.py"
+      - "server/paths.py"
+      - "server/gameplay_log.py"
+      - "scripts/make_sample_gameplay_db.py"
+      - "tests/ml/**"
+      - ".github/workflows/ml-image.yml"
+  push:
+    branches: [main]
+    paths: *image-inputs
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ml-image-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build-test-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write  # used only by the last step, on main
+    env:
+      REPO_IMAGE: ghcr.io/csipapicsa/eek-ml-train
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Commit
+        run: echo "SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+
+      # The test target is built FROM the train target, so the published image is the exact set of layers
+      # the tests ran on. The same GIT_SHA for both keeps those layers shared.
+      - name: Build and run the ML tests inside the image
+        run: >-
+          docker build -f Dockerfile.ml --target test --build-arg GIT_SHA="$SHA" -t eek-ml-train:test .
+      - name: Build the training image
+        run: >-
+          docker build -f Dockerfile.ml --target train --build-arg GIT_SHA="$SHA" -t eek-ml-train:ci .
+
+      - name: The image knows its commit
+        run: |
+          env=$(docker inspect eek-ml-train:ci --format '{{range .Config.Env}}{{println .}}{{end}}')
+          echo "$env" | grep -qx "EEK_VERSION=$SHA" || { echo "::error::EEK_VERSION isn't $SHA"; exit 1; }
+          echo "$env" | grep -qx "EEK_ML_IMAGE=$REPO_IMAGE:sha-$SHA" || { echo "::error::EEK_ML_IMAGE is wrong"; exit 1; }
+          docker image ls eek-ml-train:ci --format 'Size: {{.Size}}' >> "$GITHUB_STEP_SUMMARY"
+
+      # A real cycle: sample games -> export -> validate -> train (one real embedding model, downloaded from
+      # Hugging Face at its pinned revision) -> MLflow (a local file store) -> register the challenger.
+      # Hardened like on the server: read-only, no capabilities, 3 GB like the systemd unit.
+      - name: Train one tiny cycle with the image
+        run: |
+          mkdir -p ci-data && chmod a+rwx ci-data
+          cat > ci-data/ci.toml <<'EOF'
+          [validate]
+          first_day = "2025-01-01"  # the sample games are dated 2025
+          [train]
+          embeddings = ["e5"]
+          models = ["linear"]
+          experiment = "ci-smoke"
+          EOF
+          docker run --rm -v "$PWD/ci-data:/data" eek-ml-train:test \
+            python scripts/make_sample_gameplay_db.py --out /data/gameplay.db
+          docker run --rm -v "$PWD/ci-data:/data" --read-only --tmpfs /tmp --tmpfs /home/eek \
+            --cap-drop=ALL --security-opt no-new-privileges --memory 3g \
+            -e MLFLOW_TRACKING_URI=file:///data/mlruns -e MLFLOW_ALLOW_FILE_STORE=true \
+            eek-ml-train:ci python -m ml.pipeline --config /data/ci.toml
+
+      - name: The run is traceable and the challenger loads
+        run: |
+          docker run --rm -v "$PWD/ci-data:/data" -e EXPECTED_SHA="$SHA" \
+            -e MLFLOW_TRACKING_URI=file:///data/mlruns -e MLFLOW_ALLOW_FILE_STORE=true \
+            eek-ml-train:ci python -c '
+          import os
+          import mlflow
+          import numpy as np
+          sha = os.environ["EXPECTED_SHA"]
+          cycle = mlflow.search_runs(experiment_names=["ci-smoke"], filter_string="tags.kind = '\''cycle'\''",
+                                     output_format="list")[0]
+          tags = cycle.data.tags
+          assert tags["git_commit"] == sha, tags["git_commit"]
+          assert tags["image"].endswith(f":sha-{sha}"), tags["image"]
+          assert len(tags["snapshot_hash"]) == 64
+          probs = np.asarray(mlflow.pyfunc.load_model("models:/pick-model@challenger").predict(
+              np.random.rand(3, 11, 384).astype("float32")))
+          assert probs.shape == (3, 10) and np.allclose(probs.sum(axis=1), 1, atol=1e-4), probs
+          print("cycle", cycle.info.run_id, tags["image"], "challenger OK")
+          '
+
+      - name: Publish
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          for tag in "sha-$SHA" main; do
+            docker tag eek-ml-train:ci "$REPO_IMAGE:$tag"
+            docker push "$REPO_IMAGE:$tag"
+          done
+          echo "Published $REPO_IMAGE:sha-$SHA (also :main)" >> "$GITHUB_STEP_SUMMARY"
