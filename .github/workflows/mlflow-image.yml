@@ -38,7 +38,7 @@ jobs:
       CI_TRAINER_PASSWORD: trainer-password-ci
       CI_READER_PASSWORD: reader-password-ci
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
