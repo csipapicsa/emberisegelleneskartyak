@@ -139,10 +139,13 @@ commit, data hash and image tag.
 | 3.2 | ✅ Bucket for snapshots; service accounts: `uploader` (may only write to the bucket; its key lives on the server, root:eek 0640) and `trainer` (the job's identity: reads the bucket and the MLflow secret) | Gergo, commands from Claude |
 | 3.3 | ✅ Training image in Artifact Registry, pushed by CI without a stored key (Workload Identity Federation); setup in [gcp-setup.md](gcp-setup.md) | Claude + Gergo |
 | 3.4 | ✅ Cloud Run Job: runs the pipeline on a snapshot URI; the `trainer` MLflow password comes from Secret Manager | Claude + Gergo |
-| 3.5 | `scripts/train_in_cloud.sh` on the server: export → upload → start the job → print the MLflow run link | Claude |
+| 3.5 | ✅ `python -m ml.cloud` on the server (Python instead of a shell script: no gcloud install, unit-tested): embeddings → create-only upload → start the job → print its runs next to the server's | Claude |
 
 **Done when:** a cloud run appears in MLflow next to the local ones and gives the same metrics on the same
 snapshot.
+
+✅ 2026-11-07: execution `eek-train-zjj96` on snapshot `2026-11-06_c8a39402b353` — all 6 models matched the
+server's test MRR to 4 decimals (training is seeded and full-batch).
 
 ## Milestone 4: serving, the computer player, promotion
 
