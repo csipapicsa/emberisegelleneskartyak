@@ -77,7 +77,7 @@ so the game image stays small.
 | 2.5 | ✅ `ml/train.py`: baselines (random, smoothed card popularity) and the model grid (below): pick from hand as a softmax over the hand | Claude |
 | 2.6 | ✅ `ml/evaluate.py`: split by time and by game, top-1, top-3, MRR, log loss (ties counted as a fair tie-break), always next to the popularity baseline | Claude |
 | 2.7 | ✅ MLflow logging: a parent run per cycle with the snapshot as its dataset (content hash as digest), nested runs with parameters, metrics, learning curves, git commit, and the model (pt2 format, signature (n, 11, 384) → (n, 10)); the best on validation is registered as `challenger`. Image tag follows with 2.9 | Claude |
-| 2.8 | `ml/pipeline.py`: one command runs every step from a config file. Retraining trigger: a daily timer that runs the grid only if enough new rounds arrived since the last run (most games are at weekends) | Claude |
+| 2.8 | ✅ `ml/pipeline.py`: one command runs every step from `ml/pipeline.toml`. Retraining trigger: a nightly timer (04:00, idle priority) that trains only if at least 20 new picks arrived since the last cycle in MLflow (most games are at weekends). Each cycle stores its snapshot in MLflow | Claude + Gergo (timer install) |
 | 2.9 | `Dockerfile.ml` and a CI job: pipeline unit tests and a tiny training run on the sample data; the training image is published to GHCR on `main` | Claude |
 
 **The model grid (decided 2026-11-07):** 3 embedding models × 2 model structures = 6 runs per training cycle,

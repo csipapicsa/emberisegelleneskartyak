@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly ML training run (only trains when there are new games)
+
+[Timer]
+# After the database backups (03:05, 03:15), when hardly anyone plays.
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,23 @@
+[Unit]
+Description=ML pipeline: export, validate, and train if there is new data (docs/ml/pipeline.md)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# The user that owns the code checkout, venv-ml and ~/.mlflow/credentials. Moves to the eek user (or into
+# the training container, milestone 2.9) together with the game.
+User=adminuser_developer
+WorkingDirectory=/opt/emberisegellenes_kartyak
+Environment=MLFLOW_TRACKING_URI=http://127.0.0.1:5000
+Environment=HF_HUB_DISABLE_PROGRESS_BARS=1 TOKENIZERS_PARALLELISM=false
+Environment=MLFLOW_DISABLE_AGENT_HINT=1 GIT_PYTHON_REFRESH=quiet
+ExecStart=/opt/emberisegellenes_kartyak/venv-ml/bin/python -m ml.pipeline
+
+# The live game always comes first: CPU and disk only when nothing else wants them (the pipeline also
+# lowers its own priority), and a memory ceiling so it can never push the game out of RAM.
+Nice=19
+CPUSchedulingPolicy=idle
+IOSchedulingClass=idle
+MemoryMax=3G
+TimeoutStartSec=1h

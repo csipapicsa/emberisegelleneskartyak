@@ -14,7 +14,7 @@ Both are trained the same way: full-batch Adam on the cross-entropy of the playe
 on the validation games. The baselines need no training: random, and card popularity.
 
 MLflow (experiment "pick-model"): a parent run per cycle ("cycle <snapshot>", with the snapshot as its
-dataset) and one nested run per model with its parameters, train/val/test metrics, learning curves and,
+dataset and its files as artifacts) and one nested run per model with its parameters, train/val/test metrics, learning curves and,
 for the trained ones, the model. The trained model with the best validation MRR is registered as
 "pick-model" and gets the alias "challenger"; moving it to "champion" is a separate, deliberate step
 (milestone 4). Test metrics are reported, never used to choose.
@@ -177,6 +177,8 @@ def run_cycle(snapshot: Path, embeddings: Sequence[str] = tuple(features.EMBEDDI
         mlflow.log_params({**split_sizes, "split": "by game, time order: oldest train, newest test",
                            "task": "one-blank picks, humans only"})
         mlflow.log_input(dataset, context="training")
+        # The data itself (~150 KB), so the run can be rebuilt even if ml-data/ is gone.
+        mlflow.log_artifacts(str(snapshot), artifact_path="snapshot")
 
         for name, probs_fn in (("random", lambda s: evaluate.random_probs(splits[s])),
                                ("popularity", lambda s: evaluate.popularity_probs(splits["train"], splits[s]))):
