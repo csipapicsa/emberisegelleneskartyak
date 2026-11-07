@@ -72,15 +72,32 @@ so the game image stays small.
 | 2.1 | `scripts/make_sample_gameplay_db.py`: synthetic games in the real schema, so tests and CI can run without real data | Claude |
 | 2.2 | `ml/export.py`: snapshot `gameplay.db` into Parquet (rounds, decisions, votes, card texts) plus a manifest with row counts and a content hash; human players only | Claude |
 | 2.3 | `ml/validate.py`: the consistency checks run on 2026-11-06 (every ID resolves, hand sizes, picks in hand, czar rules); the pipeline stops on any failure | Claude |
-| 2.4 | `ml/features.py`: card embeddings with a multilingual sentence model, cached per (model, text ID); shipped with the snapshot | Claude |
-| 2.5 | `ml/train.py`: baselines (random, smoothed card popularity) and a first model on embedding features (pick from hand as a softmax over the hand) | Claude, choices discussed with Gergo |
+| 2.4 | `ml/features.py`: card embeddings with the three embedding models (below), cached per (model, text ID); shipped with the snapshot | Claude |
+| 2.4b | `ml/embedding_benchmark.py`: the first MLflow experiment, no game data needed: per embedding model, load time, cards per second and memory on this server's CPU | Claude |
+| 2.5 | `ml/train.py`: baselines (random, smoothed card popularity) and the model grid (below): pick from hand as a softmax over the hand | Claude |
 | 2.6 | `ml/evaluate.py`: split by time and by game, top-1, top-3, MRR, log loss, always next to the popularity baseline | Claude |
 | 2.7 | MLflow logging: parameters, metrics, the dataset (`mlflow.data`, with its hash), git commit, image tag, and the model as a pyfunc with an input/output signature; register the best run as `challenger` | Claude |
-| 2.8 | `ml/pipeline.py`: one command runs every step from a config file | Claude |
+| 2.8 | `ml/pipeline.py`: one command runs every step from a config file. Retraining trigger: a daily timer that runs the grid only if enough new rounds arrived since the last run (most games are at weekends) | Claude |
 | 2.9 | `Dockerfile.ml` and a CI job: pipeline unit tests and a tiny training run on the sample data; the training image is published to GHCR on `main` | Claude |
 
-**Decisions at the start of the milestone:** the embedding model (for example `multilingual-e5-small` vs
-`paraphrase-multilingual-MiniLM-L12-v2`), and the first model type. Gergo's call as the data scientist.
+**The model grid (decided 2026-11-07):** 3 embedding models × 2 model structures = 6 runs per training cycle,
+plus the two baselines, all in one MLflow experiment so they can be compared over time.
+
+| Embedding model | Size | Why |
+|---|---|---|
+| `sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2` | 118M parameters, 384 dims | the classic baseline |
+| `intfloat/multilingual-e5-small` | 118M, 384 dims | contrastively trained for relevance; inputs need the `query: ` prefix |
+| `ibm-granite/granite-embedding-97m-multilingual-r2` | 97M, 384 dims | 2026 ModernBERT model, Hungarian among its supported languages |
+
+All three are small on purpose (CPU only, about 1.1 GB of downloads together) and give the same 384 dimensions,
+so the two structures run on any of them unchanged:
+
+- **A, linear scorer:** logistic-regression style, on black/white pair features (the two embeddings, their
+  product and difference); softmax over the hand.
+- **B, small MLP** (PyTorch) on the same inputs.
+
+The data is small, so differences between the six will be noisy. That's accepted: the point is to follow
+how the models behave over time in MLflow, not to build a strong player.
 
 **Done when:** two runs (baseline and model) are compared in MLflow, and a run can be rebuilt from its
 commit, data hash and image tag.
