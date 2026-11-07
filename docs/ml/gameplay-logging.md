@@ -35,6 +35,13 @@ Design rules:
 Not recorded: anything that identifies a player or device (usernames, IP addresses or their hashes,
 session IDs, user agents), chat, voice, the exact start time, time spent looking at cards, mouse movement.
 
+Game rules that show in the data:
+
+- **In czar mode the czar plays a card too** and can't pick their own (server/game.py), so the czar has a
+  decision row with picks like everyone else.
+- **Solo games** (one `game_player` row) are logged like any other: the player is czar of their own card,
+  and a self-vote there is allowed. They aren't marked; the export leaves them out by counting seats.
+
 ## Identifiers
 
 - **Card text (`text_id`).** One ID per distinct card text, not per card. When a translation is reviewed or
@@ -164,6 +171,11 @@ text index dropped. A year of play stays under 20 MB.
 
 The export for training (Parquet files read by the MLflow experiments) is a separate script, planned
 with the first model.
+
+**Sample data:** [scripts/make_sample_gameplay_db.py](../../scripts/make_sample_gameplay_db.py) writes a
+`gameplay.db` with simulated games on made-up cards, in exactly this schema (it imports `SCHEMA`), with the
+messy cases the real log has and a planted, learnable preference. Tests and CI use it; the real log never
+leaves the server.
 
 ## Privacy
 

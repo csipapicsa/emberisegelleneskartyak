@@ -12,6 +12,8 @@ analytics.db
 messages.db
 chat.db
 gameplay.db
+# Made-up gameplay log for the ML pipeline (scripts/make_sample_gameplay_db.py)
+sample-data/
 database/card_seen.db
 *.db-journal
 *.db-wal
