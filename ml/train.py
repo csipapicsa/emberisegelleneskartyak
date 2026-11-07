@@ -171,6 +171,8 @@ def run_cycle(snapshot: Path, embeddings: Sequence[str] = tuple(features.EMBEDDI
     # image (Dockerfile.ml); runs from venv-ml on the server have none.
     tags = {"snapshot": snapshot.name, "snapshot_hash": manifest["content_hash"], "git_commit": git_commit() or "unknown",
             "image": os.environ.get("EEK_ML_IMAGE") or "none (venv-ml)"}
+    if os.environ.get("CLOUD_RUN_EXECUTION"):  # set by Cloud Run in every job execution
+        tags["cloud_run_execution"] = os.environ["CLOUD_RUN_EXECUTION"]
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")  # "can be interpreted in multiple ways": it is a local folder
         dataset = MetaDataset(resolve_dataset_source(str(snapshot)), name=snapshot.name,

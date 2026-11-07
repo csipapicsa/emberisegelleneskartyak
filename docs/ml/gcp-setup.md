@@ -16,13 +16,13 @@ Least privilege: every permission is granted on one resource, never on the whole
 
 | Who | Identity | May | On |
 |---|---|---|---|
-| The server (upload script) | `eek-uploader` service account | create objects, not read, overwrite or delete them | bucket `emberisegelleneskartya-ml` |
+| The server (`python -m ml.cloud`) | `eek-uploader` service account (the only key) | create objects, not read, overwrite or delete them; start and watch one job | bucket `emberisegelleneskartya-ml`; job `eek-train` |
 | The training job | `eek-trainer` service account | read objects; read the MLflow password (3.4) | the bucket; one secret |
 | GitHub Actions | `eek-ci-pusher` service account, via Workload Identity Federation | push images | Artifact Registry repo `eek` |
 
 The uploader can only add files, so a leaked server key can't read the gameplay data or delete anything.
-Snapshot folders are named by content hash, so it never needs to overwrite. Its key is created only when
-the upload script exists (3.5).
+Snapshot folders are named by content hash, so it never needs to overwrite. Its key lives on the server in
+`~/.config/eek/gcp-uploader.json` (mode 600).
 
 ## Bucket and service accounts (3.2)
 
@@ -92,3 +92,59 @@ No key exists anywhere, so there's nothing to leak, rotate or revoke. What remai
 
 The image goes to both registries under the same tags: `ghcr.io/csipapicsa/eek-ml-train` (public) and
 `europe-west4-docker.pkg.dev/emberisegelleneskartya/eek/eek-ml-train` (what Cloud Run pulls).
+
+## The training job (3.4)
+
+The MLflow `trainer` password goes into Secret Manager through the console (Secret Manager → New version):
+pasting into a hidden `read -s` prompt in Cloud Shell is unreliable, and the value must have no trailing
+newline. Then:
+
+```bash
+TRAINER=eek-trainer@$PROJECT.iam.gserviceaccount.com
+gcloud secrets create mlflow-trainer-password --replication-policy=user-managed --locations=$REGION
+#   ... add the value as a new version in the console ...
+gcloud secrets add-iam-policy-binding mlflow-trainer-password \
+    --member=serviceAccount:$TRAINER --role=roles/secretmanager.secretAccessor
+
+IMAGE=europe-west4-docker.pkg.dev/$PROJECT/eek/eek-ml-train@sha256:<digest>   # pinned, not :main
+gcloud run jobs create eek-train --region=$REGION --image=$IMAGE --service-account=$TRAINER \
+    --cpu=2 --memory=4Gi --task-timeout=30m --max-retries=0 \
+    --set-env-vars=MLFLOW_TRACKING_URI=https://mlflow.emberisegelleneskartyak.hu,MLFLOW_TRACKING_USERNAME=trainer \
+    --set-secrets=MLFLOW_TRACKING_PASSWORD=mlflow-trainer-password:latest \
+    --add-volume=name=bucket,type=cloud-storage,bucket=$BUCKET,readonly=true \
+    --add-volume-mount=volume=bucket,mount-path=/gcs \
+    --command=python --args=-m,ml.train,--help
+```
+
+- The image is pinned by digest: a newly pushed image runs only after `gcloud run jobs update eek-train
+  --image=...@sha256:<new digest>`, a deliberate step.
+- The bucket is mounted read-only; results go to MLflow only.
+- A job whose secret has no version fails to deploy ("versions/latest was not found"); a wrong value
+  shows up as MLflow's 401 in the job log.
+
+Smoke test (bucket visible, MLflow login works):
+
+```bash
+gcloud run jobs execute eek-train --region=$REGION --wait \
+    --args="-c,import os;import mlflow;print('bucket:'+str(os.listdir('/gcs')));print('experiments:'+str([e.name for e in mlflow.search_experiments()]))"
+gcloud logging read 'resource.type="cloud_run_job" AND resource.labels.job_name="eek-train"' \
+    --freshness=15m --limit=30 --format='value(textPayload)'
+```
+
+## Training from the server (3.5)
+
+The server's identity may also start this one job with overrides, and gets its key:
+
+```bash
+UPLOADER=eek-uploader@$PROJECT.iam.gserviceaccount.com
+gcloud run jobs add-iam-policy-binding eek-train --region=$REGION \
+    --member=serviceAccount:$UPLOADER --role=roles/run.jobsExecutorWithOverrides
+gcloud run jobs add-iam-policy-binding eek-train --region=$REGION \
+    --member=serviceAccount:$UPLOADER --role=roles/run.viewer
+gcloud iam service-accounts keys create ~/eek-uploader.json --iam-account=$UPLOADER
+cloudshell download ~/eek-uploader.json    # then into ~/.config/eek/gcp-uploader.json on the server, chmod 600
+shred -u ~/eek-uploader.json
+```
+
+Then, on the server: `venv-ml/bin/python -m ml.cloud` (see [pipeline.md](pipeline.md#training-in-gcp)).
+

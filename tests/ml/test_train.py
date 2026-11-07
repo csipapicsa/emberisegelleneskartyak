@@ -26,6 +26,7 @@ def cycle(snapshot, tmp_path_factory):
     mp = pytest.MonkeyPatch()
     mp.setenv("MLFLOW_ALLOW_FILE_STORE", "true")
     mp.setenv("EEK_ML_IMAGE", "ghcr.io/example/eek-ml-train:sha-abc1234")  # as inside the training image
+    mp.setenv("CLOUD_RUN_EXECUTION", "eek-train-abc12")  # as in a Cloud Run Job
     mlflow.set_tracking_uri((tmp_path_factory.mktemp("mlflow") / "mlruns").as_uri())
     try:
         yield train.run_cycle(snapshot, embeddings=["minilm"], experiment="train-test",
@@ -42,6 +43,7 @@ def test_cycle_logs_a_parent_with_baselines_and_models(cycle, snapshot):
     assert parent.data.tags["kind"] == "cycle"
     assert parent.data.tags["snapshot"] == snapshot.name
     assert parent.data.tags["image"] == "ghcr.io/example/eek-ml-train:sha-abc1234"
+    assert parent.data.tags["cloud_run_execution"] == "eek-train-abc12"
     assert int(parent.data.params["n_test_games"]) >= 1
     assert parent.inputs.dataset_inputs[0].dataset.name == snapshot.name
     children = mlflow.search_runs(experiment_names=["train-test"], output_format="list",
