@@ -92,6 +92,11 @@ Következő lépések, sorrendben (2026-11-06, a projekt-review alapján)
 [ ] 2. ML-életciklus a gépi játékossal: docs/ml/roadmap.md, lépésenként: docs/ml/implementation-plan.md (GCP-n tanítás, saját MLflow szerver,
        kiszolgálás a saját szerveren). Mérföldkövek: MLflow szerver → helyi pipeline → ugyanaz Cloud Run
        Jobként → model service + bot + promóció/visszaállítás → monitorozás.
+    [x] Milestones 1–3 done 2026-11-07 (MLflow, local pipeline, same training as a Cloud Run Job: python -m ml.cloud).
+    [ ] Later (not in scope now): train only in GCP. The nightly timer calls `python -m ml.cloud --register`
+        instead of training on the server (or Cloud Scheduler triggers the job). Keep the local training
+        code: CI still tests it on sample data, and it stays the fallback.
+    [ ] Then: Terraform for the GCP resources (docs/ml/gcp-setup.md lists every one).
 [ ] 3. Konténer-image sérülékenységvizsgálat (Trivy), előbb csak riport. A Dependabot PR-okkal együtt.
 [ ] 4. Metrikák: kérésszám, 5xx arány, p95 válaszidő, aktív WebSocket-kapcsolatok → Prometheus →
        Grafana, egy riasztással. Az MLflow után, nem vele egy időben.
