@@ -37,10 +37,11 @@ from pathlib import Path
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from ml import DATA_DIR
 from server.gameplay_log import CLOSED, DB_PATH, unpack_ids
 
 SNAPSHOT_FORMAT = 1
-DEFAULT_OUT = Path(__file__).resolve().parents[1] / "ml-data" / "snapshots"
+DEFAULT_OUT = DATA_DIR / "snapshots"
 MANIFEST = "manifest.json"
 
 _IDS = pa.list_(pa.int32())
@@ -156,12 +157,14 @@ def content_hash(tables: dict[str, list[dict]]) -> str:
 
 
 def _git_commit() -> str | None:
+    """The code's commit: from git, or inside the training image (no git, no .git) from EEK_VERSION,
+    which the image build sets to the commit it was built from."""
     try:
         out = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=Path(__file__).parent,
                              capture_output=True, text=True, check=True, timeout=5)
-        return out.stdout.strip() or None
+        return out.stdout.strip() or os.environ.get("EEK_VERSION")
     except (OSError, subprocess.SubprocessError):
-        return None
+        return os.environ.get("EEK_VERSION")
 
 
 def _day_to_date(day: int) -> str:

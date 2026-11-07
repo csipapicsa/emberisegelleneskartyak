@@ -22,6 +22,7 @@ for the trained ones, the model. The trained model with the best validation MRR 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import warnings
 from collections.abc import Sequence
@@ -166,7 +167,10 @@ def run_cycle(snapshot: Path, embeddings: Sequence[str] = tuple(features.EMBEDDI
     split_sizes |= {f"n_{s}_games": len({e.game_id for e in splits[s]}) for s in evaluate.SPLITS}
 
     mlflow.set_experiment(experiment)
-    tags = {"snapshot": snapshot.name, "snapshot_hash": manifest["content_hash"], "git_commit": git_commit() or "unknown"}
+    # Commit + data hash + image = everything needed to rebuild a run. EEK_ML_IMAGE is set by the training
+    # image (Dockerfile.ml); runs from venv-ml on the server have none.
+    tags = {"snapshot": snapshot.name, "snapshot_hash": manifest["content_hash"], "git_commit": git_commit() or "unknown",
+            "image": os.environ.get("EEK_ML_IMAGE") or "none (venv-ml)"}
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")  # "can be interpreted in multiple ways": it is a local folder
         dataset = MetaDataset(resolve_dataset_source(str(snapshot)), name=snapshot.name,

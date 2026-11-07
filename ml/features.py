@@ -24,7 +24,9 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-DEFAULT_CACHE = Path(__file__).resolve().parents[1] / "ml-data" / "embeddings"
+from ml import DATA_DIR
+
+DEFAULT_CACHE = DATA_DIR / "embeddings"
 
 
 @dataclass(frozen=True)
