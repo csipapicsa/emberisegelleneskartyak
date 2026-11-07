@@ -70,8 +70,8 @@ so the game image stays small.
 | # | Task | Who |
 |---|---|---|
 | 2.1 | ✅ `scripts/make_sample_gameplay_db.py`: synthetic games in the real schema, so tests and CI can run without real data | Claude |
-| 2.2 | `ml/export.py`: snapshot `gameplay.db` into Parquet (rounds, decisions, votes, card texts) plus a manifest with row counts and a content hash; human players only | Claude |
-| 2.3 | `ml/validate.py`: the consistency checks run on 2026-11-06 (every ID resolves, hand sizes, picks in hand, czar rules); the pipeline stops on any failure | Claude |
+| 2.2 | ✅ `ml/export.py`: snapshot `gameplay.db` into Parquet (rounds, decisions, votes, card texts) plus a manifest with row counts and a content hash. Solo games and the empty rounds after a closed round are left out; model players' rows are kept but flagged, so training can drop them and monitoring can use them | Claude |
+| 2.3 | ✅ `ml/validate.py`: 13 named checks of the game's rules (every ID resolves, hand sizes, picks in hand, outcomes, votes, czar rules, ...); the pipeline stops on any failure. Its first run on real data found a game bug (a deleted room kept playing to nobody, fixed in PR #26) | Claude |
 | 2.4 | `ml/features.py`: card embeddings with the three embedding models (below), cached per (model, text ID); shipped with the snapshot | Claude |
 | 2.4b | `ml/embedding_benchmark.py`: the first MLflow experiment, no game data needed: per embedding model, load time, cards per second and memory on this server's CPU | Claude |
 | 2.5 | `ml/train.py`: baselines (random, smoothed card popularity) and the model grid (below): pick from hand as a softmax over the hand | Claude |

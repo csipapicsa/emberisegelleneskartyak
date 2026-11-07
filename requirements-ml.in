@@ -1,0 +1,6 @@
+# The ML pipeline (ml/), on top of the dev tools. Kept out of requirements.txt so the game image stays small.
+# requirements-ml.txt is generated from this file, with every package the dev lock file also has pinned to
+# the same version, so CI can install both:
+#   pip-compile --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url requirements-ml.in
+-c requirements-dev.txt
+pyarrow==26.0.0            # Parquet snapshots (ml/export.py)

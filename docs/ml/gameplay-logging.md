@@ -169,8 +169,8 @@ text index dropped. A year of play stays under 20 MB.
 3. The writer catches and logs its own errors; a full disk or a locked file never reaches the game.
 4. `EEK_GAMEPLAY_LOG=0` turns logging off without a deploy.
 
-The export for training (Parquet files read by the MLflow experiments) is a separate script, planned
-with the first model.
+The export for training is [ml/export.py](../../ml/export.py): a Parquet snapshot with a content hash,
+checked by [ml/validate.py](../../ml/validate.py) before anything trains on it.
 
 **Sample data:** [scripts/make_sample_gameplay_db.py](../../scripts/make_sample_gameplay_db.py) writes a
 `gameplay.db` with simulated games on made-up cards, in exactly this schema (it imports `SCHEMA`), with the
