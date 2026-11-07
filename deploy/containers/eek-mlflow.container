@@ -23,6 +23,9 @@ Volume=/srv/eek/mlflow:/data:Z
 EnvironmentFile=/etc/eek/mlflow.env
 # Host headers MLflow accepts: the public name, and 127.0.0.1:5000 for the health check.
 Environment=MLFLOW_ALLOWED_HOSTS=mlflow.emberisegelleneskartyak.hu,127.0.0.1:5000
+# Origins whose browser requests MLflow accepts. Its own public address must be listed: by default only
+# localhost is, and the web UI's requests (which carry an Origin header) got 403 "Cross-origin request blocked".
+Environment=MLFLOW_SERVER_CORS_ALLOWED_ORIGINS=https://mlflow.emberisegelleneskartyak.hu
 
 # Set here as well as in the image: podman drops HEALTHCHECK from images in its default (OCI) format.
 HealthCmd=python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=4)"
