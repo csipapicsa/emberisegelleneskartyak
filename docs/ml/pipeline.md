@@ -23,6 +23,7 @@ MLflow's address and login come from `MLFLOW_TRACKING_URI` (in `~/.bashrc`) and 
 venv-ml/bin/python -m ml.export                 # gameplay.db -> ml-data/snapshots/<day>_<hash>/
 venv-ml/bin/python -m ml.validate ml-data/snapshots/<day>_<hash>
 venv-ml/bin/python -m ml.embedding_benchmark    # latest snapshot, MLflow experiment "embedding-benchmark"
+venv-ml/bin/python -m ml.train                  # latest snapshot, MLflow experiment "pick-model"
 ```
 
 | Step | Reads | Writes |
@@ -30,6 +31,7 @@ venv-ml/bin/python -m ml.embedding_benchmark    # latest snapshot, MLflow experi
 | `ml.export` | `gameplay.db` (a consistent copy) | Parquet tables + `manifest.json` with the content hash; nothing if the data is unchanged |
 | `ml.validate` | a snapshot | `validation.json`; exit 1 if any of the 13 checks fails |
 | `ml.embedding_benchmark` | a validated snapshot | one MLflow run per embedding model; the embeddings cache in `ml-data/embeddings/` |
+| `ml.train` | a validated snapshot, the embeddings | a parent run with 2 baselines + 6 models nested; the best on validation registered as `pick-model@challenger` |
 
 Every ML process lowers its own CPU priority to the minimum (`ml.lower_priority()`: SCHED_IDLE, nice 19),
 so the live game always comes first.

@@ -74,9 +74,9 @@ so the game image stays small.
 | 2.3 | ✅ `ml/validate.py`: 13 named checks of the game's rules (every ID resolves, hand sizes, picks in hand, outcomes, votes, czar rules, ...); the pipeline stops on any failure. Its first run on real data found a game bug (a deleted room kept playing to nobody, fixed in PR #26) | Claude |
 | 2.4 | ✅ `ml/features.py`: card embeddings with the three embedding models (below), pinned to a Hugging Face commit, cached per (model, revision, text) | Claude |
 | 2.4b | ✅ `ml/embedding_benchmark.py`: the first MLflow experiment: per embedding model, load time, cards per second, peak memory, and a zero-training signal check (is the pick the hand card most similar to the black card?) | Claude |
-| 2.5 | `ml/train.py`: baselines (random, smoothed card popularity) and the model grid (below): pick from hand as a softmax over the hand | Claude |
-| 2.6 | `ml/evaluate.py`: split by time and by game, top-1, top-3, MRR, log loss, always next to the popularity baseline | Claude |
-| 2.7 | MLflow logging: parameters, metrics, the dataset (`mlflow.data`, with its hash), git commit, image tag, and the model as a pyfunc with an input/output signature; register the best run as `challenger` | Claude |
+| 2.5 | ✅ `ml/train.py`: baselines (random, smoothed card popularity) and the model grid (below): pick from hand as a softmax over the hand | Claude |
+| 2.6 | ✅ `ml/evaluate.py`: split by time and by game, top-1, top-3, MRR, log loss (ties counted as a fair tie-break), always next to the popularity baseline | Claude |
+| 2.7 | ✅ MLflow logging: a parent run per cycle with the snapshot as its dataset (content hash as digest), nested runs with parameters, metrics, learning curves, git commit, and the model (pt2 format, signature (n, 11, 384) → (n, 10)); the best on validation is registered as `challenger`. Image tag follows with 2.9 | Claude |
 | 2.8 | `ml/pipeline.py`: one command runs every step from a config file. Retraining trigger: a daily timer that runs the grid only if enough new rounds arrived since the last run (most games are at weekends) | Claude |
 | 2.9 | `Dockerfile.ml` and a CI job: pipeline unit tests and a tiny training run on the sample data; the training image is published to GHCR on `main` | Claude |
 
@@ -107,6 +107,23 @@ First benchmark (2026-11-07, real snapshot of 2026-11-06: 1,777 card texts, 501 
 Random would be 10%: raw similarity barely predicts picks, as expected for humour, so the models have to
 learn from the picks. Granite loads in bfloat16, which is slow on this CPU; float32 may be faster.
 These runs were at normal CPU priority; the pipeline now runs at the lowest (`ml.lower_priority()`).
+
+**First training cycle** (2026-11-07, snapshot `2026-11-06_c8a39402b353`: 267 training, 89 validation and
+145 test picks from 10 games), test set:
+
+| Run | Top-1 | Top-3 | MRR | Log loss |
+|---|---|---|---|---|
+| baseline random | 0.100 | 0.300 | 0.293 | 2.303 |
+| baseline popularity | 0.103 | 0.296 | 0.294 | 2.325 |
+| linear minilm | 0.166 | 0.359 | 0.340 | 2.288 |
+| mlp minilm | 0.193 | 0.372 | 0.367 | 2.286 |
+| linear e5 | 0.131 | 0.338 | 0.322 | 2.320 |
+| mlp e5 | 0.124 | 0.324 | 0.320 | 2.304 |
+| linear granite | 0.097 | 0.303 | 0.297 | 2.347 |
+| mlp granite | 0.069 | 0.338 | 0.287 | 2.345 |
+
+Popularity can't help yet (1,778 cards, few seen twice). The challenger, chosen on validation (two games),
+was linear granite, which is the weakest on test: with this little data, the choice is mostly luck.
 
 The data is small, so differences between the six will be noisy. That's accepted: the point is to follow
 how the models behave over time in MLflow, not to build a strong player.
