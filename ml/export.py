@@ -218,6 +218,14 @@ def read_snapshot(folder: str | os.PathLike) -> tuple[dict, dict[str, list[dict]
     return manifest, tables
 
 
+def latest_snapshot(out_root: str | os.PathLike = DEFAULT_OUT) -> Path:
+    """The most recently created snapshot below out_root."""
+    manifests = [p for p in Path(out_root).glob(f"*/{MANIFEST}")]
+    if not manifests:
+        raise FileNotFoundError(f"no snapshots in {out_root}; run python -m ml.export first")
+    return max(manifests, key=lambda p: (json.loads(p.read_text())["created"], p.parent.name)).parent
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--db", type=Path, default=DB_PATH, help=f"gameplay database (default: {DB_PATH})")

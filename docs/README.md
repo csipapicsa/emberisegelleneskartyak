@@ -16,6 +16,7 @@
 | **ml/** | |
 | [roadmap.md](ml/roadmap.md) | the computer player's ML lifecycle: architecture, milestones, evaluation |
 | [implementation-plan.md](ml/implementation-plan.md) | the working checklist: tasks per milestone, who does what, done-when checks |
+| [pipeline.md](ml/pipeline.md) | running the pipeline: setup, export, validation, embedding benchmark |
 | [gameplay-logging.md](ml/gameplay-logging.md) | the anonymous gameplay log: what is recorded, schema, privacy |
 | [data-collection-plan.md](ml/data-collection-plan.md) | background: which data a computer player needs and why |
 | **worklogs/** | dated notes on finished work, including the original June 2026 specification |
