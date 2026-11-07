@@ -109,14 +109,25 @@ jobs:
         run: |
           # pip-compile keeps existing pins, so lock files that are in sync come out unchanged. Only pins and
           # hashes count: the "# via" comments differ between pip versions.
-          for f in requirements requirements-dev requirements-ml; do
+          for f in requirements requirements-dev; do
             pip-compile -q --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url "$f.in" -o "$f.txt"
           done
-          git diff --exit-code -I '^ *#' -- requirements.txt requirements-dev.txt requirements-ml.txt \
+          git diff --exit-code -I '^ *#' -- requirements.txt requirements-dev.txt \
             || { echo "::error::Lock files are out of date. Regenerate them with pip-compile (see requirements.in)."; exit 1; }
+      # Recompiling requirements-ml.txt would download every PyTorch wheel on the CPU index (~11 GB) just to
+      # hash them, so its pins are checked against requirements-ml.in and requirements-dev.txt instead.
+      - name: ML lock file matches requirements-ml.in
+        run: python scripts/check_ml_lock.py
       # The lock files pin every installed package, so this audits exactly what the image and CI install.
-      - run: python -m pip_audit -r requirements.txt -r requirements-dev.txt -r requirements-ml.txt --progress-spinner off
-
+      # --disable-pip: look the pinned versions up instead of installing them (all three files are hashed).
+      - run: >-
+          python -m pip_audit --disable-pip -r requirements.txt -r requirements-dev.txt -r requirements-ml.txt
+          --progress-spinner off
+      # PyPI doesn't know torch's "+cpu" builds, so the step above skips torch: audit it by its plain version.
+      - name: Audit torch
+        run: |
+          grep -oE '^torch==[0-9.]+' requirements-ml.txt > torch-version.txt
+          python -m pip_audit --no-deps --disable-pip -r torch-version.txt --progress-spinner off
   test:
     needs: changes
     if: needs.changes.outputs.code == 'true'
@@ -168,7 +179,9 @@ jobs:
           cache: pip
           cache-dependency-path: requirements*.txt
       # requirements-ml.txt pins shared packages to the dev lock file's versions, so both install together.
-      - run: python -m pip install --require-hashes -r requirements-dev.txt -r requirements-ml.txt
+      - run: >-
+          python -m pip install --require-hashes --extra-index-url https://download.pytorch.org/whl/cpu
+          -r requirements-dev.txt -r requirements-ml.txt
       - run: python -m pytest tests/ml --cov=ml
       - name: The pipeline from the command line, on sample data
         run: |

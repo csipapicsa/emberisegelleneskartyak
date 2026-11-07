@@ -72,8 +72,8 @@ so the game image stays small.
 | 2.1 | ✅ `scripts/make_sample_gameplay_db.py`: synthetic games in the real schema, so tests and CI can run without real data | Claude |
 | 2.2 | ✅ `ml/export.py`: snapshot `gameplay.db` into Parquet (rounds, decisions, votes, card texts) plus a manifest with row counts and a content hash. Solo games and the empty rounds after a closed round are left out; model players' rows are kept but flagged, so training can drop them and monitoring can use them | Claude |
 | 2.3 | ✅ `ml/validate.py`: 13 named checks of the game's rules (every ID resolves, hand sizes, picks in hand, outcomes, votes, czar rules, ...); the pipeline stops on any failure. Its first run on real data found a game bug (a deleted room kept playing to nobody, fixed in PR #26) | Claude |
-| 2.4 | `ml/features.py`: card embeddings with the three embedding models (below), cached per (model, text ID); shipped with the snapshot | Claude |
-| 2.4b | `ml/embedding_benchmark.py`: the first MLflow experiment, no game data needed: per embedding model, load time, cards per second and memory on this server's CPU | Claude |
+| 2.4 | ✅ `ml/features.py`: card embeddings with the three embedding models (below), pinned to a Hugging Face commit, cached per (model, revision, text) | Claude |
+| 2.4b | ✅ `ml/embedding_benchmark.py`: the first MLflow experiment: per embedding model, load time, cards per second, peak memory, and a zero-training signal check (is the pick the hand card most similar to the black card?) | Claude |
 | 2.5 | `ml/train.py`: baselines (random, smoothed card popularity) and the model grid (below): pick from hand as a softmax over the hand | Claude |
 | 2.6 | `ml/evaluate.py`: split by time and by game, top-1, top-3, MRR, log loss, always next to the popularity baseline | Claude |
 | 2.7 | MLflow logging: parameters, metrics, the dataset (`mlflow.data`, with its hash), git commit, image tag, and the model as a pyfunc with an input/output signature; register the best run as `challenger` | Claude |
@@ -95,6 +95,18 @@ so the two structures run on any of them unchanged:
 - **A, linear scorer:** logistic-regression style, on black/white pair features (the two embeddings, their
   product and difference); softmax over the hand.
 - **B, small MLP** (PyTorch) on the same inputs.
+
+First benchmark (2026-11-07, real snapshot of 2026-11-06: 1,777 card texts, 501 one-blank picks):
+
+| Model | Load (s, incl. download) | Texts/s | Peak memory | Pick = most similar card |
+|---|---|---|---|---|
+| MiniLM | 40.6 | 57 | 1.3 GB | 11.6% |
+| e5-small | 38.7 | 65 | 1.1 GB | 11.8% |
+| Granite R2 | 28.2 | 10 | 1.0 GB | 11.4% |
+
+Random would be 10%: raw similarity barely predicts picks, as expected for humour, so the models have to
+learn from the picks. Granite loads in bfloat16, which is slow on this CPU; float32 may be faster.
+These runs were at normal CPU priority; the pipeline now runs at the lowest (`ml.lower_priority()`).
 
 The data is small, so differences between the six will be noisy. That's accepted: the point is to follow
 how the models behave over time in MLflow, not to build a strong player.

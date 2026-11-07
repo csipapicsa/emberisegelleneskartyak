@@ -1,6 +1,16 @@
-# The ML pipeline (ml/), on top of the dev tools. Kept out of requirements.txt so the game image stays small.
+# The ML pipeline (ml/), on top of the dev tools. Kept out of requirements.txt so the game image stays small,
+# and installed into its own virtualenv (venv-ml/), never into the game's.
 # requirements-ml.txt is generated from this file, with every package the dev lock file also has pinned to
 # the same version, so CI can install both:
 #   pip-compile --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url requirements-ml.in
+# PyTorch comes from its CPU-only index (the PyPI build bundles GPU libraries worth several GB), so installs
+# need it too:
+#   pip install --require-hashes --extra-index-url https://download.pytorch.org/whl/cpu \
+#       -r requirements-dev.txt -r requirements-ml.txt
+--extra-index-url https://download.pytorch.org/whl/cpu
 -c requirements-dev.txt
-pyarrow==26.0.0            # Parquet snapshots (ml/export.py)
+pyarrow==26.0.0                # Parquet snapshots (ml/export.py)
+torch==2.14.1+cpu              # embeddings and the MLP
+sentence-transformers==6.2.0   # the three embedding models (ml/features.py)
+transformers==5.20.2           # pinned with sentence-transformers; Granite R2 needs ModernBERT support
+mlflow-skinny==3.17.2          # MLflow client, same version as the server (deploy/mlflow/Dockerfile)

@@ -270,6 +270,21 @@ def validate_snapshot(folder: str | Path, write_report: bool = True,
     return results
 
 
+def require_valid(folder: str | Path) -> dict:
+    """The snapshot's manifest, if validate_snapshot passed on exactly this data; otherwise ValueError.
+    Everything downstream (benchmark, training) calls this, so nothing runs on unchecked data."""
+    folder = Path(folder)
+    manifest = json.loads((folder / "manifest.json").read_text())
+    report_path = folder / REPORT
+    if not report_path.is_file():
+        raise ValueError(f"{folder} hasn't been validated; run python -m ml.validate {folder}")
+    report = json.loads(report_path.read_text())
+    if report.get("content_hash") != manifest["content_hash"] or not report.get("ok"):
+        failed = [c["name"] for c in report.get("checks", []) if c.get("failures")]
+        raise ValueError(f"{folder} failed validation: {', '.join(failed) or 'report does not match the data'}")
+    return manifest
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("snapshot", type=Path, help="snapshot folder written by ml.export")
