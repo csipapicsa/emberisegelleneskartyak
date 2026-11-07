@@ -20,3 +20,14 @@ register = true
 # Train only when at least this many new training picks (one-blank human submissions) arrived since the
 # last cycle in MLflow. Most games are at weekends, so most weekday nights there's nothing to do.
 min_new_picks = 20
+
+[cloud]
+# `python -m ml.cloud`: the same training as a GCP Cloud Run Job (docs/ml/gcp-setup.md).
+project = "emberisegelleneskartya"
+region = "europe-west4"
+bucket = "emberisegelleneskartya-ml"
+job = "eek-train"
+# The eek-uploader service account's key: may create objects in the bucket and run this one job.
+key_file = "~/.config/eek/gcp-uploader.json"
+# For the run links: the job logs to this MLflow over HTTPS.
+mlflow_url = "https://mlflow.emberisegelleneskartyak.hu"

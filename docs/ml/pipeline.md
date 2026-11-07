@@ -83,6 +83,21 @@ Every MLflow run gets the tags `git_commit`, `snapshot_hash` and `image`, which 
 Local builds: `podman build -f Dockerfile.ml --ignorefile Dockerfile.ml.dockerignore --target test .`
 (podman reuses cached layers even when `GIT_SHA` changes; CI uses docker, which doesn't).
 
+## Training in GCP
+
+The same cycle as a Cloud Run Job ([ml/cloud.py](../../ml/cloud.py); setup: [gcp-setup.md](gcp-setup.md)):
+
+```bash
+venv-ml/bin/python -m ml.cloud                                  # latest snapshot
+venv-ml/bin/python -m ml.cloud --snapshot ml-data/snapshots/<name> --register
+```
+
+It computes any missing embeddings here, uploads the snapshot and its embeddings to
+`gs://emberisegelleneskartya-ml/cycles/<snapshot>/` (create-only), runs the job on them, waits, and prints
+the job's runs next to the server's runs on the same snapshot, with MLflow links. Cloud runs carry the tag
+`cloud_run_execution`. Without `--register` the job doesn't touch `pick-model@challenger`; the nightly run
+on the server stays the one that registers. Settings: `[cloud]` in [ml/pipeline.toml](../../ml/pipeline.toml).
+
 ## Sample data
 
 Everything runs on made-up games too, which is what the tests and CI use:
