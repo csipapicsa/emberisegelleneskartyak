@@ -1,0 +1,21 @@
+# Settings for `python -m ml.pipeline` (the nightly run, deploy/systemd/eek-ml-train.timer).
+
+[export]
+# Empty: gameplay.db in the game's data directory (EEK_DATA_DIR, or the repository root).
+db = ""
+snapshots = "ml-data/snapshots"
+
+[validate]
+# The earliest plausible game date (the check "days"): when gameplay logging went live.
+first_day = "2026-11-06"
+
+[train]
+embeddings = ["minilm", "e5", "granite"]
+models = ["linear", "mlp"]
+experiment = "pick-model"
+register = true
+
+[trigger]
+# Train only when at least this many new training picks (one-blank human submissions) arrived since the
+# last cycle in MLflow. Most games are at weekends, so most weekday nights there's nothing to do.
+min_new_picks = 20

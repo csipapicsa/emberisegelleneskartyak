@@ -17,7 +17,35 @@ PyTorch comes from its CPU-only index: the PyPI build bundles GPU libraries wort
 MLflow's address and login come from `MLFLOW_TRACKING_URI` (in `~/.bashrc`) and `~/.mlflow/credentials`
 ([deploy/containers/README.md](../../deploy/containers/README.md#mlflow)).
 
-## Steps
+## One command
+
+```bash
+venv-ml/bin/python -m ml.pipeline           # export -> validate -> train, if there's enough new data
+venv-ml/bin/python -m ml.pipeline --force   # train anyway
+```
+
+Settings are in [ml/pipeline.toml](../../ml/pipeline.toml): which embeddings and models, the MLflow experiment,
+and the trigger (`min_new_picks`, 20 by default). The pipeline asks MLflow for the last training cycle and
+skips if the snapshot was already trained on or has too few new picks; that isn't an error (exit code 0).
+A failed validation check stops it with exit code 1.
+
+Each cycle stores its snapshot (about 150 KB) as artifacts of its parent run, so a run carries the exact
+data it was trained on. A cycle adds about 4 MB of models.
+
+### Nightly run (as root)
+
+At 04:00, after the database backups, at idle CPU and disk priority with a 3 GB memory ceiling
+([deploy/systemd/eek-ml-train.service](../../deploy/systemd/eek-ml-train.service)):
+
+```bash
+install -m 644 deploy/systemd/eek-ml-train.service deploy/systemd/eek-ml-train.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now eek-ml-train.timer
+systemctl start eek-ml-train.service            # a first run by hand
+journalctl -u eek-ml-train.service -n 20        # what it did: trained, or why it skipped
+```
+
+## Single steps
 
 ```bash
 venv-ml/bin/python -m ml.export                 # gameplay.db -> ml-data/snapshots/<day>_<hash>/
