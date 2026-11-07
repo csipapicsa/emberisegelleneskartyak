@@ -8,6 +8,6 @@ pytest-asyncio==1.3.0
 httpx==0.28.1              # FastAPI's TestClient
 pytest-cov==7.1.0          # coverage gate (settings in pyproject.toml)
 playwright==1.64.1         # end-to-end tests in tests/e2e (browser: python -m playwright install chromium)
-ruff==0.17.3               # lint (rules in pyproject.toml): python -m ruff check server tests scripts
+ruff==0.17.3               # lint (rules in pyproject.toml): python -m ruff check server tests scripts ml
 pip-audit==2.10.1          # known vulnerabilities in the locked dependencies (CI audit job)
 pip-tools==7.6.2           # pip-compile: regenerates the two lock files

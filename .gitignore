@@ -14,6 +14,8 @@ chat.db
 gameplay.db
 # Made-up gameplay log for the ML pipeline (scripts/make_sample_gameplay_db.py)
 sample-data/
+# ML pipeline snapshots and features (ml/export.py); derived from gameplay.db, never committed
+ml-data/
 database/card_seen.db
 *.db-journal
 *.db-wal

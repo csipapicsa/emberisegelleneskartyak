@@ -44,7 +44,9 @@ from server.gameplay_log import CLOSED, DECIDED, NO_DECISION, NO_SUBMISSIONS, SC
 
 DEFAULT_OUT = Path(__file__).resolve().parents[1] / "sample-data" / "gameplay.db"
 HAND_SIZE = 10
-FIRST_DAY = 20760          # 2026-11-03, days since 1970-01-01, like game.day
+# 2025-01-01, days since 1970-01-01 like game.day: before the real log began (2026-11-06), so sample games
+# can never be mistaken for real ones, and always in the past, so date checks pass on any day.
+FIRST_DAY = 20089
 CARD_ID_BASE = 90_000_000  # far above the real card IDs, so sample cards can't be mistaken for real ones
 APP_VERSION = "sample"
 MODEL = ("random-bot", "0")
