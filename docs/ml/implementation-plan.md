@@ -69,7 +69,7 @@ so the game image stays small.
 
 | # | Task | Who |
 |---|---|---|
-| 2.1 | `scripts/make_sample_gameplay_db.py`: synthetic games in the real schema, so tests and CI can run without real data | Claude |
+| 2.1 | ✅ `scripts/make_sample_gameplay_db.py`: synthetic games in the real schema, so tests and CI can run without real data | Claude |
 | 2.2 | `ml/export.py`: snapshot `gameplay.db` into Parquet (rounds, decisions, votes, card texts) plus a manifest with row counts and a content hash; human players only | Claude |
 | 2.3 | `ml/validate.py`: the consistency checks run on 2026-11-06 (every ID resolves, hand sizes, picks in hand, czar rules); the pipeline stops on any failure | Claude |
 | 2.4 | `ml/features.py`: card embeddings with the three embedding models (below), cached per (model, text ID); shipped with the snapshot | Claude |
