@@ -56,6 +56,12 @@ written down, and `/opt/emberisegellenes_kartyak` holds only code.
 **Done when:** a test run from a laptop (`MLFLOW_TRACKING_URI=https://mlflow...`) shows up in the UI with a
 metric and an artifact.
 
+**Notes from building it (2026-11-07):** the official image lacks `Flask-WTF`, which the login needs, so
+`deploy/mlflow/` builds a small image on top of it, tested and published by its own workflow. MLflow also needs
+`MLFLOW_FLASK_SERVER_SECRET_KEY`, refuses admin passwords under 12 characters, and starts seven background job
+workers by default (about 1.5 GB of RAM, for GenAI features), which the image switches off. Artifacts aren't in
+the daily backup: a model can be rebuilt from its run's commit, data snapshot and image.
+
 ## Milestone 2: the pipeline, run locally
 
 **Layout:** a separate `ml/` package with its own lock files (`requirements-ml.in/.txt`, PyTorch CPU build),

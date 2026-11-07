@@ -1,4 +1,4 @@
-# Containers: staging and production
+# Containers: staging, production and MLflow
 
 The app runs as a rootless podman container under a dedicated `eek` system user (no login, no sudo),
 managed by systemd through [Quadlet](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html).
@@ -9,6 +9,7 @@ the server.
 |---|---|---|---|---|
 | staging | `:main` | `podman auto-update`, every 5 minutes | 127.0.0.1:8011 | `/srv/eek/staging` |
 | production | `:prod` | promote workflow (planned) | 127.0.0.1:8010 | `/srv/eek/prod` |
+| MLflow | `eek-mlflow:<mlflow version>` | by hand (below) | 127.0.0.1:5000 | `/srv/eek/mlflow` |
 
 When auto-update finds a new image, it restarts the unit. The unit counts as started only once the
 container is healthy (`Notify=healthy`), so a broken image fails the restart and auto-update rolls back to
@@ -22,6 +23,9 @@ the previous one.
   daily. Installed into `/etc/systemd/user/podman-auto-update.timer.d/`.
 - `../nginx/staging.emberisegelleneskartyak.hu.conf`: HTTPS and a password in front of staging.
   `/healthz` stays public so CI can check which commit is live.
+- `eek-mlflow.container`: MLflow tracking server and model registry, image from `../mlflow/`
+  (built and tested by `.github/workflows/mlflow-image.yml`). With `../nginx/mlflow.emberisegelleneskartyak.hu.conf`
+  and the daily database backup `../systemd/eek-mlflow-backup.{service,timer}`.
 
 ## First-time setup (as root)
 
@@ -72,3 +76,86 @@ journalctl --user-unit=eek-staging.service -f              # app logs
 journalctl --user-unit=podman-auto-update.service          # what auto-update pulled, or rolled back
 cd / && sudo -u eek env XDG_RUNTIME_DIR=/run/user/$(id -u eek) podman auto-update --dry-run   # newer image waiting?
 ```
+
+## MLflow
+
+Experiment tracking and the model registry for the computer player ([docs/ml/roadmap.md](../../docs/ml/roadmap.md)).
+The official image plus MLflow's login (`--app-name basic-auth`); runs, registry and users in SQLite, artifacts
+as files, all in `/srv/eek/mlflow`. MLflow serves the artifacts itself, so a client (laptop, cloud job, model
+service) needs only the URL and a login:
+
+```bash
+export MLFLOW_TRACKING_URI=https://mlflow.emberisegelleneskartyak.hu
+export MLFLOW_TRACKING_USERNAME=trainer MLFLOW_TRACKING_PASSWORD=...
+```
+
+| User | For | Can |
+|---|---|---|
+| `admin` | Gergo | everything, including users |
+| `trainer` | training pipelines, the GCP job | log runs, register models, move the `champion` alias |
+| `reader` | the model service (milestone 4) | read everything, load models |
+
+Every logged-in user can read every experiment (`default_permission = READ` in `../mlflow/basic_auth.ini`);
+whoever creates an experiment manages it. MLflow lets any user create a new, empty experiment, `reader` included.
+
+The background job workers are switched off in the image (`MLFLOW_SERVER_ENABLE_JOB_EXECUTION=false`): they serve
+MLflow's GenAI features and cost about 1.5 GB of RAM. The server uses about 500 MB.
+
+### Install (as root)
+
+```bash
+uid=$(id -u eek)
+install -d -o eek -g eek -m 750 /srv/eek/mlflow /srv/eek/backups
+
+# Secrets (see ../mlflow.env.example). The admin password is read only on the first start.
+( umask 027
+  printf 'MLFLOW_AUTH_ADMIN_PASSWORD=%s\nMLFLOW_FLASK_SERVER_SECRET_KEY=%s\n' \
+    "$(openssl rand -base64 24)" "$(openssl rand -base64 32)" > /etc/eek/mlflow.env )
+chown root:eek /etc/eek/mlflow.env
+
+# Container
+install -m 644 deploy/containers/eek-mlflow.container /etc/containers/systemd/users/$uid/
+systemctl --user -M eek@ daemon-reload
+systemctl --user -M eek@ start eek-mlflow.service      # first start pulls the image (~1 GB)
+curl -s http://127.0.0.1:5000/health                  # OK
+
+# nginx and HTTPS. No nginx password: MLflow asks for its own login.
+install -m 644 deploy/nginx/mlflow.emberisegelleneskartyak.hu.conf /etc/nginx/conf.d/
+nginx -t && systemctl reload nginx
+certbot --nginx -d mlflow.emberisegelleneskartyak.hu
+
+# Daily backup of the databases at 03:15, to /srv/eek/backups/mlflow (30 days)
+install -m 644 deploy/systemd/eek-mlflow-backup.service deploy/systemd/eek-mlflow-backup.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now eek-mlflow-backup.timer
+systemctl start eek-mlflow-backup.service && ls /srv/eek/backups/mlflow
+```
+
+Then the two other users, from any shell (keep the printed passwords in a password manager):
+
+```bash
+read -rsp 'MLflow admin password: ' A; echo     # sudo grep ADMIN /etc/eek/mlflow.env
+for u in trainer reader; do
+  p=$(openssl rand -base64 18)
+  curl -sf -u "admin:$A" -H 'Content-Type: application/json' -d "{\"username\":\"$u\",\"password\":\"$p\"}" \
+    https://mlflow.emberisegelleneskartyak.hu/api/2.0/mlflow/users/create >/dev/null && echo "$u: $p"
+done; unset A p
+```
+
+Change a password: `POST /api/2.0/mlflow/users/update-password` with `{"username": ..., "password": ...}`,
+as `admin`.
+
+### Upgrade MLflow
+
+New versions can migrate the database, so: in one PR, bump the `FROM` line in `../mlflow/Dockerfile` and the
+tag in `eek-mlflow.container` (CI checks they match). After the merge and the published image:
+
+```bash
+systemctl start eek-mlflow-backup.service                          # fresh backup first
+install -m 644 deploy/containers/eek-mlflow.container /etc/containers/systemd/users/$(id -u eek)/
+systemctl --user -M eek@ daemon-reload
+systemctl --user -M eek@ restart eek-mlflow.service
+journalctl --user-unit=eek-mlflow.service -n 50                   # migration messages, errors
+```
+
+Rollback: put the old container file back and copy the backup over `/srv/eek/mlflow/mlflow.db` (service stopped).

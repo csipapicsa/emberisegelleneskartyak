@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Create consistent SQLite backups of every database in this project.
 
-Backups are written below ``backups/`` and files older than the configured
-retention window are removed.  SQLite's backup API is used rather than a raw
+Backups are written below ``backups/`` (or ``--backup-dir``) and files older
+than the configured retention window are removed.  SQLite's backup API is used rather than a raw
 file copy, so a live database can be backed up safely while the site runs.
+
+Runs on the host's own Python (3.9 on this server: the systemd units use /usr/bin/python3, and the eek
+service user has no virtualenv), so it must stay compatible with it; tests/test_backup_databases.py
+checks that when python3.9 is installed.
 """
 from __future__ import annotations
 
@@ -12,7 +16,7 @@ import fcntl
 import os
 import sqlite3
 import sys
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 RETENTION_DAYS = 30
@@ -22,6 +26,8 @@ PROJECT_ROOT = Path(os.environ.get("EEK_DATA_DIR") or Path(__file__).resolve().p
 # Subdirectories whose databases are backed up too, e.g. the uploaded
 # database/card_master.db (the game's card source).
 DATABASE_SUBDIRS = ("database",)
+# datetime.UTC only exists from Python 3.11 on.
+UTC = timezone.utc  # noqa: UP017
 
 
 def sqlite_databases(project_root: Path) -> list[Path]:
@@ -58,11 +64,14 @@ def prune_old_backups(backup_dir: Path, now: datetime) -> list[Path]:
     return deleted
 
 
-def run(project_root: Path, now: datetime | None = None) -> tuple[list[Path], list[Path]]:
-    """Create one timestamped backup per database and purge expired files."""
+def run(
+    project_root: Path, now: datetime | None = None, backup_dir: Path | None = None
+) -> tuple[list[Path], list[Path]]:
+    """Create one timestamped backup per database and purge expired files.
+    Backups go to ``backup_dir``, by default ``backups/`` inside the project root."""
     now = now or datetime.now(UTC)
-    backup_dir = project_root / "backups"
-    backup_dir.mkdir(mode=0o700, exist_ok=True)
+    backup_dir = backup_dir or project_root / "backups"
+    backup_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(backup_dir, 0o700)
 
     lock_path = backup_dir / ".backup.lock"
@@ -90,9 +99,15 @@ def main(argv: list[str] | None = None) -> int:
         default=PROJECT_ROOT,
         help="Project directory containing the .db files.",
     )
+    parser.add_argument(
+        "--backup-dir",
+        type=Path,
+        default=None,
+        help="Where to write the backups (default: backups/ inside the project directory).",
+    )
     args = parser.parse_args(argv)
     try:
-        created, deleted = run(args.project_root)
+        created, deleted = run(args.project_root, backup_dir=args.backup_dir)
     except (OSError, RuntimeError, sqlite3.Error) as exc:
         print(f"Database backup failed: {exc}", file=sys.stderr)
         return 1
