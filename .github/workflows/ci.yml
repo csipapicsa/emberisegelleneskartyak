@@ -127,7 +127,11 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.11"
+          # 3.9 is the server's system Python, which runs scripts/backup_databases.py from systemd;
+          # tests/test_backup_databases.py runs the script with it. The last version listed is the default.
+          python-version: |
+            3.9
+            3.11
           cache: pip
           cache-dependency-path: requirements*.txt
       # The client-side JavaScript is tested under Node (tests/js/, and some pytest files run node directly).

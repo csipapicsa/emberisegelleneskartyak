@@ -1,0 +1,145 @@
+name: MLflow image
+
+# Builds the MLflow server image (deploy/mlflow/), checks that its login works, and on main publishes it
+# to GHCR as ghcr.io/csipapicsa/eek-mlflow:<mlflow version> (plus sha-<commit>). The server pulls it by
+# hand (deploy/containers/README.md); there's no auto-update for MLflow.
+on:
+  pull_request:
+    paths:
+      - "deploy/mlflow/**"
+      - ".github/workflows/mlflow-image.yml"
+  push:
+    branches: [main]
+    paths:
+      - "deploy/mlflow/**"
+      - ".github/workflows/mlflow-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mlflow-image-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build-test-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write  # used only by the last step, on main
+    env:
+      IMAGE: eek-mlflow:ci
+      REPO_IMAGE: ghcr.io/csipapicsa/eek-mlflow
+      # Throwaway credentials for the test container, which only lives inside this job.
+      CI_ADMIN: "admin:ci-admin-password"
+      CI_ADMIN_WRONG: "admin:wrong-password"
+      CI_TRAINER_PASSWORD: trainer-password-ci
+      CI_READER_PASSWORD: reader-password-ci
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      # The two packages added on top of the official image, checked for known vulnerabilities.
+      - name: Audit the added packages
+        run: |
+          python -m pip install "$(grep -oE '^pip-audit==[^ ]+' requirements-dev.txt)"
+          python -m pip_audit --no-deps --disable-pip -r deploy/mlflow/requirements.txt --progress-spinner off
+
+      - name: MLflow version from the Dockerfile
+        id: version
+        run: |
+          version=$(grep -oE '^FROM ghcr.io/mlflow/mlflow:v[0-9.]+' deploy/mlflow/Dockerfile | sed 's/.*:v//')
+          test -n "$version" || { echo "::error::No MLflow version in deploy/mlflow/Dockerfile"; exit 1; }
+          grep -q "eek-mlflow:$version\$" deploy/containers/eek-mlflow.container \
+            || { echo "::error::eek-mlflow.container doesn't use eek-mlflow:$version"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: docker build -t "$IMAGE" deploy/mlflow
+
+      # --tmpfs /tmp: podman (on the server) adds a writable /tmp to read-only containers by itself; docker doesn't.
+      - name: Start it with a login, hardened like on the server
+        run: |
+          mkdir -p ci-data && chmod a+rwx ci-data
+          docker run -d --name mlflow -p 127.0.0.1:5000:5000 -v "$PWD/ci-data:/data" \
+            --init --read-only --tmpfs /tmp --cap-drop=ALL --security-opt no-new-privileges \
+            -e MLFLOW_AUTH_ADMIN_PASSWORD="${CI_ADMIN#admin:}" \
+            -e MLFLOW_FLASK_SERVER_SECRET_KEY=ci-secret-key \
+            "$IMAGE"
+          for i in $(seq 1 90); do curl -sf http://127.0.0.1:5000/health && break; sleep 1; done
+          echo
+          curl -sf http://127.0.0.1:5000/health || { echo "::error::/health didn't answer within 90 s"; exit 1; }
+
+      - name: Login is enforced; a trainer can log a run with an artifact and register a model
+        env:
+          URL: http://127.0.0.1:5000
+        run: |
+          api="$URL/api/2.0/mlflow"
+          code() { curl -s -o /dev/null -w '%{http_code}' "$@"; }
+          pw() { if [ "$1" = trainer ]; then echo "$CI_TRAINER_PASSWORD"; else echo "$CI_READER_PASSWORD"; fi; }
+          test "$(code "$api/experiments/search?max_results=1")" = 401
+          test "$(code -u "$CI_ADMIN_WRONG" "$api/experiments/search?max_results=1")" = 401
+          test "$(code -u "$CI_ADMIN" "$api/experiments/search?max_results=1")" = 200
+          test "$(code -H 'Host: evil.example' -u "$CI_ADMIN" "$api/experiments/search?max_results=1")" = 403
+          for u in trainer reader; do
+            test "$(code -u "$CI_ADMIN" -H 'Content-Type: application/json' \
+              -d "{\"username\":\"$u\",\"password\":\"$(pw "$u")\"}" "$api/users/create")" = 200
+          done
+          # The client, run inside the image (same MLflow version as the server).
+          docker exec -e GIT_PYTHON_REFRESH=quiet -e MLFLOW_TRACKING_URI=http://127.0.0.1:5000 \
+            -e MLFLOW_TRACKING_USERNAME=trainer -e MLFLOW_TRACKING_PASSWORD="$CI_TRAINER_PASSWORD" mlflow python3 -c '
+          import os, tempfile, mlflow
+          from mlflow.pyfunc import PythonModel
+          class Echo(PythonModel):
+              def predict(self, context, model_input):
+                  return model_input
+          mlflow.set_experiment("ci-smoke")
+          with mlflow.start_run():
+              mlflow.log_metric("top1", 0.5)
+              path = os.path.join(tempfile.mkdtemp(), "note.txt")
+              open(path, "w").write("hello")
+              mlflow.log_artifact(path)
+              mlflow.pyfunc.log_model(name="model", python_model=Echo(), registered_model_name="ci-model")
+          mlflow.MlflowClient().set_registered_model_alias("ci-model", "champion", "1")
+          '
+          # A reader can load the champion (what the model service will do), but not move the alias.
+          docker exec -e GIT_PYTHON_REFRESH=quiet -e MLFLOW_TRACKING_URI=http://127.0.0.1:5000 \
+            -e MLFLOW_TRACKING_USERNAME=reader -e MLFLOW_TRACKING_PASSWORD="$CI_READER_PASSWORD" mlflow python3 -c '
+          import mlflow
+          mlflow.pyfunc.load_model("models:/ci-model@champion")
+          try:
+              mlflow.MlflowClient().set_registered_model_alias("ci-model", "champion", "1")
+          except mlflow.exceptions.MlflowException:
+              pass
+          else:
+              raise SystemExit("reader could move the champion alias")
+          '
+
+      - name: Stops cleanly on SIGTERM (what systemd sends on restart)
+        run: |
+          start=$(date +%s)
+          docker stop -t 20 mlflow
+          took=$(( $(date +%s) - start ))
+          echo "Stopped in ${took}s"
+          test "$took" -lt 15 || { echo "::error::MLflow ignored SIGTERM and was killed"; exit 1; }
+
+      - name: Container log
+        if: ${{ !cancelled() }}
+        run: docker logs mlflow 2>&1 | tail -50
+
+      - name: Publish
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          for tag in "$VERSION" "sha-${GITHUB_SHA::7}"; do
+            docker tag "$IMAGE" "$REPO_IMAGE:$tag"
+            docker push "$REPO_IMAGE:$tag"
+          done
+          echo "Published $REPO_IMAGE:$VERSION (also :sha-${GITHUB_SHA::7})" >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,48 @@
+# MLflow: experiment tracking and model registry for the computer player (docs/ml/roadmap.md).
+# Image built from deploy/mlflow/ by .github/workflows/mlflow-image.yml. No auto-update: a new MLflow
+# version can migrate the database, so upgrades are done by hand, after a backup (see README.md).
+#
+# Rootless podman under the `eek` system user, managed by systemd through Quadlet. Installed root-owned:
+#   /etc/containers/systemd/users/<uid of eek>/eek-mlflow.container
+[Unit]
+Description=MLflow tracking server and model registry (mlflow.emberisegelleneskartyak.hu)
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+ContainerName=eek-mlflow
+Image=ghcr.io/csipapicsa/eek-mlflow:3.17.2
+
+# Only nginx on this host can reach it.
+PublishPort=127.0.0.1:5000:5000
+
+# Runs, registry, users (SQLite) and artifacts. The image runs as root, which in rootless podman is the
+# host's eek user, so eek owns the files. :Z gives the folder a private SELinux label.
+Volume=/srv/eek/mlflow:/data:Z
+# MLFLOW_AUTH_ADMIN_PASSWORD, MLFLOW_FLASK_SERVER_SECRET_KEY (see ../mlflow.env.example)
+EnvironmentFile=/etc/eek/mlflow.env
+# Host headers MLflow accepts: the public name, and 127.0.0.1:5000 for the health check.
+Environment=MLFLOW_ALLOWED_HOSTS=mlflow.emberisegelleneskartyak.hu,127.0.0.1:5000
+
+# Set here as well as in the image: podman drops HEALTHCHECK from images in its default (OCI) format.
+HealthCmd=python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/health', timeout=4)"
+HealthInterval=30s
+HealthStartPeriod=60s
+Notify=healthy
+HealthOnFailure=kill
+
+# A tiny init as PID 1 that passes systemd's SIGTERM on: `mlflow server` as PID 1 ignores it, so every
+# restart would wait for the kill timeout.
+RunInit=true
+
+# Hardening: no Linux capabilities, no privilege gain, read-only filesystem apart from /data and /tmp.
+DropCapability=all
+NoNewPrivileges=true
+ReadOnly=true
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

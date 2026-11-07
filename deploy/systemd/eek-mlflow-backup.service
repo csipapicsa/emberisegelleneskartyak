@@ -1,0 +1,15 @@
+[Unit]
+Description=Back up the MLflow databases (runs, registry, users)
+
+# The SQLite databases only. Artifacts (models, plots) are not copied: every model can be rebuilt from its
+# run's commit, data snapshot and training image, and copying them daily would fill the disk.
+[Service]
+Type=oneshot
+User=eek
+Group=eek
+ExecStart=/usr/bin/python3 /opt/emberisegellenes_kartyak/scripts/backup_databases.py --project-root /srv/eek/mlflow --backup-dir /srv/eek/backups/mlflow
+NoNewPrivileges=true
+ProtectSystem=strict
+ReadOnlyPaths=/srv/eek/mlflow
+ReadWritePaths=/srv/eek/backups
+PrivateTmp=true

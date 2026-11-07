@@ -1,0 +1,8 @@
+# The packages the official MLflow image lacks for its login (`mlflow server --app-name basic-auth`).
+# Installed with --no-deps: their dependencies (Flask, itsdangerous, MarkupSafe) are already in the base
+# image, and `pip check` in the Dockerfile confirms that. Pinned with hashes, so a rebuild installs the
+# same files.
+flask-wtf==1.3.0 \
+    --hash=sha256:dc5e3a4ce97f75c47bf6c1c72ad2c3b7bdf579a2ed13aebcc5d3d81fe2571160
+wtforms==3.3.1 \
+    --hash=sha256:2f4728ef3f67173c22590e60e845937598af7455474330fdb84354a609d67ec1
