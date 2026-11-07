@@ -80,8 +80,15 @@ gcloud iam service-accounts add-iam-policy-binding eek-ci-pusher@$PROJECT.iam.gs
    request's token says `refs/pull/...`, so PR runs can't push.
 3. It returns a Google token for `eek-ci-pusher`, valid for 20 minutes, which can only write to `eek`.
 
-No key exists anywhere, so there's nothing to leak, rotate or revoke. Someone who can merge to `main` can
-still push an image, which is why `main` requires a reviewed PR and passing checks (ruleset `protect-main`).
+No key exists anywhere, so there's nothing to leak, rotate or revoke. What remains:
+
+- Whoever can merge to `main` can push an image. `main` only takes PRs with passing checks (ruleset
+  `protect-main`); with one maintainer there's no second reviewer, so the GitHub account (with 2FA) is
+  the real key.
+- A compromised third-party action could misuse the token, so `google-github-actions/auth` is pinned to a
+  commit SHA, not a movable tag.
+- The worst a pushed image can do is run as the training job later: read the bucket and the MLflow
+  trainer password. It can't touch the game, the server or the rest of the project.
 
 The image goes to both registries under the same tags: `ghcr.io/csipapicsa/eek-ml-train` (public) and
 `europe-west4-docker.pkg.dev/emberisegelleneskartya/eek/eek-ml-train` (what Cloud Run pulls).
