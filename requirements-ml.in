@@ -3,4 +3,4 @@
 # the same version, so CI can install both:
 #   pip-compile --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url requirements-ml.in
 -c requirements-dev.txt
-pyarrow==26.0.0            # Parquet snapshots (ml/export.py)
+pyarrow==26.0.1            # Parquet snapshots (ml/export.py)
