@@ -135,9 +135,9 @@ commit, data hash and image tag.
 
 | # | Task | Who |
 |---|---|---|
-| 3.1 | GCP project, billing (free trial), a budget alert at a few euros; enable Cloud Run, Cloud Storage, Artifact Registry and Secret Manager | Gergo |
-| 3.2 | Bucket for snapshots; service accounts: `uploader` (may only write to the bucket; its key lives on the server, root:eek 0640) and `trainer` (the job's identity: reads the bucket and the MLflow secret) | Gergo, commands from Claude |
-| 3.3 | Training image in Artifact Registry (pushed by CI, or mirrored from GHCR) | Claude |
+| 3.1 | ✅ GCP project, billing (free trial), a budget alert at a few euros; enable Cloud Run, Cloud Storage, Artifact Registry and Secret Manager | Gergo |
+| 3.2 | ✅ Bucket for snapshots; service accounts: `uploader` (may only write to the bucket; its key lives on the server, root:eek 0640) and `trainer` (the job's identity: reads the bucket and the MLflow secret) | Gergo, commands from Claude |
+| 3.3 | ✅ Training image in Artifact Registry, pushed by CI without a stored key (Workload Identity Federation); setup in [gcp-setup.md](gcp-setup.md) | Claude + Gergo |
 | 3.4 | Cloud Run Job: runs the pipeline on a snapshot URI; the `trainer` MLflow password comes from Secret Manager | Claude + Gergo |
 | 3.5 | `scripts/train_in_cloud.sh` on the server: export → upload → start the job → print the MLflow run link | Claude |
 

@@ -2,7 +2,8 @@ name: ML training image
 
 # Builds the training image (Dockerfile.ml), runs the ML tests inside it, trains one tiny cycle on sample
 # data with it, and on main publishes it to GHCR as ghcr.io/csipapicsa/eek-ml-train:sha-<commit> (plus
-# :main). The same image runs on the server and as the GCP Cloud Run Job (implementation plan, milestone 3).
+# :main) and to GCP Artifact Registry under the same tags, where the Cloud Run training job pulls it from
+# (implementation plan, milestone 3; setup in docs/ml/gcp-setup.md).
 on:
   pull_request:
     paths: &image-inputs
@@ -35,9 +36,11 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
-      packages: write  # used only by the last step, on main
+      packages: write  # GHCR push, last steps, on main only
+      id-token: write  # GitHub's OIDC token for GCP (no stored key); GCP accepts it only from main
     env:
       REPO_IMAGE: ghcr.io/csipapicsa/eek-ml-train
+      GCP_IMAGE: europe-west4-docker.pkg.dev/emberisegelleneskartya/eek/eek-ml-train
     steps:
       - uses: actions/checkout@v5
 
@@ -113,3 +116,30 @@ jobs:
             docker push "$REPO_IMAGE:$tag"
           done
           echo "Published $REPO_IMAGE:sha-$SHA (also :main)" >> "$GITHUB_STEP_SUMMARY"
+
+      # Keyless: GitHub's short-lived OIDC token is exchanged for a ~20-minute Google token of the
+      # eek-ci-pusher service account, which may only write to this one registry. GCP's provider accepts
+      # tokens only from this repository (by numeric ID) and this workflow file on main, so a PR can't push.
+      - name: Sign in to GCP (Workload Identity Federation)
+        id: gcp
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093  # v3.0.0
+        with:
+          workload_identity_provider: projects/1000025529818/locations/global/workloadIdentityPools/github/providers/eek-repo
+          service_account: eek-ci-pusher@emberisegelleneskartya.iam.gserviceaccount.com
+          token_format: access_token
+          access_token_lifetime: 1200s
+
+      - name: Publish to Artifact Registry
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          TOKEN: ${{ steps.gcp.outputs.access_token }}
+        run: |
+          echo "$TOKEN" | docker login europe-west4-docker.pkg.dev -u oauth2accesstoken --password-stdin
+          for tag in "sha-$SHA" main; do
+            docker tag eek-ml-train:ci "$GCP_IMAGE:$tag"
+            docker push "$GCP_IMAGE:$tag"
+          done
+          digest=$(docker image inspect "$GCP_IMAGE:sha-$SHA" --format '{{join .RepoDigests "\n"}}' | grep pkg.dev)
+          echo "Published $digest (also :sha-$SHA, :main)" >> "$GITHUB_STEP_SUMMARY"
+
