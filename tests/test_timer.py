@@ -166,3 +166,54 @@ async def test_timer_triggers_reveal_when_submissions_exist():
         await game_logic._timer_task(room, round_num, mgr)
 
     assert "cards_revealed" in mgr.events(CODE)
+
+
+# ── A deleted room stops playing ──────────────────────────────────────────────
+# The round loop runs in background tasks that keep their own reference to the room. Before
+# game.close_room, a running game whose room was deleted (everyone gone, or closed by the admin) kept
+# playing its remaining rounds to nobody: gameplay.db showed a "closed" round followed by empty rounds
+# up to the game's last (found by ml/validate.py on 2026-11-07).
+
+@pytest.mark.asyncio
+async def test_deleted_room_plays_no_more_rounds():
+    from server import main
+
+    room, _ = make_room(CODE, n_players=3, voting_mode="czar", round_total=5, timer_seconds=2)
+    mgr = FakeManager()
+    await game_logic.start_game(room, make_black_cards(10), make_white_cards(120), mgr)
+    round_num = room.round_num
+    running = room.timer_task
+
+    main._delete_room_and_chat(CODE)
+    assert room.closed and room.timer_task is None
+    with pytest.raises(asyncio.CancelledError):
+        await running
+
+    # A task that was already past its sleep when the room went (or one that missed the cancel) runs on:
+    # it must not start another round.
+    async def instant(n):
+        pass
+
+    mgr.clear()
+    with patch("server.game.asyncio.sleep", side_effect=instant):
+        await game_logic._timer_task(room, round_num, mgr)
+        await game_logic.start_round(room, mgr)
+    assert room.round_num == round_num
+    assert "round_start" not in mgr.events(CODE)
+
+
+@pytest.mark.asyncio
+async def test_room_deleted_during_the_pause_between_rounds():
+    """_end_round waits 3 s before the next round, inside the task that would have to be cancelled."""
+    room, sids = make_room(CODE, n_players=3, voting_mode="czar", round_total=5, timer_seconds=60)
+    mgr = FakeManager()
+    await game_logic.start_game(room, make_black_cards(10), make_white_cards(120), mgr)
+    round_num = room.round_num
+
+    async def deleted_during_pause(n):
+        game_logic.close_room(room)
+
+    with patch("server.game.asyncio.sleep", side_effect=deleted_during_pause):
+        await game_logic._end_round(room, [sids[1]], mgr)
+    assert room.round_num == round_num
+    assert room.timer_task is None
