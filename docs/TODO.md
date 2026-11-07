@@ -69,6 +69,14 @@ Konténer / staging — teendők (2026-11-06)
     így a következő kör 9 lappal indul (a rákövetkező kör helyrehozza).
 [ ] Staging: a Umami-szkript a staging forgalmát is az éles statisztikába számolja.
 
+Újracsatlakozás telefonon (2026-11-07) — az ML-tanítás után
+Telefonon appváltáskor a böngésző felfüggeszti a lapot, a WebSocket megszakad. A játékos nem tud
+visszajönni, a többiek pedig várnak arra, aki már nincs ott.
+[ ] Mérés előbb: hány kapcsolat szakad meg játék közben, és hány jön vissza (analytics, név nélkül)
+[ ] Automatikus újracsatlakozás ugyanazzal a session-nel (visibilitychange / online esemény)
+[ ] Türelmi idő a kirúgás előtt; a kör ne várjon arra, aki elment
+[ ] Tesztek: szerver (pytest) + e2e (megszakadt, majd visszatérő kliens)
+
 Következő lépések, sorrendben (2026-11-06, a projekt-review alapján)
 [ ] 1. Éles átköltöztetése konténerbe (Phase 2.4): eek user, /srv/eek/prod, :prod tag.
        BIZTONSÁG: ez zárja le a P7-et (a játék most wheel tag userként fut → kódfuttatási hiba = root).
