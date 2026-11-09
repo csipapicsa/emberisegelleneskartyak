@@ -48,7 +48,7 @@ from server.messages_db import (
 from server.messages_db import ensure_tables as ensure_msg_tables
 from server.messages_db import get_conn as get_msg_conn
 from server.privacy import PrivacyConfigurationError, pseudonymize_ip
-from server.room import Player, create_room, delete_room, get_room
+from server.room import Player, create_room, delete_room, get_room, room_of_player
 from server.session import create_or_get_session
 from server.voice import check_ice_rate, generate_turn_credentials, validate_signal
 
@@ -588,10 +588,23 @@ async def healthz():
     return {"status": "ok", "version": VERSION}
 
 
+# TURN credentials let the holder relay traffic through our coturn server, so only a player in an open room
+# gets them (not just any well-formed session ID), and each IP may ask only so often. A whole group on one
+# home network joining a room asks once per player and page load, well under the limit.
+VOICE_CREDENTIALS_RATE_LIMIT = 30
+VOICE_CREDENTIALS_RATE_WINDOW = 600
+_voice_credential_requests: dict[str, deque] = {}
+
+
 @app.get("/api/voice/credentials")
-async def api_voice_credentials(session_id: str = ""):
+async def api_voice_credentials(request: Request, session_id: str = ""):
     if not _UUID_RE.match(session_id):
         raise HTTPException(400, "Érvénytelen session.")
+    if _rate_limited(_voice_credential_requests, _client_ip(request),
+                     VOICE_CREDENTIALS_RATE_LIMIT, VOICE_CREDENTIALS_RATE_WINDOW):
+        raise HTTPException(429, "Túl sok kérés, próbáld újra később.")
+    if room_of_player(session_id) is None:
+        raise HTTPException(403, "Hangkapcsolat csak szobában lévő játékosnak.")
     creds = generate_turn_credentials(session_id)
     if creds is None:
         raise HTTPException(503, "A hangkapcsolat nincs beállítva.")
@@ -805,19 +818,24 @@ _print_semaphore = asyncio.Semaphore(1)
 _print_requests: dict[str, deque] = {}
 
 
-def _print_rate_limited(ip: str | None) -> bool:
+def _rate_limited(requests: dict[str, deque], ip: str | None, limit: int, window: float) -> bool:
+    """Sliding-window limit per IP, in memory only. Records this request unless it's over the limit."""
     if not ip:
         return False
     now = time.monotonic()
-    times = _print_requests.setdefault(ip, deque())
-    while times and now - times[0] > PRINT_RATE_WINDOW:
+    times = requests.setdefault(ip, deque())
+    while times and now - times[0] > window:
         times.popleft()
-    if len(times) >= PRINT_RATE_LIMIT:
+    if len(times) >= limit:
         return True
     times.append(now)
-    for key in [k for k, v in _print_requests.items() if not v]:
-        del _print_requests[key]
+    for key in [k for k, v in requests.items() if not v]:
+        del requests[key]
     return False
+
+
+def _print_rate_limited(ip: str | None) -> bool:
+    return _rate_limited(_print_requests, ip, PRINT_RATE_LIMIT, PRINT_RATE_WINDOW)
 
 
 def _render_print(edition_ids: list[int], per_page: int) -> dict:
