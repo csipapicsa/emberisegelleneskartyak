@@ -114,6 +114,7 @@ def break_votes(t):
 
 def break_czar(t):
     r = _decided_round(t, vote_mode=False)
+    next(g for g in t["games"] if g["game_id"] == r["game_id"])["self_vote"] = False
     v = _first(t["votes"], game_id=r["game_id"], round_no=r["round_no"])
     v["target"] = r["czar"]
 
@@ -171,3 +172,54 @@ def test_main_exit_codes(snapshot, tmp_path, capsys):
     assert "FAIL days" in out and "failed: days" in out
     assert validate.main([str(tmp_path / "missing")]) == 1
     assert "failed to run" in capsys.readouterr().err
+
+
+# Real game situations the first weekend of data showed; each one is allowed by the game (server/game.py).
+
+def _round_votes(t, r):
+    return [v for v in t["votes"] if (v["game_id"], v["round_no"]) == (r["game_id"], r["round_no"])]
+
+
+def test_no_decision_before_the_reveal_is_allowed(tables):
+    # The czar didn't submit and was kicked: the round ends without a reveal, shown stays empty.
+    t = copy.deepcopy(tables)
+    r = _first(t["rounds"], outcome=NO_DECISION, shown=lambda s: s is not None)
+    r["shown"] = None
+    assert run(t)["shown"].ok
+
+
+def test_more_votes_than_players_connected_at_the_end_is_allowed(tables):
+    # A player votes, then disconnects before the tally; eligible counts who's connected at the end.
+    t = copy.deepcopy(tables)
+    r = _decided_round(t, vote_mode=True)
+    r["eligible"] = len(_round_votes(t, r)) - 1
+    assert run(t)["votes"].ok
+
+
+def test_a_player_voting_twice_is_caught(tables):
+    t = copy.deepcopy(tables)
+    r = _decided_round(t, vote_mode=True)
+    t["votes"].append(dict(_round_votes(t, r)[0]))
+    assert not run(t)["votes"].ok
+
+
+def test_the_last_player_left_may_vote_for_their_own_card(tables):
+    t = copy.deepcopy(tables)
+    r = _decided_round(t, vote_mode=True)
+    next(g for g in t["games"] if g["game_id"] == r["game_id"])["self_vote"] = False
+    submitted = {d["seat"] for d in t["decisions"]
+                 if (d["game_id"], d["round_no"]) == (r["game_id"], r["round_no"]) and d["picks"] is not None}
+    v = dict(_round_votes(t, r)[0], voter=min(submitted))
+    t["votes"] = [x for x in t["votes"] if x not in _round_votes(t, r)] + [v]
+    v["target"], r["eligible"] = v["voter"], 1
+    assert run(t)["votes"].ok
+    r["eligible"] = 2
+    assert not run(t)["votes"].ok
+
+
+def test_the_czar_may_pick_their_own_card_with_self_voting_on(tables):
+    t = copy.deepcopy(tables)
+    r = _decided_round(t, vote_mode=False)
+    next(g for g in t["games"] if g["game_id"] == r["game_id"])["self_vote"] = True
+    _round_votes(t, r)[0]["target"] = r["czar"]
+    assert run(t)["czar"].ok
