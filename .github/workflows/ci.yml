@@ -83,8 +83,10 @@ jobs:
         run: |
           base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
           archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          curl -sSfLO "$base/$archive"
-          curl -sSfLO "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          # GitHub's release downloads sometimes answer 504 for a few minutes: retry for ~2 minutes before failing.
+          retry=(--retry 8 --retry-delay 15)
+          curl -sSfLO "${retry[@]}" "$base/$archive"
+          curl -sSfLO "${retry[@]}" "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
           sha256sum --check --ignore-missing "gitleaks_${GITLEAKS_VERSION}_checksums.txt"
           tar -xzf "$archive" gitleaks
       # --redact: CI logs of a public repo are public, so a found secret must not be printed in them.
