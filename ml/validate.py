@@ -176,28 +176,34 @@ def _outcome(d: _Data) -> Iterator[str]:
 @check("shown", "the submissions shown are exactly the cards submitted, each once")
 def _shown(d: _Data) -> Iterator[str]:
     for key, r in d.rounds.items():
-        if r["outcome"] in (DECIDED, NO_DECISION):
+        # A round without a decision can also end before the reveal: the czar was kicked for not submitting.
+        if r["outcome"] == DECIDED or (r["outcome"] == NO_DECISION and r["shown"] is not None):
             shown = r["shown"] or []
             if len(shown) != len(set(shown)) or set(shown) != d.submitters[key]:
                 yield f"{_where(r)}: shown {shown}, submitted {sorted(d.submitters[key])}"
 
 
-@check("votes", "votes go to submitted cards, at most one per eligible player; self-votes only where allowed")
+@check("votes", "votes go to submitted cards, at most one per player; self-votes only where allowed")
 def _votes(d: _Data) -> Iterator[str]:
+    # Not checked: votes <= eligible. eligible counts the players connected when the round ends, and a
+    # player can vote and then disconnect before the tally.
     for key, votes in d.round_votes.items():
         r, game = d.rounds.get(key), d.games.get(key[0])
         if r is None or game is None:
             continue
-        if len(votes) > r["eligible"]:
-            yield f"{_where(r)}: {len(votes)} votes, {r['eligible']} eligible"
+        voters = [v["voter"] for v in votes]
+        if len(voters) != len(set(voters)):
+            yield f"{_where(r)}: a player voted more than once ({sorted(voters)})"
         for v in votes:
             if v["target"] not in d.submitters[key]:
                 yield f"{_where(v, 'voter')}: voted for seat {v['target']}, who didn't submit"
-            if v["voter"] == v["target"] and not game["self_vote"]:
+            # The game allows a self-vote to the last player left in the room (the others were kicked).
+            if v["voter"] == v["target"] and not game["self_vote"] and r["eligible"] > 1:
                 yield f"{_where(v, 'voter')}: voted for their own card"
 
 
-@check("czar", "czar mode: a czar each round, the only voter, never picking their own card; vote mode: no czar")
+@check("czar", "czar mode: a czar each round, the only voter, picking their own card only where allowed; "
+              "vote mode: no czar")
 def _czar(d: _Data) -> Iterator[str]:
     for key, r in d.rounds.items():
         game = d.games.get(key[0])
@@ -212,7 +218,8 @@ def _czar(d: _Data) -> Iterator[str]:
         for v in d.round_votes[key]:
             if v["voter"] != r["czar"]:
                 yield f"{_where(v, 'voter')}: voted, but the czar is seat {r['czar']}"
-            elif v["target"] == r["czar"]:
+            # The czar submits too; with self-voting on, or when theirs is the only card, they may pick it.
+            elif v["target"] == r["czar"] and not game["self_vote"] and d.submitters[key] != {r["czar"]}:
                 yield f"{_where(v, 'voter')}: the czar picked their own card"
 
 
