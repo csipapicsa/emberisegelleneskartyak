@@ -23,7 +23,7 @@ def generate_turn_credentials(session_id: str) -> dict | None:
     secret = os.environ.get("TURN_SECRET")
     if not secret:
         return None
-    ttl = 86400
+    ttl = 6 * 3600  # the game page fetches fresh credentials on every load
     expiry = int(time.time()) + ttl
     username = f"{expiry}:{session_id}"
     h = _hmac.new(secret.encode(), username.encode(), hashlib.sha1)

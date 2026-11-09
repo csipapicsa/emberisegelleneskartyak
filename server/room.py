@@ -100,5 +100,13 @@ def get_room(code: str) -> Room | None:
     return _rooms.get(code)
 
 
+def room_of_player(session_id: str) -> Room | None:
+    """The open room this session is an approved player in (pending players don't count), or None."""
+    for room in _rooms.values():
+        if not room.closed and session_id in room.players:
+            return room
+    return None
+
+
 def delete_room(code: str) -> None:
     _rooms.pop(code, None)
