@@ -97,6 +97,12 @@ Következő lépések, sorrendben (2026-11-06, a projekt-review alapján)
         instead of training on the server (or Cloud Scheduler triggers the job). Keep the local training
         code: CI still tests it on sample data, and it stays the fallback.
     [ ] Then: Terraform for the GCP resources (docs/ml/gcp-setup.md lists every one).
+    [ ] Later: improve the pick model. The first real cycle (2026-11-09, 47 training games) only matches the
+        popularity baseline (test MRR 0.383 vs 0.388): the models score each white card on its own, so they
+        mostly learn which cards are liked. More data alone won't fix that; keep collecting it for richer models.
+        - Score pick-model v1 and v2 on the same (new) test set: the old 2-game test set isn't comparable.
+        - Features that combine the black card with each white card, so the model can learn what fits.
+        - Raise max_epochs: linear e5 hit the 300-epoch cap (best epoch 298).
 [ ] 3. Konténer-image sérülékenységvizsgálat (Trivy), előbb csak riport. A Dependabot PR-okkal együtt.
 [ ] 4. Metrikák: kérésszám, 5xx arány, p95 válaszidő, aktív WebSocket-kapcsolatok → Prometheus →
        Grafana, egy riasztással. Az MLflow után, nem vele egy időben.
