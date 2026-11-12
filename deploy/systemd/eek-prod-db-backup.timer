@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily backup of the production databases
+
+[Timer]
+OnCalendar=*-*-* 03:05:00
+Persistent=true
+Unit=eek-prod-db-backup.service
+
+[Install]
+WantedBy=timers.target

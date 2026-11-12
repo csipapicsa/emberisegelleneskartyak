@@ -1,0 +1,11 @@
+[Unit]
+Description=Hourly cleanup of production print PDFs
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=300
+Persistent=true
+Unit=eek-prod-print-cleanup.service
+
+[Install]
+WantedBy=timers.target

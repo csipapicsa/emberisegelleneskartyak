@@ -5,6 +5,7 @@
 | [architecture.md](architecture.md) | how the game is built and run: components, game engine, data, interfaces, delivery |
 | [TODO.md](TODO.md) | open work, in priority order (Hungarian) |
 | **operations/** | |
+| [runbooks/deploy.md](runbooks/deploy.md) | releases, rollbacks, releasing the computer player, moving production into its container |
 | [backups.md](operations/backups.md) | daily database backups and how to restore (Hungarian) |
 | [privacy.md](operations/privacy.md) | how the privacy notice is implemented: pseudonyms, retention (Hungarian) |
 | [../deploy/containers/](../deploy/containers/README.md) | staging and production containers: setup and day-to-day commands |

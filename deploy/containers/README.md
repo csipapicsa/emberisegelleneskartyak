@@ -23,8 +23,12 @@ the previous one.
   daily. Installed into `/etc/systemd/user/podman-auto-update.timer.d/`.
 - `../nginx/staging.emberisegelleneskartyak.hu.conf`: HTTPS and a password in front of staging.
   `/healthz` stays public so CI can check which commit is live.
-- `eek-model.container` + `eek-staging.network`: the model service for staging's computer player
-  (`ml/serve.py`, the ML training image), on a network shared only with `eek-staging.container`.
+- `eek-model.container` + `eek-staging.network` + `eek-prod.network`: the model service for the computer
+  player (`ml/serve.py`, the ML training image): `challenger` for staging, `champion` for production, on a
+  network shared with each (staging and production can't reach each other).
+- `eek-prod.container`: production, following `:prod` (moved only by the Promote workflow, after an
+  approval). Moving production from the host service into it, releases and rollbacks:
+  [../../docs/runbooks/deploy.md](../../docs/runbooks/deploy.md).
 - `eek-mlflow.container`: MLflow tracking server and model registry, image from `../mlflow/`
   (built and tested by `.github/workflows/mlflow-image.yml`). With `../nginx/mlflow.emberisegelleneskartyak.hu.conf`
   and the daily database backup `../systemd/eek-mlflow-backup.{service,timer}`.

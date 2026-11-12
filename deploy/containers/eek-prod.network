@@ -1,0 +1,4 @@
+# The network production and the model service share: the game reaches it as http://eek-model:8020, and
+# staging (on eek-staging.network) can't reach production. Installed next to the .container files.
+[Network]
+NetworkName=eek-prod

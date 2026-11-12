@@ -17,9 +17,11 @@ Image=ghcr.io/csipapicsa/eek-ml-train:main
 AutoUpdate=registry
 Exec=python -m ml.serve
 
-# Staging reaches it on the shared network (http://eek-model:8020); production, which runs on the host
-# (emberisegellenes.service), through this port on localhost only.
+# Staging and the production container reach it on their own networks (http://eek-model:8020; staging and
+# production can't reach each other); production on the host (emberisegellenes.service, until it moves into
+# its container: docs/runbooks/deploy.md) through this port on localhost only.
 Network=eek-staging.network
+Network=eek-prod.network
 PublishPort=127.0.0.1:8020:8020
 
 # /data holds the Hugging Face cache (the embedding model, ~470 MB, downloaded on the first start).

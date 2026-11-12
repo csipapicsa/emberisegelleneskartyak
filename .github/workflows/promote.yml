@@ -1,0 +1,77 @@
+name: Promote to production
+
+# Moves the :prod tag to an image that CI has already built, tested (unit, ML, browser tests against the
+# container) and published as sha-<commit>. Nothing is rebuilt: production runs exactly the tested image.
+# The production container follows :prod (deploy/containers/eek-prod.container): podman auto-update pulls it
+# within 5 minutes and rolls back by itself if the new container doesn't become healthy.
+#
+# The "production" environment requires an approval before this job runs, so a person decides when a
+# release goes live (a restart ends the games in progress: approve when nobody is playing).
+# Rolling back is the same workflow with the previous commit, which the job summary of every run records.
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "Commit to release, 7 characters (empty: what :main is now)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    permissions:
+      contents: read
+      packages: write
+    env:
+      REPO_IMAGE: ghcr.io/csipapicsa/emberisegelleneskartyak
+      COMMIT: ${{ inputs.commit }}
+    steps:
+      - name: Log in to GHCR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Pick the tested image
+        id: source
+        run: |
+          if [ -z "$COMMIT" ]; then
+            source="$REPO_IMAGE:main"
+          elif printf '%s' "$COMMIT" | grep -qE '^[0-9a-f]{7}$'; then
+            source="$REPO_IMAGE:sha-$COMMIT"
+          else
+            echo "::error::commit must be 7 lowercase hex characters, got '$COMMIT'"; exit 1
+          fi
+          # Only images that passed every CI check were published, so existing means tested.
+          docker buildx imagetools inspect "$source" > /dev/null \
+            || { echo "::error::$source doesn't exist (not published by CI)"; exit 1; }
+          revision=$(docker buildx imagetools inspect "$source" --format '{{ index .Image.Config.Labels "org.opencontainers.image.revision" }}')
+          echo "source=$source" >> "$GITHUB_OUTPUT"
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+
+      - name: Remember what production runs now
+        id: previous
+        run: |
+          previous=$(docker buildx imagetools inspect "$REPO_IMAGE:prod" --format '{{ index .Image.Config.Labels "org.opencontainers.image.revision" }}' 2>/dev/null || true)
+          echo "revision=${previous:-none}" >> "$GITHUB_OUTPUT"
+
+      - name: Move :prod
+        run: docker buildx imagetools create --tag "$REPO_IMAGE:prod" "${{ steps.source.outputs.source }}"
+
+      - name: Summary
+        run: |
+          {
+            echo "### Production: ${{ steps.source.outputs.revision }}"
+            echo "- image: \`${{ steps.source.outputs.source }}\` → \`$REPO_IMAGE:prod\`"
+            echo "- before: ${{ steps.previous.outputs.revision }} (roll back: run this workflow with that commit)"
+            echo "- the server pulls it within 5 minutes; check \`curl -s http://127.0.0.1:8010/healthz\`"
+          } >> "$GITHUB_STEP_SUMMARY"
