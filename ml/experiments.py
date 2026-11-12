@@ -108,7 +108,7 @@ def load(snapshot: str | Path | None = None) -> Data:
     folder = Path(snapshot) if snapshot else latest_snapshot(DEFAULT_OUT)
     manifest = require_valid(folder)
     _, tables = read_snapshot(folder)
-    splits = evaluate.split_by_game(evaluate.pick_examples(tables), tables["games"])
+    splits = evaluate.make_splits(tables, "A")  # the cycle's clean split: val/test without computer players
     return Data(folder, manifest, tables, splits, {c["text_id"]: c["text"] for c in tables["card_texts"]})
 
 

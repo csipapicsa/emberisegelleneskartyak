@@ -15,6 +15,7 @@
 | [ads/](features/ads/plan.md) | ad slot and analytics rollout plan, privacy notice text (Hungarian) |
 | **ml/** | |
 | [roadmap.md](ml/roadmap.md) | the computer player's ML lifecycle: architecture, milestones, evaluation |
+| [computer-player.md](ml/computer-player.md) | the computer player in the game: serving, keeping its data apart, promotion, release |
 | [implementation-plan.md](ml/implementation-plan.md) | the working checklist: tasks per milestone, who does what, done-when checks |
 | [pipeline.md](ml/pipeline.md) | running the pipeline: setup, export, validation, embedding benchmark |
 | [gameplay-logging.md](ml/gameplay-logging.md) | the anonymous gameplay log: what is recorded, schema, privacy |

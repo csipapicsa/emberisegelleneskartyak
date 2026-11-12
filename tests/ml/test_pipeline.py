@@ -48,7 +48,8 @@ def add_games(config, tmp_path, games: int) -> None:
 def test_trains_once_then_waits_for_new_data(config, tmp_path, mlflow_dir):
     first = run(config)
     assert first["status"] == "trained" and first["reason"] == "first cycle"
-    assert [r["name"] for r in first["runs"]] == ["baseline random", "baseline popularity", "linear minilm"]
+    assert [r["name"] for r in first["runs"]] == ["baseline random", "baseline popularity", "linear minilm",
+                                                  "linear minilm [B]", "linear minilm [C]"]
 
     again = run(config)
     assert again["status"] == "skipped" and "already trained" in again["reason"]

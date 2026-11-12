@@ -43,6 +43,7 @@ class Config:
     experiment: str = train.EXPERIMENT
     register: bool = True
     min_new_picks: int = 20
+    variants: list[str] = field(default_factory=lambda: list(evaluate.VARIANTS))
 
 
 def load_config(path: Path = DEFAULT_CONFIG) -> Config:
@@ -59,9 +60,13 @@ def load_config(path: Path = DEFAULT_CONFIG) -> Config:
     config.models = list(tr.get("models", config.models))
     config.experiment = tr.get("experiment", config.experiment)
     config.register = bool(tr.get("register", config.register))
+    config.variants = list(tr.get("variants", config.variants))
     config.min_new_picks = int(trig.get("min_new_picks", config.min_new_picks))
     unknown = [e for e in config.embeddings if e not in features.EMBEDDING_MODELS]
     unknown += [m for m in config.models if m not in train.CONFIGS]
+    unknown += [v for v in config.variants if v not in evaluate.VARIANTS]
+    if "A" not in config.variants:
+        unknown.append("variants without A (the registered one)")
     if unknown or not config.embeddings or not config.models:
         raise ValueError(f"{path}: unknown or missing embeddings/models: {', '.join(unknown) or '(empty list)'}")
     return config
@@ -75,7 +80,8 @@ def last_cycle(experiment: str) -> dict | None:
     if not found:
         return None
     run = found[0]
-    picks = sum(int(run.data.params.get(f"n_{s}_picks", 0)) for s in evaluate.SPLITS)
+    picks = run.data.params.get("n_human_picks")  # cycles before data variants: the splits added up to all picks
+    picks = int(picks) if picks is not None else sum(int(run.data.params.get(f"n_{s}_picks", 0)) for s in evaluate.SPLITS)
     return {"snapshot_hash": run.data.tags.get("snapshot_hash"), "picks": picks, "run_id": run.info.run_id}
 
 
@@ -99,7 +105,7 @@ def run(config: Config, force: bool = False,
                     "reason": f"{picks - previous['picks']} new picks, fewer than {config.min_new_picks}"}
 
     result = train.run_cycle(folder, config.embeddings, config.models, config.experiment, register=config.register,
-                             encoder_factory=encoder_factory)
+                             encoder_factory=encoder_factory, variants=config.variants)
     return {"status": "trained", "snapshot": folder, "new_snapshot": new, "picks": picks, **result,
             "reason": "forced" if force else ("first cycle" if previous is None else
                                               f"{picks - previous['picks']} new picks")}
