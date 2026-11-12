@@ -1,0 +1,8 @@
+[Unit]
+Description=Delete production print PDFs older than 24 hours (the eek-prod container's data)
+# Replaces emberisegellenes-print-cleanup.service once production runs in its container.
+
+[Service]
+Type=oneshot
+User=eek
+ExecStart=/usr/bin/find /srv/eek/prod/generated/print -type f -name '*.pdf' -mmin +1440 -delete

@@ -141,7 +141,9 @@ service address (`EEK_MODEL_URL`), so code can be deployed before the feature is
 | Model service, computer player, staging container (milestone 4.1–4.3) | ✅ live on staging, playing `challenger` |
 | Data variants A/B/C, clean evaluation, paired bootstrap | ✅ in every nightly cycle |
 | Promotion and rollback (4.4) | ✅ `python -m ml.promote` |
-| Production: own container, Promote workflow with approval, computer player on `champion` | planned |
+| One model service for both: `challenger` (staging) and `champion` (production) | ✅ v6 is the first champion |
+| Production: own container, Promote workflow with approval | ✅ prepared and rehearsed on a copy of production's data; the cutover needs root and a quiet moment ([runbook](../runbooks/deploy.md)) |
+| Computer player on production | ready: one drop-in and a restart at a quiet time ([runbook](../runbooks/deploy.md#release-the-computer-player-on-production-host-service)) |
 
 ## Later
 

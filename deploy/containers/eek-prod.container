@@ -1,0 +1,49 @@
+# Production: runs whatever is tagged :prod on GHCR. Nothing reaches :prod by itself: the Promote workflow
+# (.github/workflows/promote.yml) moves the tag to an image CI has already tested and published, after a
+# manual approval in GitHub. podman auto-update then pulls it within 5 minutes; if the new container doesn't
+# become healthy, auto-update rolls back to the previous image. A restart ends the games in progress (rooms
+# live in memory), so approve a promotion when nobody is playing.
+#
+# Rootless podman under the `eek` user, like staging. Installed root-owned:
+#   /etc/containers/systemd/users/<uid of eek>/eek-prod.container
+# Moving production from the host service (emberisegellenes.service) into this container:
+# docs/runbooks/deploy.md.
+[Unit]
+Description=Emberiségellenes Kártyák, production (follows :prod)
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+ContainerName=eek-prod
+Image=ghcr.io/csipapicsa/emberisegelleneskartyak:prod
+AutoUpdate=registry
+
+# The same address the host service used, so nginx needs no change.
+PublishPort=127.0.0.1:8010:8010
+
+# The computer player's model service (eek-model.container), "champion" model.
+Network=eek-prod.network
+Environment=EEK_MODEL_URL=http://eek-model:8020
+Environment=EEK_MODEL_NAME=champion
+
+# Runtime data (databases, card database, print PDFs), owned by eek (UID 10001 inside the container).
+UserNS=keep-id:uid=10001,gid=10001
+Volume=/srv/eek/prod:/data:Z
+# EEK_PRIVACY_HMAC_SECRET, EEK_ADMIN_STATS_KEY, TURN_SECRET (see ../privacy.env.example).
+EnvironmentFile=/etc/eek/prod.env
+LogDriver=journald
+
+# "Started" means /healthz answered 200 (the image's HEALTHCHECK); lets auto-update roll back a broken image.
+Notify=healthy
+HealthOnFailure=kill
+
+DropCapability=all
+NoNewPrivileges=true
+ReadOnly=true
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,11 @@
+[Unit]
+Description=Back up the production databases (the eek-prod container's data)
+# Replaces emberisegellenes-db-backup.service once production runs in its container (docs/runbooks/deploy.md).
+
+[Service]
+Type=oneshot
+# The data belongs to eek; the script runs on the host's Python and uses SQLite's backup API, so the live
+# databases are copied consistently while the game runs.
+User=eek
+Environment=EEK_DATA_DIR=/srv/eek/prod
+ExecStart=/usr/bin/python3 /opt/emberisegellenes_kartyak/scripts/backup_databases.py --backup-dir /srv/eek/backups/prod
