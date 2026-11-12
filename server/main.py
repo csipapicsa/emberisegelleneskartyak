@@ -21,7 +21,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 
-from server import card_search, card_seen, chat_db, edition_display, gameplay_log, print_cards
+from server import bot, card_search, card_seen, chat_db, edition_display, gameplay_log, print_cards
 from server import game as game_logic
 from server.analytics import get_stats, log_event
 from server.db import (
@@ -119,12 +119,12 @@ async def _room_cleanup_task() -> None:
                 if inactivity > FINISHED_TTL:
                     stale.append(code)
             elif not room.started:
-                all_gone = all(not p.connected for p in room.players.values())
+                all_gone = not room.humans_connected()  # computer players don't keep a room alive
                 ttl = EMPTY_TTL if all_gone else UNSTARTED_TTL
                 if inactivity > ttl:
                     stale.append(code)
             else:
-                all_gone = all(not p.connected for p in room.players.values())
+                all_gone = not room.humans_connected()
                 if all_gone and inactivity > EMPTY_TTL:
                     stale.append(code)
 
@@ -364,10 +364,12 @@ def _room_snapshot(room) -> dict:
                 "score": p.score,
                 "connected": p.connected,
                 "is_admin": p.is_admin,
+                "is_bot": p.is_bot,
                 "submitted": bool(p.submitted_cards),
             }
             for sid, p in room.players.items()
         ],
+        "bots": {"enabled": bot.enabled(), "max": CONFIG.get("max_bots", 1)},
         "pending": [
             {"session_id": sid, "username": p.username}
             for sid, p in room.pending.items()
@@ -496,7 +498,7 @@ async def api_list_rooms():
         for r in _rooms.values()
         # An unstarted lobby with nobody connected has no admin left to
         # approve a new joiner into — don't advertise it as joinable.
-        if not r.finished and (r.started or any(p.connected for p in r.players.values()))
+        if not r.finished and (r.started or r.humans_connected())
     ]
 
 
@@ -932,6 +934,11 @@ async def websocket_endpoint(ws: WebSocket, room_code: str):
 
     room = get_room(room_code)
 
+    # A computer player's seat can't be taken over by connecting with its session ID.
+    if room and session_id in room.players and room.players[session_id].is_bot:
+        await ws.close(code=4001)
+        return
+
     # Reconnect path
     if room and session_id in room.players:
         player = room.players[session_id]
@@ -941,6 +948,7 @@ async def websocket_endpoint(ws: WebSocket, room_code: str):
         await manager.send(room_code, session_id, _room_snapshot(room))
         if room.started and not room.finished:
             await manager.send(room_code, session_id, {"event": "hand_update", "hand": player.hand})
+        bot.resume(room, manager)  # computer players wait while no human is in the room
     elif room and not room.started:
         # New player joining — goes to pending
         username = ws.query_params.get("username", "").strip() or f"Játékos{len(room.players)+1}"
@@ -1017,6 +1025,32 @@ async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
         await manager.send(room_code, target, {"event": "denied", "message": "A belépési kérelmet elutasították."})
         await manager.broadcast(room_code, _room_snapshot(room))
 
+    elif event == "add_bot":
+        if session_id != room.admin_session_id or room.started:
+            return
+        if not bot.enabled():
+            await manager.send(room_code, session_id, {"event": "error", "message": "Gépi játékos itt nem érhető el."})
+            return
+        if room.bot_count() >= CONFIG.get("max_bots", 1):
+            await manager.send(room_code, session_id, {"event": "error", "message": "Több gépi játékos nem lehet."})
+            return
+        if len(room.players) >= CONFIG.get("max_room_players", 20):
+            await manager.send(room_code, session_id, {"event": "error", "message": "A szoba megtelt."})
+            return
+        computer = bot.new_player(room)
+        room.players[computer.session_id] = computer
+        room.join_order.append(computer.session_id)
+        await manager.broadcast(room_code, _room_snapshot(room))
+
+    elif event == "remove_bot":
+        if session_id != room.admin_session_id or room.started:
+            return
+        target = room.players.get(msg.get("session_id"))
+        if not target or not target.is_bot:
+            return
+        game_logic.remove_player(room, target.session_id)
+        await manager.broadcast(room_code, _room_snapshot(room))
+
     elif event == "configure_room":
         if session_id != room.admin_session_id or room.started:
             return
@@ -1089,19 +1123,7 @@ async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
         if len(selected) != pick or len(set(card_ids)) != len(card_ids):
             await manager.send(room_code, session_id, {"event": "error", "message": f"Pontosan {pick} kártyát kell beküldeni."})
             return
-        gameplay_log.submitted(room, session_id, list(player.hand), selected)
-        player.submitted_cards = selected
-        for c in selected:
-            player.hand.remove(c)
-        await manager.send(room_code, session_id, {"event": "hand_update", "hand": player.hand})
-        await manager.send(room_code, session_id, {"event": "submission_accepted"})
-        await manager.broadcast(room_code, {
-            "event": "player_submitted",
-            "session_id": session_id,
-            "username": player.username,
-        })
-        if room.all_submitted():
-            await game_logic.reveal_cards(room, manager)
+        await game_logic.submit_cards(room, session_id, selected, manager)
 
     elif event == "withdraw_submission":
         if room.phase != "submitting":
@@ -1163,21 +1185,7 @@ async def _handle_message(session_id: str, room_code: str, msg: dict) -> None:
         player = room.players.get(session_id)
         if not player or room.phase != "submitting" or player.submitted_cards:
             return
-        from server.deck import draw_card, reshuffle_into_deck
-        old_hand = player.hand
-        room.discard_pile.extend(player.hand)
-        player.hand = []
-        if not room.white_deck:
-            reshuffle_into_deck(room.white_deck, room.discard_pile)
-            room.discard_pile = []
-        for _ in range(10):
-            if not room.white_deck:
-                reshuffle_into_deck(room.white_deck, room.discard_pile)
-                room.discard_pile = []
-            card = draw_card(room.white_deck)
-            if card:
-                player.hand.append(card)
-        gameplay_log.hand_changed(room, session_id, old_hand, player.hand)
+        game_logic.deal_new_hand(room, player)
         await manager.send(room_code, session_id, {"event": "hand_update", "hand": player.hand})
         await manager.send(room_code, session_id, {"event": "new_hand_dealt"})
 

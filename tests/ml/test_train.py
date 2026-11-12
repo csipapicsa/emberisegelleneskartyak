@@ -1,6 +1,8 @@
 """ml/train.py: one training cycle on sample data, with the stand-in encoder and a throwaway MLflow store."""
 from __future__ import annotations
 
+import json
+
 import mlflow
 import numpy as np
 import pytest
@@ -74,12 +76,28 @@ def test_best_validation_model_becomes_the_challenger(cycle):
     assert version.tags["embedding"] == "minilm"
 
 
-def test_challenger_loads_and_returns_probabilities(cycle):
+def test_challenger_loads_and_returns_raw_scores(cycle):
     model = mlflow.pyfunc.load_model(f"models:/{train.REGISTERED_MODEL}@challenger")
     inputs = model.metadata.signature.inputs.inputs[0]
     assert tuple(inputs.shape) == (-1, 11, 384)
-    probs = np.asarray(model.predict(np.random.default_rng(0).random((4, 11, 384), dtype=np.float32)))
-    assert probs.shape == (4, 10) and np.allclose(probs.sum(axis=1), 1, atol=1e-5)
+    x = np.random.default_rng(0).random((4, 11, 384), dtype=np.float32)
+    scores = np.asarray(model.predict(x))
+    assert scores.shape == (4, 10)
+    assert not np.allclose(scores.sum(axis=1), 1, atol=1e-3), "scores, not probabilities"
+    # Each card's score depends only on the black card and that card, so a short hand can be padded.
+    swapped = x.copy()
+    swapped[:, 5:] = x[:, 1:2]
+    assert np.allclose(np.asarray(model.predict(swapped))[:, :4], scores[:, :4], atol=1e-5)
+
+
+def test_challenger_carries_the_new_hand_cutoffs(cycle):
+    version = mlflow.MlflowClient().get_model_version_by_alias(train.REGISTERED_MODEL, "challenger")
+    assert version.tags["output"] == "scores"
+    cutoffs = json.loads(version.tags["best_score_percentiles"])
+    assert list(cutoffs) == [str(q) for q in train.REFRESH_PERCENTILES]
+    assert list(cutoffs.values()) == sorted(cutoffs.values()), "higher percentile, higher cut-off"
+    run = mlflow.get_run(cycle["challenger"]["run_id"])
+    assert run.data.metrics["train_best_score_p10"] == pytest.approx(cutoffs["10"])
 
 
 def test_fit_is_reproducible_and_stops_early(snapshot, tmp_path):

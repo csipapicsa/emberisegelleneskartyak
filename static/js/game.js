@@ -116,7 +116,7 @@ function onRoomState(state) {
   votingMode = state.voting_mode || 'czar';
   preventSelfVote = state.prevent_self_vote !== false;
   renderPlayers(state.players, state.czar);
-  voiceManager?.connectToPeers((state.players || []).map(p => p.session_id));
+  voiceManager?.connectToPeers((state.players || []).filter(p => !p.is_bot).map(p => p.session_id));
   document.getElementById('roomCodeEl').textContent = state.code;
   if (state.started && state.black_card) {
     renderBlackCard(state.black_card);
@@ -434,7 +434,7 @@ function renderPlayers(players, czarSid) {
     panel.innerHTML = `<h2 style="margin-bottom:8px">Játékosok</h2>` +
       players.map(p => `
         <div class="player-row ${p.session_id === mySessionId ? 'you' : ''} ${p.session_id === czarSid ? 'czar' : ''} ${!p.connected ? 'disconnected' : ''}" data-sid="${p.session_id}">
-          <span class="name">${esc(p.username)}</span>
+          <span class="name">${p.is_bot ? '🤖 ' : ''}${esc(p.username)}</span>
           <span>
             <span class="voice-indicator" data-sid="${p.session_id}"></span>
             <span class="score-badge">${p.score}</span>

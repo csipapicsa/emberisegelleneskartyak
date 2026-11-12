@@ -49,7 +49,9 @@ Game rules that show in the data:
   `card_id` links back to the card catalogue.
 - **Seat.** A player's number within one game (0, 1, 2, ...). It links one player's hands, picks and votes
   across the rounds of a game, and means nothing outside it. 1 byte per row.
-- **Model (`model_id`).** A model player's registered name and version (the MLflow model registry).
+- **Model (`model_id`).** A model player's registered name and version (the MLflow model registry). A computer
+  player's seat is flagged from the start of the game as version `unknown`, and gets the real version once its
+  model answers; if the alias moves mid-game, the seat keeps the last version that answered.
 
 ## Schema
 

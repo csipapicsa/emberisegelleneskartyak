@@ -18,6 +18,7 @@ class Player:
     connected: bool = True
     is_admin: bool = False
     missed_rounds: int = 0
+    is_bot: bool = False  # a computer player (server/bot.py): always "connected", has no socket
 
 
 @dataclass
@@ -65,19 +66,29 @@ class Room:
 
     def all_submitted(self) -> bool:
         connected = [p for p in self.players.values() if p.connected]
-        if not connected:
+        # With no human connected (e.g. everyone between the lobby and the game page) a computer player's
+        # submission alone mustn't reveal the round.
+        if not connected or not self.humans_connected():
             return False
         return all(bool(p.submitted_cards) for p in connected)
 
+    def humans_connected(self) -> bool:
+        """Is any human still here? Computer players always count as connected, so a room with only
+        computer players left is empty."""
+        return any(p.connected and not p.is_bot for p in self.players.values())
+
+    def bot_count(self) -> int:
+        return sum(1 for p in self.players.values() if p.is_bot)
+
     def all_voted(self) -> bool:
         connected = [sid for sid, p in self.players.items() if p.connected]
-        if not connected:
+        if not connected or not self.humans_connected():
             return False
         return all(sid in self.votes for sid in connected)
 
     def promote_next_admin(self) -> str | None:
         for sid in self.join_order:
-            if sid != self.admin_session_id and sid in self.players:
+            if sid != self.admin_session_id and sid in self.players and not self.players[sid].is_bot:
                 self.admin_session_id = sid
                 self.players[sid].is_admin = True
                 return sid

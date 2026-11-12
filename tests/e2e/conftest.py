@@ -8,6 +8,9 @@ With EEK_E2E_BASE_URL set, the tests run against that server instead of starting
 test the container image itself. That server must have the sample cards and no secrets configured.
 EEK_E2E_DATA_DIR tells the tests where that server's data directory is, so they can check what it wrote.
 
+Computer players need a model service: the local server gets tests/e2e/fake_model.py on a free port
+(EEK_MODEL_URL); for the container, CI starts the same fake service and passes its address.
+
 When Playwright or its Chromium is missing these tests are skipped, so a plain `pytest` still works on a
 machine without browsers. The CI e2e job sets EEK_E2E_REQUIRED=1, which turns that skip into a failure.
 """
@@ -56,6 +59,9 @@ def server(tmp_path_factory) -> Iterator[tuple[str, Path | None]]:
         check=True, capture_output=True,
     )
 
+    from tests.e2e import fake_model
+    model = fake_model.start()
+
     port = _free_port()
     url = f"http://127.0.0.1:{port}"
     log_path = data_dir / "uvicorn.log"
@@ -63,6 +69,7 @@ def server(tmp_path_factory) -> Iterator[tuple[str, Path | None]]:
     env = {k: v for k, v in os.environ.items()
            if k not in ("EEK_PRIVACY_HMAC_SECRET", "TURN_SECRET", "EEK_ADMIN_STATS_KEY")}
     env["EEK_DATA_DIR"] = str(data_dir)
+    env["EEK_MODEL_URL"] = f"http://127.0.0.1:{model.server_address[1]}"
     with open(log_path, "w") as log:
         proc = subprocess.Popen(
             [sys.executable, "-m", "uvicorn", "server.main:app", "--host", "127.0.0.1", "--port", str(port)],
@@ -87,6 +94,7 @@ def server(tmp_path_factory) -> Iterator[tuple[str, Path | None]]:
             proc.wait(timeout=10)
         except subprocess.TimeoutExpired:
             proc.kill()
+        model.shutdown()
 
 
 @pytest.fixture(scope="session")

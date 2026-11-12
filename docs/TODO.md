@@ -93,6 +93,11 @@ Következő lépések, sorrendben (2026-11-06, a projekt-review alapján)
        kiszolgálás a saját szerveren). Mérföldkövek: MLflow szerver → helyi pipeline → ugyanaz Cloud Run
        Jobként → model service + bot + promóció/visszaállítás → monitorozás.
     [x] Milestones 1–3 done 2026-11-07 (MLflow, local pipeline, same training as a Cloud Run Job: python -m ml.cloud).
+    [x] Milestone 4.1–4.3 built 2026-11-12: model service (ml/serve.py, follows pick-model@challenger), computer
+        player (server/bot.py, one per room: max_bots), staging container (deploy/containers/eek-model.container).
+        Worst-case turn with brand-new cards, 5 games at once: max 3.9 s (ml/serve_bench.py, budget 15 s).
+    [ ] Next: 4.4 promotion (challenger -> champion with a comparison on the same test set) and rollback; then the
+        computer player in production, following champion. More than one per room: raise max_bots.
     [ ] Later (not in scope now): train only in GCP. The nightly timer calls `python -m ml.cloud --register`
         instead of training on the server (or Cloud Scheduler triggers the job). Keep the local training
         code: CI still tests it on sample data, and it stays the fallback.

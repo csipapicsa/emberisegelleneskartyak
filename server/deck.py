@@ -40,18 +40,21 @@ def least_seen_shuffle(cards: list[dict], seen: dict[int, int]) -> list[dict]:
     return [cards[i] for i in order]
 
 
-def deal_hand(white_deck: list[dict], size: int) -> list[dict]:
+def deal_hand(white_deck: list[dict], size: int, record: bool = True) -> list[dict]:
+    """record=False: the cards go to a computer player, who doesn't count as having seen them."""
     hand = white_deck[:size]
     del white_deck[:size]
-    card_seen.record(hand)
+    if record:
+        card_seen.record(hand)
     return hand
 
 
-def draw_card(white_deck: list[dict]) -> dict | None:
+def draw_card(white_deck: list[dict], record: bool = True) -> dict | None:
     if not white_deck:
         return None
     card = white_deck.pop(0)
-    card_seen.record([card])
+    if record:
+        card_seen.record([card])
     return card
 
 

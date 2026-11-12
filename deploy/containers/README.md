@@ -23,6 +23,8 @@ the previous one.
   daily. Installed into `/etc/systemd/user/podman-auto-update.timer.d/`.
 - `../nginx/staging.emberisegelleneskartyak.hu.conf`: HTTPS and a password in front of staging.
   `/healthz` stays public so CI can check which commit is live.
+- `eek-model.container` + `eek-staging.network`: the model service for staging's computer player
+  (`ml/serve.py`, the ML training image), on a network shared only with `eek-staging.container`.
 - `eek-mlflow.container`: MLflow tracking server and model registry, image from `../mlflow/`
   (built and tested by `.github/workflows/mlflow-image.yml`). With `../nginx/mlflow.emberisegelleneskartyak.hu.conf`
   and the daily database backup `../systemd/eek-mlflow-backup.{service,timer}`.
@@ -66,6 +68,37 @@ chown root:nginx /etc/nginx/eek-staging.htpasswd; chmod 640 /etc/nginx/eek-stagi
 install -m 644 deploy/nginx/staging.emberisegelleneskartyak.hu.conf /etc/nginx/conf.d/
 nginx -t && systemctl reload nginx
 certbot --nginx -d staging.emberisegelleneskartyak.hu
+```
+
+## Computer player on staging (as root)
+
+The model service loads `pick-model@challenger` from MLflow as the `reader` user, and the staging game calls it
+at `http://eek-model:8020` (set in `eek-staging.container`). Without it the computer player plays at random.
+
+```bash
+uid=$(id -u eek)
+install -d -o eek -g eek -m 750 /srv/eek/model                 # Hugging Face cache
+
+read -rsp 'MLflow reader password: ' p; echo
+( umask 027
+  printf 'MLFLOW_TRACKING_URI=https://mlflow.emberisegelleneskartyak.hu\nMLFLOW_TRACKING_USERNAME=reader\nMLFLOW_TRACKING_PASSWORD=%s\n' \
+    "$p" > /etc/eek/model.env ); unset p
+chown root:eek /etc/eek/model.env
+
+install -m 644 deploy/containers/eek-staging.network deploy/containers/eek-model.container \
+    deploy/containers/eek-staging.container /etc/containers/systemd/users/$uid/
+systemctl --user -M eek@ daemon-reload
+systemctl --user -M eek@ start eek-model.service       # first start: image + embedding model, a few minutes
+systemctl --user -M eek@ restart eek-staging.service   # joins the network
+journalctl --user-unit=eek-model.service -n 20         # "loaded pick-model version N (e5)"
+```
+
+Check from the server that a whole worst-case turn stays far inside the shortest timer (15 s), with brand-new
+cards and 5 games at once:
+
+```bash
+cd / && sudo -u eek env XDG_RUNTIME_DIR=/run/user/$uid podman exec eek-model \
+    python -m ml.serve_bench --url http://127.0.0.1:8020 --games 5 --rounds 10
 ```
 
 ## Day to day (as root)

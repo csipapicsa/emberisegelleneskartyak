@@ -1,0 +1,51 @@
+# The model service for staging's computer player (ml/serve.py): scores cards for server/bot.py.
+# Runs the ML training image (it has PyTorch, the embedding models' code and FastAPI) with a different command,
+# and follows its :main tag like staging does. The model itself comes from MLflow: the version behind the
+# "challenger" alias, re-checked every 5 minutes, so every new nightly winner plays on staging.
+#
+# Rootless podman under the `eek` user, like eek-staging.container. Installed root-owned:
+#   /etc/containers/systemd/users/<uid of eek>/eek-model.container
+[Unit]
+Description=Model service for the computer player (staging)
+Wants=network-online.target
+After=network-online.target
+
+[Container]
+ContainerName=eek-model
+Image=ghcr.io/csipapicsa/eek-ml-train:main
+AutoUpdate=registry
+Exec=python -m ml.serve
+
+# No published port: only the staging game, on the same network, can reach it.
+Network=eek-staging.network
+
+# /data holds the Hugging Face cache (the embedding model, ~470 MB, downloaded on the first start).
+UserNS=keep-id:uid=10001,gid=10001
+Volume=/srv/eek/model:/data:Z
+# MLFLOW_TRACKING_URI (the public HTTPS address), MLFLOW_TRACKING_USERNAME=reader, MLFLOW_TRACKING_PASSWORD.
+EnvironmentFile=/etc/eek/model.env
+Environment=EEK_MODEL_URI=models:/pick-model@challenger
+Environment=EEK_MODEL_POLL_SECONDS=300
+Environment=EEK_REFRESH_PERCENTILE=10
+
+# Healthy = a model is loaded (/healthz 200). Loading takes about a minute, the first start longer.
+HealthCmd=python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8020/healthz', timeout=4)"
+HealthInterval=30s
+HealthStartPeriod=300s
+Notify=healthy
+HealthOnFailure=kill
+
+# About 1.3 GB in use (PyTorch, the model, the embedding model and its cache); the cap keeps a leak from
+# taking the server's memory.
+PodmanArgs=--memory=2g
+DropCapability=all
+NoNewPrivileges=true
+ReadOnly=true
+
+[Service]
+Restart=always
+# The first start pulls the image (~1.9 GB) and downloads the embedding model.
+TimeoutStartSec=900
+
+[Install]
+WantedBy=default.target
