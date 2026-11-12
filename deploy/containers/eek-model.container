@@ -24,6 +24,10 @@ UserNS=keep-id:uid=10001,gid=10001
 Volume=/srv/eek/model:/data:Z
 # MLFLOW_TRACKING_URI (the public HTTPS address), MLFLOW_TRACKING_USERNAME=reader, MLFLOW_TRACKING_PASSWORD.
 EnvironmentFile=/etc/eek/model.env
+# The MLflow name resolves to this server's own public IP, and rootless networking (pasta) gives the container
+# that same IP, so the connection would stay inside the container: "connection refused". host-gateway is the
+# address pasta maps to the real host (169.254.1.2), where nginx answers; TLS still sees the right name.
+AddHost=mlflow.emberisegelleneskartyak.hu:host-gateway
 Environment=EEK_MODEL_URI=models:/pick-model@challenger
 Environment=EEK_MODEL_POLL_SECONDS=300
 Environment=EEK_REFRESH_PERCENTILE=10
@@ -34,6 +38,8 @@ HealthInterval=30s
 HealthStartPeriod=300s
 Notify=healthy
 HealthOnFailure=kill
+# The app's output in the system journal (journalctl CONTAINER_NAME=eek-model), not only in podman logs.
+LogDriver=journald
 
 # About 1.3 GB in use (PyTorch, the model, the embedding model and its cache); the cap keeps a leak from
 # taking the server's memory.

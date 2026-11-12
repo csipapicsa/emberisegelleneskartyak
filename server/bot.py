@@ -51,6 +51,16 @@ SAFETY_MARGIN = 3.0     # seconds left on the round timer at the latest deadline
 MIN_REQUEST_TIME = 0.5  # don't start a request (or a new hand) with less time than this left
 
 _tasks: set[asyncio.Task] = set()
+# Decisions since the app started: the model answered, or the computer player fell back to random. Shown in
+# /healthz, because the fallback keeps games working and would otherwise hide a broken model service.
+stats = {"model": 0, "random": 0}
+
+
+def _count(answered: bool) -> None:
+    stats["model" if answered else "random"] += 1
+    if not answered:
+        logger.warning("computer player: no model answer, chose at random (%d of %d decisions so far)",
+                       stats["random"], stats["model"] + stats["random"])
 
 
 def model_url() -> str | None:
@@ -202,6 +212,7 @@ async def _submit_turn(room: Room, sid: str, round_no: int, manager: ConnectionM
         cards, probs = [player.hand[i] for i in best_first(answer.scores)[:pick]], answer.probs
     else:
         cards, probs = random.sample(player.hand, pick), None
+    _count(probs is not None)
     await game.submit_cards(room, sid, cards, manager, probs=probs)
 
 
@@ -224,6 +235,7 @@ async def _judge_turn(room: Room, sid: str, round_no: int, manager: ConnectionMa
     if not candidates:
         return
     winner = random.choice(candidates)["session_id"]
+    answered = False
     try:
         flat = [(i, c["text"]) for i, s in enumerate(candidates) for c in s["cards"]]
         answer = await ask((room.current_black or {}).get("text", ""), [t for _, t in flat],
@@ -235,10 +247,12 @@ async def _judge_turn(room: Room, sid: str, round_no: int, manager: ConnectionMa
                 totals.setdefault(i, []).append(score)
             best = max(totals, key=lambda i: sum(totals[i]) / len(totals[i]))
             winner = candidates[best]["session_id"]
+            answered = True
     except Exception:  # noqa: BLE001 - fall back to the random choice
         logger.exception("computer player %s: judging failed, choosing at random", sid)
     if not still_on():
         return
+    _count(answered)
     if room.voting_mode == "vote":
         await game.cast_vote(room, sid, winner, manager)
     else:
