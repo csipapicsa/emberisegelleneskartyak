@@ -67,7 +67,7 @@ jobs:
       # Install only ruff, at the version pinned in requirements-dev.txt (one source of truth).
       - run: python -m pip install "$(grep -oE '^ruff==[^ ]+' requirements-dev.txt)"
       # "github" format turns findings into annotations on the PR's changed lines.
-      - run: python -m ruff check --output-format=github server tests scripts ml
+      - run: python -m ruff check --output-format=github server tests scripts ml notebooks
 
   secret-scan:
     # Always runs: a secret pasted into a Markdown file is still a leak.
@@ -111,19 +111,20 @@ jobs:
         run: |
           # pip-compile keeps existing pins, so lock files that are in sync come out unchanged. Only pins and
           # hashes count: the "# via" comments differ between pip versions.
-          for f in requirements requirements-dev; do
+          for f in requirements requirements-dev requirements-notebooks; do
             pip-compile -q --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url "$f.in" -o "$f.txt"
           done
-          git diff --exit-code -I '^ *#' -- requirements.txt requirements-dev.txt \
+          git diff --exit-code -I '^ *#' -- requirements.txt requirements-dev.txt requirements-notebooks.txt \
             || { echo "::error::Lock files are out of date. Regenerate them with pip-compile (see requirements.in)."; exit 1; }
       # Recompiling requirements-ml.txt would download every PyTorch wheel on the CPU index (~11 GB) just to
       # hash them, so its pins are checked against requirements-ml.in and requirements-dev.txt instead.
       - name: ML lock file matches requirements-ml.in
         run: python scripts/check_ml_lock.py
       # The lock files pin every installed package, so this audits exactly what the image and CI install.
-      # --disable-pip: look the pinned versions up instead of installing them (all three files are hashed).
+      # --disable-pip: look the pinned versions up instead of installing them (all four files are hashed).
       - run: >-
           python -m pip_audit --disable-pip -r requirements.txt -r requirements-dev.txt -r requirements-ml.txt
+          -r requirements-notebooks.txt
           --progress-spinner off
       # PyPI doesn't know torch's "+cpu" builds, so the step above skips torch: audit it by its plain version.
       - name: Audit torch

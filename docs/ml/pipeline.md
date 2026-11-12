@@ -61,6 +61,12 @@ venv-ml/bin/python -m ml.train                  # latest snapshot, MLflow experi
 | `ml.embedding_benchmark` | a validated snapshot | one MLflow run per embedding model; the embeddings cache in `ml-data/embeddings/` |
 | `ml.train` | a validated snapshot, the embeddings | a parent run with 2 baselines + 6 models nested; the best on validation registered as `pick-model@challenger` |
 
+## Experiment notebooks
+
+Model ideas not yet in the cycle live in [notebooks/](../../notebooks/README.md), one notebook per model family,
+on the cycle's split, metrics and training loop (`ml/experiments.py`). Run them in the background with
+`venv-ml/bin/python -m ml.notebooks run all`; results go to the MLflow experiment `pick-model-experiments`.
+
 Every ML process lowers its own CPU priority to the minimum (`ml.lower_priority()`: SCHED_IDLE, nice 19),
 so the live game always comes first.
 

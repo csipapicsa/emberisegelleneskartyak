@@ -1,0 +1,10 @@
+# Experiment notebooks (notebooks/), on top of the ML pipeline. Installed into venv-ml/ only; neither CI's
+# ml job nor the training image needs them. requirements-notebooks.txt is generated from this file, with
+# every package the ML and dev lock files also have pinned to the same version:
+#   pip-compile --generate-hashes --allow-unsafe --strip-extras --no-emit-index-url requirements-notebooks.in
+# Install (into venv-ml, after requirements-dev.txt and requirements-ml.txt):
+#   venv-ml/bin/pip install --require-hashes -r requirements-notebooks.txt
+-c requirements-dev.txt
+-c requirements-ml.txt
+ipykernel==7.1.0       # the Jupyter kernel (VS Code's notebook editor runs venv-ml through it)
+papermill==2.6.0       # runs a notebook from the command line with parameters (python -m ml.notebooks)
