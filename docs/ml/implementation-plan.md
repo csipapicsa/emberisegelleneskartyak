@@ -149,6 +149,9 @@ server's test MRR to 4 decimals (training is seeded and full-batch).
 
 ## Milestone 4: serving, the computer player, promotion
 
+Status 2026-11-12: 4.1–4.3 built (`ml/serve.py`, `deploy/containers/eek-model.container`, `server/bot.py`); the
+service follows `challenger` on staging; one computer player per room for now (`max_bots` in config.json).
+
 | # | Task | Who |
 |---|---|---|
 | 4.1 | `ml_service/`: a small FastAPI app that loads the model with the `champion` alias from MLflow, polls the alias every few minutes, `POST /predict` (black card and hand → probability per card), `/healthz` with the model version | Claude |

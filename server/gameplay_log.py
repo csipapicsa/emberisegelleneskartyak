@@ -15,6 +15,7 @@ import logging
 import os
 import queue
 import sqlite3
+import struct
 import threading
 import time
 from collections.abc import Iterable
@@ -29,6 +30,9 @@ if TYPE_CHECKING:
 DB_PATH = DATA_DIR / "gameplay.db"
 ENABLED_ENV = "EEK_GAMEPLAY_LOG"
 logger = logging.getLogger(__name__)
+
+# A computer player's seat before its model has answered (or if it never does).
+UNKNOWN_MODEL = ("pick-model", "unknown")
 
 # round.outcome
 DECIDED = 0          # the czar picked or players voted
@@ -97,12 +101,23 @@ def unpack_ids(data: bytes) -> list[int]:
     return ids
 
 
+def pack_probs(probs: Iterable[float]) -> bytes:
+    """decision.probs: float16 per hand card, little-endian, in hand order."""
+    probs = list(probs)
+    return struct.pack(f"<{len(probs)}e", *probs)
+
+
+def unpack_probs(data: bytes) -> list[float]:
+    return list(struct.unpack(f"<{len(data) // 2}e", data))
+
+
 # --- Per-game state, kept on the room ---
 
 @dataclass
 class _Round:
     no: int
-    decisions: dict[int, tuple[list[int], list[int]]] = field(default_factory=dict)  # seat -> hand, picks
+    # seat -> hand, picks, the model's probability per hand card (computer players only, else None)
+    decisions: dict[int, tuple[list[int], list[int], list[float] | None]] = field(default_factory=dict)
     changes: list[tuple[int, int, list[int], list[int]]] = field(default_factory=list)  # seat, seq, out, in
     shown: list[int] | None = None
     idle_hands: dict[int, list[int]] = field(default_factory=dict)  # non-submitters when submitting closed
@@ -114,6 +129,7 @@ class GameLog:
     started: float
     game_row: tuple
     seats: dict[str, int] = field(default_factory=dict)       # session_id -> seat
+    models: dict[int, tuple[str, str]] = field(default_factory=dict)  # seat -> model name, version
     texts: dict[int, tuple] = field(default_factory=dict)     # text_id -> card_text row, this game
     round: _Round | None = None
 
@@ -222,7 +238,19 @@ def game_started(room: Room) -> None:
     )
     room.gameplay = GameLog(game_id=game_id, started=now, game_row=game_row)
     for sid in room.join_order:
-        room.gameplay.seat(sid)
+        seat = room.gameplay.seat(sid)
+        player = room.players.get(sid)
+        if player is not None and player.is_bot:
+            # Flagged from the start, so training leaves this seat out even if the model never answers.
+            room.gameplay.models[seat] = (UNKNOWN_MODEL[0], UNKNOWN_MODEL[1])
+
+
+@_safe
+def model_answered(room: Room, session_id: str, name: str, version: str) -> None:
+    """A computer player's model answered: the seat's model is now this version. The seat keeps one model
+    (game_player.model_id), the last one that answered: an alias that moves mid-game changes it."""
+    if room.gameplay is not None:
+        room.gameplay.models[room.gameplay.seat(session_id)] = (name, str(version))
 
 
 @_safe
@@ -245,13 +273,18 @@ def hand_changed(room: Room, session_id: str, removed: list[dict], added: list[d
 
 
 @_safe
-def submitted(room: Room, session_id: str, hand: list[dict], picks: list[dict]) -> None:
-    """hand: the hand as shown when submitting (picked cards included); picks in blank order."""
+def submitted(room: Room, session_id: str, hand: list[dict], picks: list[dict],
+              probs: list[float] | None = None) -> None:
+    """hand: the hand as shown when submitting (picked cards included); picks in blank order. probs:
+    a computer player's probability per hand card, in hand order (None: a human, or the model didn't
+    answer and the pick was random)."""
     rnd = _current_round(room)
     if rnd is None:
         return
     log = room.gameplay
-    rnd.decisions[log.seat(session_id)] = (_ids(log, hand), _ids(log, picks))
+    if probs is not None and len(probs) != len(hand):
+        probs = None
+    rnd.decisions[log.seat(session_id)] = (_ids(log, hand), _ids(log, picks), probs)
 
 
 @_safe
@@ -293,23 +326,27 @@ def round_ended(room: Room, outcome: int, votes: dict[str, str] | None = None) -
     log = room.gameplay
     log.round = None
 
+    def decided(seat: int, hand: list[int], picks: list[int], probs: list[float] | None) -> tuple:
+        p_chosen = probs[hand.index(picks[0])] if probs and picks and picks[0] in hand else None
+        return (log.game_id, rnd.no, seat, pack_ids(hand), pack_ids(picks), p_chosen,
+                pack_probs(probs) if probs else None)
+
     decisions = []
     for sid, player in room.players.items():
         seat = log.seat(sid)
         if seat in rnd.decisions:
-            hand, picks = rnd.decisions[seat]
-            decisions.append((log.game_id, rnd.no, seat, pack_ids(hand), pack_ids(picks)))
+            decisions.append(decided(seat, *rnd.decisions[seat]))
         else:
-            decisions.append((log.game_id, rnd.no, seat, pack_ids(_ids(log, player.hand)), None))
+            decisions.append((log.game_id, rnd.no, seat, pack_ids(_ids(log, player.hand)), None, None, None))
     # Players who have left the room since (kicked for inactivity, or disconnected and removed).
     present = {d[2] for d in decisions}
-    for seat, (hand, picks) in rnd.decisions.items():
+    for seat, decision in rnd.decisions.items():
         if seat not in present:
-            decisions.append((log.game_id, rnd.no, seat, pack_ids(hand), pack_ids(picks)))
+            decisions.append(decided(seat, *decision))
             present.add(seat)
     for seat, hand in rnd.idle_hands.items():
         if seat not in present:
-            decisions.append((log.game_id, rnd.no, seat, pack_ids(hand), None))
+            decisions.append((log.game_id, rnd.no, seat, pack_ids(hand), None, None, None))
 
     czar = log.seat(room.czar_session_id) if room.voting_mode == "czar" and room.czar_session_id else None
     eligible = 1 if room.voting_mode == "czar" else sum(1 for p in room.players.values() if p.connected)
@@ -319,7 +356,7 @@ def round_ended(room: Room, outcome: int, votes: dict[str, str] | None = None) -
     batch = {
         "texts": list(log.texts.values()),
         "game": log.game_row,
-        "seats": [(log.game_id, seat) for seat in log.seats.values()],
+        "seats": [(log.game_id, seat, *log.models.get(seat, (None, None))) for seat in log.seats.values()],
         "round": (log.game_id, rnd.no, t, black, czar, outcome, eligible,
                   pack_ids(rnd.shown) if rnd.shown is not None else None),
         "decisions": decisions,
@@ -381,10 +418,19 @@ class _Writer:
         with conn:  # one transaction: the whole round or nothing
             conn.executemany("INSERT OR IGNORE INTO card_text VALUES (?,?,?,?,?)", new_texts)
             conn.execute("INSERT OR IGNORE INTO game VALUES (?,?,?,?,?,?,?,?)", batch["game"])
-            conn.executemany("INSERT OR IGNORE INTO game_player (game_id, seat) VALUES (?,?)", batch["seats"])
+            for game_id, seat, model_name, model_version in batch["seats"]:
+                model_id = None
+                if model_name is not None:
+                    conn.execute("INSERT OR IGNORE INTO model (name, version) VALUES (?,?)", (model_name, model_version))
+                    model_id = conn.execute("SELECT model_id FROM model WHERE name = ? AND version = ?",
+                                            (model_name, model_version)).fetchone()[0]
+                # A computer player's seat may learn its model version after its first round was written.
+                conn.execute("INSERT INTO game_player (game_id, seat, model_id) VALUES (?,?,?) "
+                             "ON CONFLICT (game_id, seat) DO UPDATE SET model_id = excluded.model_id "
+                             "WHERE excluded.model_id IS NOT NULL", (game_id, seat, model_id))
             conn.execute("INSERT OR IGNORE INTO round VALUES (?,?,?,?,?,?,?,?)", batch["round"])
-            conn.executemany("INSERT OR IGNORE INTO decision (game_id, round_no, seat, hand, picks) "
-                             "VALUES (?,?,?,?,?)", batch["decisions"])
+            conn.executemany("INSERT OR IGNORE INTO decision (game_id, round_no, seat, hand, picks, p_chosen, probs) "
+                             "VALUES (?,?,?,?,?,?,?)", batch["decisions"])
             conn.executemany("INSERT OR IGNORE INTO hand_change VALUES (?,?,?,?,?,?)", batch["changes"])
             conn.executemany("INSERT OR IGNORE INTO vote VALUES (?,?,?,?)", batch["votes"])
         self._confirmed_texts.update(row[0] for row in new_texts)

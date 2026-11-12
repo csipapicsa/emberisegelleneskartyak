@@ -8,7 +8,7 @@ import time
 from collections import Counter
 from typing import TYPE_CHECKING
 
-from server import card_seen, gameplay_log
+from server import bot, card_seen, gameplay_log
 from server.analytics import log_event
 from server.deck import build_deck, deal_hand, draw_black, draw_card, reshuffle_into_deck
 from server.room import Room
@@ -69,7 +69,7 @@ async def _kick_inactive_players(room: Room, manager: ConnectionManager) -> list
         return []
     kicked: list[str] = []
     for sid, player in list(room.players.items()):
-        if not player.connected:
+        if not player.connected or player.is_bot:  # a computer player is never idle by choice
             continue
         if player.submitted_cards:
             continue
@@ -118,7 +118,7 @@ async def start_game(room: Room, black_cards: list[dict], white_cards: list[dict
     for player in room.players.values():
         player.score = 0.0
         player.swaps_remaining = room.round_total
-        player.hand = deal_hand(room.white_deck, 10)
+        player.hand = deal_hand(room.white_deck, 10, record=not player.is_bot)
 
     gameplay_log.game_started(room)
     await manager.broadcast(room.code, {"event": "game_started"})
@@ -176,6 +176,7 @@ async def start_round(room: Room, manager: ConnectionManager) -> None:
     room.cards_revealed = False
     if room.timer_seconds > 0:
         room.timer_task = asyncio.create_task(_timer_task(room, room.round_num, manager))
+    bot.start_turns(room, manager)
 
 
 async def _timer_task(room: Room, round_num: int, manager: ConnectionManager) -> None:
@@ -262,6 +263,49 @@ async def reveal_cards(room: Room, manager: ConnectionManager) -> None:
     if room.timer_seconds > 0:
         _cancel_timer(room)
         room.timer_task = asyncio.create_task(_timer_task(room, room.round_num, manager))
+    bot.start_judging(room, manager)
+
+
+async def submit_cards(room: Room, session_id: str, cards: list[dict], manager: ConnectionManager,
+                       probs: list[float] | None = None) -> None:
+    """Play cards from a player's hand. The caller has checked them (right phase, in the hand, the right
+    number). Shared by the WebSocket handler and computer players; probs: a computer player's probability
+    per hand card, for the gameplay log."""
+    player = room.players[session_id]
+    gameplay_log.submitted(room, session_id, list(player.hand), cards, probs)
+    player.submitted_cards = cards
+    for c in cards:
+        player.hand.remove(c)
+    await manager.send(room.code, session_id, {"event": "hand_update", "hand": player.hand})
+    await manager.send(room.code, session_id, {"event": "submission_accepted"})
+    await manager.broadcast(room.code, {
+        "event": "player_submitted",
+        "session_id": session_id,
+        "username": player.username,
+    })
+    if room.all_submitted():
+        await reveal_cards(room, manager)
+
+
+def deal_new_hand(room: Room, player) -> list[dict]:
+    """Replace the whole hand with ten new cards; returns the old hand. Cards drawn for a computer player
+    don't count as seen (card_seen)."""
+    old_hand = player.hand
+    room.discard_pile.extend(player.hand)
+    player.hand = []
+    for _ in range(10):
+        if not room.white_deck:
+            reshuffle_into_deck(room.white_deck, room.discard_pile)
+            room.discard_pile = []
+        card = draw_card(room.white_deck, record=not player.is_bot)
+        if card:
+            player.hand.append(card)
+    gameplay_log.hand_changed(room, player.session_id, old_hand, player.hand)
+    return old_hand
+
+
+def remove_player(room: Room, session_id: str) -> None:
+    _remove_player(room, session_id)
 
 
 async def czar_pick(room: Room, winner_session_id: str, manager: ConnectionManager) -> None:
@@ -336,7 +380,7 @@ async def skip_revealed_round(room: Room, manager: ConnectionManager) -> None:
                 room.discard_pile = []
                 if not room.white_deck:
                     break
-            card = draw_card(room.white_deck)
+            card = draw_card(room.white_deck, record=not player.is_bot)
             if card:
                 player.hand.append(card)
 
@@ -365,7 +409,7 @@ async def _end_round(room: Room, winners: list[str], manager: ConnectionManager)
                 room.discard_pile = []
                 if not room.white_deck:
                     break
-            card = draw_card(room.white_deck)
+            card = draw_card(room.white_deck, record=not player.is_bot)
             if card:
                 player.hand.append(card)
 

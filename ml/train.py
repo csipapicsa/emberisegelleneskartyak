@@ -18,10 +18,18 @@ dataset and its files as artifacts) and one nested run per model with its parame
 for the trained ones, the model. The trained model with the best validation MRR is registered as
 "pick-model" and gets the alias "challenger"; moving it to "champion" is a separate, deliberate step
 (milestone 4). Test metrics are reported, never used to choose.
+
+The logged model returns raw scores, one per hand card (the softmax is left to whoever uses it), so a score
+means the same in every hand. The computer player (ml/serve.py) needs that for its new-hand rule: it asks
+for new cards when the best card in its hand scores lower than the best card in most training hands. Those
+cut-offs (REFRESH_PERCENTILES of the best score per training hand) are registered with the model as the
+tag "best_score_percentiles"; the tag "output" = "scores" tells them apart from older versions, which
+returned probabilities.
 """
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import warnings
@@ -38,6 +46,8 @@ from ml.export import _git_commit as git_commit
 from ml.validate import require_valid
 
 EXPERIMENT = "pick-model"
+# Percentiles of the best card's score per training hand, registered with the model (see the docstring).
+REFRESH_PERCENTILES = (5, 10, 20, 30, 50)
 REGISTERED_MODEL = "pick-model"
 MODEL_TYPES = ("linear", "mlp")
 
@@ -161,6 +171,14 @@ def predict_probs(model, x) -> np.ndarray:
         return torch.softmax(model(x), dim=-1).numpy()
 
 
+def best_score_percentiles(model, x) -> dict[str, float]:
+    """{"10": s, ...}: s is the score that the best card of 10% of these hands falls below."""
+    torch = _torch()
+    with torch.no_grad():
+        best = model(x).max(dim=-1).values.numpy()
+    return {str(q): float(np.percentile(best, q)) for q in REFRESH_PERCENTILES}
+
+
 def _log_metrics(prefix_metrics: dict[str, dict[str, float]]) -> None:
     import mlflow
     mlflow.log_metrics({f"{split}_{name}": value for split, m in prefix_metrics.items() for name, value in m.items()})
@@ -232,9 +250,12 @@ def run_cycle(snapshot: Path, embeddings: Sequence[str] = tuple(features.EMBEDDI
                     _log_metrics(scores)
                     for epoch, train_loss, val_loss in curve:
                         mlflow.log_metrics({"curve_train_loss": train_loss, "curve_val_loss": val_loss}, step=epoch)
+                    percentiles = best_score_percentiles(model, data["train"][0])
+                    mlflow.log_metrics({f"train_best_score_p{q}": v for q, v in percentiles.items()})
                     model_uri = _log_model(model, data["train"])
                 runs.append({"name": run_name, "run_id": child.info.run_id, "model_type": model_type,
-                             "embedding": key, "model_uri": model_uri, **scores})
+                             "embedding": key, "model_uri": model_uri, "best_score_percentiles": percentiles,
+                             **scores})
 
         challenger = _register_best(runs, tags) if register else None
         if challenger:
@@ -243,15 +264,16 @@ def run_cycle(snapshot: Path, embeddings: Sequence[str] = tuple(features.EMBEDDI
 
 
 def _log_model(model, train) -> str:
-    """The scorer plus a softmax, so the logged model returns probabilities: input (n, 11, 384), the black
-    card's embedding then the hand's; output (n, 10). Saved in MLflow's "pt2" format, a traced graph
+    """The scorer: input (n, 11, 384), the black card's embedding then the hand's; output (n, 10) raw
+    scores (apply a softmax for probabilities). Each card's score depends only on the black card and that
+    card, so a hand of fewer cards can be padded. Saved in MLflow's "pt2" format, a traced graph
     (torch.export) that loads without this module. The example input (two training picks) also gives the
     model its signature."""
     import mlflow.pytorch
     torch = _torch()
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
-        info = mlflow.pytorch.log_model(torch.nn.Sequential(model, torch.nn.Softmax(dim=-1)).eval(), name="model",
+        info = mlflow.pytorch.log_model(torch.nn.Sequential(model).eval(), name="model",
                                         input_example=train[0][:2].numpy(), pip_requirements=["torch==2.14.1"])
     return info.model_uri
 
@@ -267,7 +289,9 @@ def _register_best(runs: list[dict], tags: dict) -> dict | None:
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         version = mlflow.register_model(best["model_uri"], REGISTERED_MODEL,
-                                        tags={**tags, "model_type": best["model_type"], "embedding": best["embedding"]})
+                                        tags={**tags, "model_type": best["model_type"], "embedding": best["embedding"],
+                                              "output": "scores",
+                                              "best_score_percentiles": json.dumps(best["best_score_percentiles"])})
     client = mlflow.MlflowClient()
     client.set_registered_model_alias(REGISTERED_MODEL, "challenger", version.version)
     return {"name": best["name"], "run_id": best["run_id"], "version": version.version}

@@ -1,0 +1,5 @@
+# The network the staging game and its model service share: the game reaches the model service by its
+# container name (http://eek-model:8020), and nothing else can. Installed next to the .container files:
+#   /etc/containers/systemd/users/<uid of eek>/eek-staging.network
+[Network]
+NetworkName=eek-staging

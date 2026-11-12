@@ -196,7 +196,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.code == 'true'
     # Builds the production image and tests *it*: the container runs on the sample cards and three headless
-    # Chromium "phones" play one round against it. On main the tested image is handed to the publish job,
+    # Chromium "phones" play one round against it, and one phone plays the computer player. On main the tested image is handed to the publish job,
     # so what gets published is exactly what was tested.
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -216,7 +216,11 @@ jobs:
           mkdir -p ci-data/database
           python scripts/make_sample_db.py --out ci-data/database/card_master.db
           chmod -R a+rwX ci-data  # the app runs as UID 10001 inside the container
-          docker run -d --name app -p 127.0.0.1:8010:8010 -v "$PWD/ci-data:/data" "$IMAGE"
+          # A stand-in model service for the computer player (tests/e2e/fake_model.py, stdlib only); the
+          # container reaches it on the Docker host.
+          nohup python -m tests.e2e.fake_model --host 0.0.0.0 --port 8020 > fake-model.log 2>&1 &
+          docker run -d --name app -p 127.0.0.1:8010:8010 -v "$PWD/ci-data:/data" \
+            --add-host=host.docker.internal:host-gateway -e EEK_MODEL_URL=http://host.docker.internal:8020 "$IMAGE"
           for i in $(seq 1 30); do curl -sf http://127.0.0.1:8010/healthz && break; sleep 1; done
           echo
           version=$(curl -sf http://127.0.0.1:8010/healthz | python -c 'import json,sys; print(json.load(sys.stdin)["version"])')

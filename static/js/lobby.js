@@ -38,6 +38,7 @@ async function initLobby(code, sid, uname) {
   socket.connect(uname);
   initChat(socket);
   setupSegControls();
+  document.getElementById('addBotBtn')?.addEventListener('click', () => socket.send('add_bot', {}));
 
   window.addEventListener('pagehide', () => { socket.close(); });
   window.addEventListener('pageshow', event => {
@@ -131,12 +132,16 @@ function onRoomState(state) {
       voiceManager.init(); // mic + TURN handshake runs in background
     }
     if (voiceManager) {
-      voiceManager.connectToPeers(state.players.map(p => p.session_id));
+      // Computer players have no microphone.
+      voiceManager.connectToPeers(state.players.filter(p => !p.is_bot).map(p => p.session_id));
     }
   }
 
   renderPlayers(state.players);
   renderPending(state.pending);
+  const bots = state.players.filter(p => p.is_bot).length;
+  const canAddBot = isAdmin && state.bots?.enabled && bots < (state.bots.max || 0);
+  document.getElementById('addBotBtn')?.classList.toggle('hidden', !canAddBot);
 
   if (isAdmin) {
     document.getElementById('adminPanel').classList.remove('hidden');
@@ -194,9 +199,11 @@ function renderPlayers(players) {
   const list = document.getElementById('playerList');
   list.innerHTML = players.map(p => `
     <div class="player-row ${p.session_id === mySessionId ? 'you' : ''}">
-      <span class="name">${esc(p.username)}${p.is_admin ? ' 👑' : ''}</span>
+      <span class="name">${p.is_bot ? '🤖 ' : ''}${esc(p.username)}${p.is_admin ? ' 👑' : ''}</span>
       <span>
-        <span class="voice-indicator" data-sid="${p.session_id}"></span>
+        ${p.is_bot && isAdmin
+          ? `<button class="btn btn-sm btn-danger" onclick="removeBot('${p.session_id}')" title="Eltávolítás">✕</button>`
+          : `<span class="voice-indicator" data-sid="${p.session_id}"></span>`}
         <span class="score">${p.connected ? '' : '(kilépett)'}</span>
       </span>
     </div>
@@ -340,6 +347,7 @@ function showRoomReplaced(newCode) {
 
 function approve(sid) { socket.send('approve_player', { session_id: sid }); }
 function deny(sid)    { socket.send('deny_player',    { session_id: sid }); }
+function removeBot(sid) { socket.send('remove_bot',   { session_id: sid }); }
 
 function esc(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');

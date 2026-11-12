@@ -19,6 +19,11 @@ AutoUpdate=registry
 # Only nginx on this host can reach it (staging.emberisegelleneskartyak.hu).
 PublishPort=127.0.0.1:8011:8010
 
+# The computer player's model service (eek-model.container) on a shared network. Without the service the
+# computer player still plays, at random (server/bot.py).
+Network=eek-staging.network
+Environment=EEK_MODEL_URL=http://eek-model:8020
+
 # Runtime data. The host's eek user appears as the image's eek user (UID 10001) inside the container,
 # so the app owns its files. :Z gives the folder a private SELinux label.
 UserNS=keep-id:uid=10001,gid=10001
