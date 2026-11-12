@@ -1,55 +1,41 @@
-# Adatbázis-mentések
+# Database backups
 
-## Mit ment a rendszer?
+## What is backed up
 
-A `scripts/backup_databases.py` minden, a projekt gyökerében és a
-`database/` könyvtárban lévő `.db` fájlról mentést készít. Jelenleg ez például
-a `cards.db`, `messages.db`, `chat.db`, `analytics.db`, a biztonsági
-kártyaadatbázis és a `database/card_master.db` (ennek mentése
-`database__card_master--<időbélyeg>.db` néven készül). A mentés a SQLite
-online backup API-ját használja, ezért futó weboldal mellett is konzisztens.
+`scripts/backup_databases.py` backs up every `.db` file in the data folder and in `database/`: the runtime
+databases (`analytics.db`, `chat.db`, `messages.db`, `gameplay.db`), the uploaded card database
+`database/card_master.db` (saved as `database__card_master--<timestamp>.db`) and the dealt-card counts. It uses
+SQLite's online backup API, so the copies are consistent while the site is running.
 
-## Hova és meddig?
+## Where, and for how long
 
-- Könyvtár: `backups/` a projekt gyökerében.
-- Fájlnév: `<adatbázisnév>--<UTC-időbélyeg>.db`.
-- A könyvtár és a mentések jogosultsága csak a szolgáltatás felhasználójának
-  ad hozzáférést.
-- Megőrzés: 30 nap. A következő napi futás törli a 30 napnál régebbi
-  mentéseket.
-- A `backups/` Gitből ki van zárva: ez nem GitHub-mentés, hanem helyi,
-  gyors visszaállítási lehetőség.
+- Folder: `backups/` in the data folder (or `--backup-dir`).
+- File name: `<database>--<UTC timestamp>.db`.
+- The folder and the files are readable by the service user only.
+- Retention: 30 days. The next daily run deletes older backups.
+- `backups/` is not in Git: these are local copies for quick restores, not an archive.
 
-## Napi futás
+## Daily run
 
-A systemd timer napi 03:05-kor fut, és kimaradt futást is pótol a következő
-induláskor. Telepítés:
+A systemd timer runs at 03:05 and catches up on a missed run at the next boot. Install (as root):
 
 ```bash
-sudo install -m 644 /opt/emberisegellenes_kartyak/deploy/systemd/emberisegellenes-db-backup.service /etc/systemd/system/emberisegellenes-db-backup.service
-sudo install -m 644 /opt/emberisegellenes_kartyak/deploy/systemd/emberisegellenes-db-backup.timer /etc/systemd/system/emberisegellenes-db-backup.timer
-sudo systemctl daemon-reload
-sudo systemctl enable --now emberisegellenes-db-backup.timer
+install -m 644 /opt/emberisegellenes_kartyak/deploy/systemd/emberisegellenes-db-backup.service \
+               /opt/emberisegellenes_kartyak/deploy/systemd/emberisegellenes-db-backup.timer /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now emberisegellenes-db-backup.timer
 ```
 
-Ellenőrzés:
+Check: `systemctl list-timers emberisegellenes-db-backup.timer`.
+A backup by hand: `/usr/bin/python3 /opt/emberisegellenes_kartyak/scripts/backup_databases.py`.
 
-```bash
-systemctl list-timers emberisegellenes-db-backup.timer
-```
+Once production runs in its container, `eek-prod-db-backup.timer` takes over: it backs up `/srv/eek/prod` into
+`/srv/eek/backups/prod` as the `eek` user ([../runbooks/deploy.md](../runbooks/deploy.md)).
 
-Kézi mentés:
+## Restoring
 
-```bash
-/usr/bin/python3 /opt/emberisegellenes_kartyak/scripts/backup_databases.py
-```
+Stop the service, set the current database aside, and replace only the affected `.db` file with the chosen
+backup; then start the service again. Always take a fresh backup of the current state first.
 
-## Visszaállítás
-
-Előbb állítsd le a szolgáltatást, majd mentsd félre az aktuális adatbázist és
-csak az érintett `.db` fájlt cseréld ki egy kiválasztott mentésre. Ezután
-indítsd újra a szolgáltatást. A visszaállítás előtt mindig készíts egy új
-mentést az aktuális állapotról is.
-
-Ez a helyi mentés nem véd szerver- vagy fiókszintű adatvesztés ellen. Ha ez
-fontos kockázat, kell egy külön, titkosított, szerveren kívüli mentés is.
+These local backups don't protect against losing the server or the account. If that risk matters, add a
+separate, encrypted, off-server copy.

@@ -1,248 +1,313 @@
-# Emberiség Ellenes Kártyák — Umami analitika és AdSense előkészítési terv
+# Umami analytics and AdSense preparation: plan
 
-**Dátum:** 2026-10-16  
-**Weboldal:** https://emberisegelleneskartyak.hu/  
-**Cél:** pontosabb látogatottsági és játékmenet-analitika; a reklámozás lehetőségének felelős megvizsgálása; később egyetlen diszkrét banner megjelenítése kizárólag a főoldalon és – amennyiben megfelel a szabályoknak – a csatlakozási oldalon.
+**Date:** 2026-10-16
+**Site:** https://emberisegelleneskartyak.hu/
+**Goal:** more accurate traffic and gameplay analytics; a responsible look at advertising; later a single,
+unobtrusive banner on the home page only and, if it complies with the rules, on the join page.
 
-> **Claude / fejlesztői feladat:** Először auditáld a jelenlegi alkalmazást, a tényleges Umami-verziót és a Google szabályzatok alkalmazhatóságát. A számok képernyőképekből származnak, nem API-exportból. Ne tekintsd az itt szereplő állításokat már ellenőrzött kód- vagy konfigurációs tényeknek. Előbb adj rövid diagnózist és tételes implementációs tervet; csak utána módosítsd a kódot. **Valódi AdSense-kódot, CMP-t, automatikus hirdetést vagy hirdetéssel kapcsolatos hozzájáruláskezelést ne aktiválj a tulajdonos külön jóváhagyása nélkül.**
+> **Brief for the developer (Claude):** first audit the current application, the actual Umami version and how
+> Google's policies apply. The numbers come from screenshots, not an API export; treat nothing here as a
+> verified fact about the code or configuration. Give a short diagnosis and an itemised plan before changing
+> code. **Don't activate real AdSense code, a CMP, auto ads or ad-related consent handling without the
+> owner's explicit approval.**
 
-## 1. Kiinduló adatok (Umami, utolsó 90 nap)
+## 1. Starting data (Umami, last 90 days)
 
-| Mutató | Jelzett érték |
+| Metric | Reported value |
 |---|---:|
-| Visitors | 4 270 |
-| Visits | 6 250 |
-| Views | 39 600 |
+| Visitors | 4,270 |
+| Visits | 6,250 |
+| Views | 39,600 |
 | Bounce rate | 35% |
-| Visit duration | 7 perc 23 másodperc |
+| Visit duration | 7 min 23 s |
 
-**Fontos:** A `Visitors`, `Visits`, `Views`, `Entry page`, `Exit page` és `Sources` nem egymással felcserélhető mérőszámok. A 39 600 oldalmegtekintés **nem** 39 600 reklámmegjelenés. A 7m23s Umami-mutató **nem** bizonyítottan ennyi aktív játékidő: az Umami időtartam-számítása és az egyoldalas játékmenetek sajátosságai miatt külön mérés szükséges.
+**Note:** `Visitors`, `Visits`, `Views`, `Entry page`, `Exit page` and `Sources` are not interchangeable.
+39,600 page views are **not** 39,600 ad impressions. The 7m23s is **not** proven active play time: Umami's
+duration calculation and single-page game sessions need a separate measurement.
 
-### Oldalak — Path, Visitors (nem Views)
-
-A leglátogatottabb útvonalak:
+### Pages: path, visitors (not views)
 
 | Path | Visitors |
 |---|---:|
-| `/` | 3 530 |
-| `/join` | 2 260 |
-| `/create` | 1 290 |
+| `/` | 3,530 |
+| `/join` | 2,260 |
+| `/create` | 1,290 |
 | `/kartyak` | 374 |
 | `/kartyaotlet.html` | 149 |
 | `/kartyaszavazas` | 54 |
 
-A `/game/NNNN` és `/room/NNNN` útvonalak külön-külön jelennek meg, ezért a top 10 lista alulbecsüli e két **oldalcsoport** jelentőségét. A számok nem konverziós tölcsért jelentenek; ugyanaz a látogató több útvonalon is szerepelhet.
+`/game/NNNN` and `/room/NNNN` appear as separate paths, so the top 10 underestimates these two **page groups**.
+These numbers are not a conversion funnel; one visitor can appear on several paths.
 
-### Entry/Exit és URL-fülek — példák
+### Entry/exit and URL tabs: examples
 
-- Entry path `/`: kb. **3 240 (81%)**; `/join`: **611 (15%)**; `/create`: **98 (2%)**.
-- Exit path `/`: kb. **1 900 (70%)**; `/join`: **611 (23%)**; `/create`: **66 (2%)**.
-- Az URL fülön `/` kb. **3 450 (48%)**, `/join` **1 690 (23%)**, `/create` **1 280 (18%)**; itt a query stringek eltérően csoportosulnak.
-- Külön kártyás URL-ek is láthatók: pl. `/kartyak?edition=5`.
+- Entry path `/`: about **3,240 (81%)**; `/join`: **611 (15%)**; `/create`: **98 (2%)**.
+- Exit path `/`: about **1,900 (70%)**; `/join`: **611 (23%)**; `/create`: **66 (2%)**.
+- On the URL tab `/` about **3,450 (48%)**, `/join` **1,690 (23%)**, `/create` **1,280 (18%)**; query strings
+  group differently here.
+- Per-edition card URLs too, e.g. `/kartyak?edition=5`.
 
-**Értelmezési figyelmeztetés:** Ezeknél a panelek eltérő nevezők és az Umami saját „Visitors” bontásai szerepelnek. A százalékokat tilos egyszerűen egy klasszikus felhasználói funnelként vagy a 39 600 megtekintés eloszlásaként kezelni.
+**Careful:** these panels use different denominators and Umami's own "Visitors" breakdowns. Don't read the
+percentages as a classic user funnel or as the distribution of the 39,600 views.
 
-### Forgalmi csatornák (a képernyőképen)
+### Traffic channels (from the screenshot)
 
-| Channel | Visitors | Jelzett arány |
+| Channel | Visitors | Share |
 |---|---:|---:|
-| Organic search | 2 310 | 47% |
-| Direct | 2 180 | 45% |
+| Organic search | 2,310 | 47% |
+| Direct | 2,180 | 45% |
 | Paid ads | 220 | 5% |
 | Organic social | 131 | 3% |
 | Referral | 18 | 0% |
 | LLM | 3 | 0% |
 
-A keresőkből (kiemelten Google), valamint a direct csatornából érdemi forgalom érkezik. A `Paid ads` itt **látogatásszerzési forrás**, **nem** bevétel. A Direct nem kizárólag kézzel beírt URL-t vagy bizonyítottan visszatérő látogatót jelent. Az LLM forgalom egy részének referrere hiányozhat.
+Search (mainly Google) and direct bring most of the traffic. `Paid ads` is a **source of visits**, **not**
+revenue. Direct doesn't only mean typed URLs or proven returning visitors. Part of the LLM traffic may lack a
+referrer.
 
-## 2. Üzleti és UX-döntés: csak egy diszkrét hirdetés
+## 2. Business and UX decision: one unobtrusive ad only
 
-**Tulajdonosi döntés:**
+**Owner's decision:**
 
-1. Hirdetés **csak** a főoldalon (`/`) és feltételesen a csatlakozási oldalon (`/join`) jöhet szóba.
-2. **Nincs hirdetés** játék közben (`/game/*`), lobbyban (`/room/*`), kártyaböngészőben (`/kartyak*`), kártyajavaslatnál, szavazásnál, szobakészítésnél (`/create`) vagy más útvonalon.
-3. Cél: legfeljebb **egy**, mobilra optimalizált, az oldal alsó részén elhelyezett banner az engedélyezett oldalakon; ne rontsa a felhasználói élményt.
-4. Kezdetben **ne legyen AdSense Auto ads**, különösen ne automatikus overlay, anchor vagy vignette, mert azok olyan oldalon is megjelenhetnek, ahol nem szeretnénk. A betöltést és a hirdetéshelyet route-level whitelisttel kell korlátozni.
-5. A játékszabályokat, a WebSocket-kommunikációt és a kártyatartalmat a monetizáció érdekében **ne alakítsuk át**.
+1. Ads **only** on the home page (`/`), and conditionally on the join page (`/join`).
+2. **No ads** in a game (`/game/*`), in the lobby (`/room/*`), in the card browser (`/kartyak*`), on card
+   ideas, voting, room creation (`/create`) or anywhere else.
+3. At most **one** mobile-friendly banner low on the allowed pages; it must not hurt the experience.
+4. **No AdSense Auto ads** at first, especially no automatic overlays, anchors or vignettes, which could
+   appear where we don't want them. Loading and the ad slot are limited by a route whitelist.
+5. The game rules, the WebSocket protocol and the card content are **not changed** for monetisation.
 
-**Fontos megfelelőségi különbség:** A kártyák hiánya egy adott oldalon csökkentheti a problémás tartalom közelében megjelenő hirdetések kockázatát, de **nem garantálja** az AdSense webhelyszintű jóváhagyását. Ráadásul a `/join` tisztán funkcionális (űrlap/navigáció) oldalként **alacsony értékű tartalom** miatt problémás lehet. Ha a felülvizsgálat alapján nem megfelelő, **csak a főoldalon** legyen reklám; ne töltsük fel mesterséges SEO-szöveggel pusztán a hirdetés miatt.
+**Compliance:** keeping cards off a page may lower the risk of ads next to problematic content, but it does
+**not guarantee** site-level AdSense approval. `/join`, a purely functional page (form/navigation), may be
+problematic as **low-value content**. If so, ads go on the **home page only**; no artificial SEO text just for
+the ad.
 
-## 3. Elsődleges fejlesztés: az Umami jelenlegi állapotának auditja
+## 3. First: audit the current Umami setup
 
-A tényleges implementációt kell feltérképezni:
+- Which Umami version runs? Cloud or self-hosted? Which tracking script?
+- Which pages load the tracker? Any duplicate script or double page view? Does it work on mobile, in private
+  mode, with an ad blocker, on reload?
+- Which query strings and room codes does it collect? Any unnecessary parameters, personal data or random
+  room codes?
+- Why is the Views/Visits ratio so high: page loads, route changes, events or a measurement error? Investigate,
+  don't guess.
+- How many **Views** really go to `/`, `/join`, `/create`, `/room/*`, `/game/*`, `/kartyak*`? From an export/API
+  or a reliable aggregation.
+- Do all screenshots use the same date range and time zone?
+- Does the rendered home page or `/join` contain random cards, explicit text, chat or other content that
+  affects ad compliance?
 
-- Pontosan melyik Umami-verzió fut? Cloud vagy self-hosted? Milyen tracking script/verzió?
-- Mely HTML-oldalak töltik be a trackert? Van-e duplikált script vagy dupla pageview? Működik-e mobilon, privát böngészésben, adblocker mellett, újratöltéskor?
-- Milyen query stringeket és room code-okat gyűjt most? Vannak-e technikailag felesleges paraméterek, személyes adatok vagy véletlenszerű szobakódok?
-- A váratlan vagy nagyon magas Views/Visits arány oka oldalletöltésekben, route-váltásokban, eseményekben vagy mérési hibában keresendő? Vizsgálni, nem találgatni.
-- Hány **Views** jut valójában a `/`, `/join`, `/create`, `/room/*`, `/game/*`, `/kartyak*` csoportokra? Export/API vagy hiteles aggregáció alapján.
-- Egyezik-e a riport dátumtartománya és időzónája az összes képernyőképen?
-- A nyitóoldal és a `/join` tényleges, renderelt HTML/DOM tartalmaz-e véletlenszerű kártyákat, explicit szöveget, chatet vagy más, a reklámmegfelelőségre ható tartalmat? (A főoldali kártyapéldák lehetőségét külön ellenőrizni.)
+**First deliverable:** an audit summary `current state → problem → proposed fix → risk → priority`, no changes.
 
-**Elvárt első deliverable:** audit-összefoglaló `current state → problem → proposed fix → risk → priority`, módosítás nélkül.
+## 4. Normalised paths and reliable view reports
 
-## 4. Oldalútvonalak normalizálása és megbízható Views-riport
+Proposed **analytics groups** (the real routes stay as they are):
 
-Javasolt **analitikai kategóriák** (a valódi route-okat érintetlenül hagyva):
-
-| Valódi URL példa | Analitikai csoport |
+| Real URL | Analytics group |
 |---|---|
 | `/` | `/` |
 | `/join` | `/join` |
 | `/create` | `/create` |
 | `/room/6454` | `/room/:code` |
 | `/game/6920` | `/game/:code` |
-| `/kartyak?edition=5` | `/kartyak` (edition eseményparaméterként, ha hasznos) |
+| `/kartyak?edition=5` | `/kartyak` (edition as an event property, if useful) |
 | `/kartyaotlet.html` | `/kartyaotlet.html` |
 | `/kartyaszavazas` | `/kartyaszavazas` |
 
-**Megvalósítási lehetőségek a tényleges Umami-verzióhoz igazítva:**
+Options, depending on the actual Umami version:
 
-- Elsőként ellenőrizni, hogy az Umami **Breakdown / filter / API** már képes-e helyes csoportosított exportot adni a régi adatokra. A múltbeli adatokat lehetőleg ne módosítsuk.
-- Az új pageview-khoz szükség esetén a tracker `data-before-send` hookjával **csak az analitikai payload URL mezőjét** normalizálni; semmiképpen sem módosítani a böngésző valódi URL-jét, az alkalmazás routingját, a meghívólinkeket vagy a szobakódokat.
-- Alternatíva: verziótól függően `data-auto-pageview="false"` és az Umami dokumentált `umami.track(props => ({...props, url: normalizedUrl}))` megoldása. Ügyelni arra, hogy **pontosan egy** pageview keletkezzen valódi lapbetöltésenként/valódi route-váltásonként, ne legyen duplikáció.
-- A `data-auto-track="false"` **nem** automatikusan felcserélhető a `data-auto-pageview="false"` opcióval; az utóbbi csak megfelelő Umami-verzióban elérhető.
-- Szobakód, session UUID, név, szabad szöveg, kártyaszöveg ne kerüljön tracking URL-be vagy event payloadba. A címkék legyenek alacsony kardinalitásúak.
-- Egyéb URL-ekhez fallback; ne legyen csendes adatvesztés.
+- First check whether Umami's **Breakdown / filter / API** can already group old data correctly. Don't modify
+  historical data if possible.
+- For new page views, if needed, normalise **only the URL field of the analytics payload** with the tracker's
+  `data-before-send` hook; never change the browser's real URL, the app's routing, invite links or room codes.
+- Alternatively, depending on the version: `data-auto-pageview="false"` with Umami's documented
+  `umami.track(props => ({...props, url: normalizedUrl}))`. **Exactly one** page view per real page load or
+  route change, no duplicates.
+- `data-auto-track="false"` is **not** the same as `data-auto-pageview="false"`; the latter needs a recent
+  enough Umami.
+- No room code, session UUID, name, free text or card text in tracking URLs or event payloads. Low-cardinality
+  labels only.
+- A fallback for other URLs: no silent data loss.
 
-**Acceptance tesztek:** 10 külön `/game/NNNN` és 10 külön `/room/NNNN` látogatás analitikában egy-egy összesített oldalcsoportra essen, de mindegyik valós meghívólink és játékszoba működjön. Nincs duplikált pageview és nincs szivárgó room code.
+**Acceptance:** 10 different `/game/NNNN` and 10 different `/room/NNNN` visits land in one page group each,
+while every real invite link and game room keeps working. No duplicate page views, no leaked room codes.
 
-## 5. Eseményalapú analitika — mire használják ténylegesen a játékot?
+## 5. Event analytics: what is the game actually used for?
 
-Az eseményeket a **már meglévő, sikeres szerver-visszajelzésekhez vagy állapotváltásokhoz** kösd, ne pusztán gombnyomáshoz. A WebSocket protokollt és a játékmenetet ne módosítsuk csak a mérés kedvéért.
+Tie events to **existing, successful server confirmations or state changes**, not just button presses. Don't
+change the WebSocket protocol or the gameplay only for measurement.
 
-### Ajánlott kezdeti event-séma
+### Proposed initial event schema
 
-| Event | Mikor egyszer? | Hasznos, nem érzékeny property |
+| Event | When (once) | Useful, non-sensitive property |
 |---|---|---|
-| `room_created` | Sikeres szobalétrehozás | `source_page` |
-| `room_joined` | Ténylegesen sikeres belépés | `entry_method` (pl. code/link, ha megbízhatóan ismert) |
-| `game_started` | Játék kezdetének visszaigazolt állapotváltásakor | `player_count`, `voting_mode`, `planned_rounds` |
-| `round_completed` | Befejezett körre érkezett állapotnál | `round_number`, `player_count` |
-| `game_finished` | Végjáték szerveroldali eseménynél | `completed_rounds`, `player_count` |
-| `game_abandoned` | **Csak ha megbízhatóan meghatározható** | lehetőleg aggregált ok |
-| `cards_browse_opened` | Kártyaböngésző megnyitásakor | `edition_id` (publikus katalógus-ID) |
+| `room_created` | Room created successfully | `source_page` |
+| `room_joined` | Really joined | `entry_method` (code/link, if reliably known) |
+| `game_started` | Confirmed game start | `player_count`, `voting_mode`, `planned_rounds` |
+| `round_completed` | A finished round's state | `round_number`, `player_count` |
+| `game_finished` | Server-side end of game | `completed_rounds`, `player_count` |
+| `game_abandoned` | **Only if reliably determined** | an aggregated reason, if possible |
+| `cards_browse_opened` | Card browser opened | `edition_id` (public catalogue ID) |
 
-**Duplikációs probléma:** Ha minden játékos kliensoldala küld egy `game_started` eseményt, az **játékosonkénti észlelések számát** jelenti, nem egyedi játékokét. Két eltérő KPI szükséges:
+**Duplicates:** if every player's client sends `game_started`, it counts **player participations**, not
+games. Two KPIs are needed:
 
-1. **Player participation**: hány játékos csatlakozott / vett részt, kliensoldali Umami-eventekből is becsülhető.
-2. **Unique games**: hány szoba indított ténylegesen játékot, lehetőség szerint adatvédelmi szempontból minimális, aggregált szerveroldali számlálóból, vagy egyetlen kijelölt eseménykibocsátóból, megfelelő reconnect/idempotencia kezeléssel. **Ne** küldjük a szobakódot vagy session ID-t az Umamiba csak a deduplikáció miatt.
+1. **Player participation:** how many players joined/took part; client-side Umami events can estimate it.
+2. **Unique games:** how many rooms really started a game, preferably from a minimal, aggregated server-side
+   counter, or a single designated sender with reconnect/idempotency handling. **Don't** send the room code
+   or session ID to Umami just to deduplicate.
 
-A `round_completed` és `game_finished` eseményeknél reconnect, dupla `room_state`/`round_end` üzenet és oldalak közötti átmenet ne okozzon véletlen többszörös számlálást. Ha a pontos egyedi játékszámhoz külön perzisztens aggregált számláló kell, előbb javasolj minimális megoldást és kérj jóváhagyást; a jelenlegi in-memory state-et ne alakítsd át indokolatlanul.
+Reconnects, repeated `room_state`/`round_end` messages and page transitions must not double-count
+`round_completed` and `game_finished`. If exact unique-game counts need a persistent aggregated counter,
+propose a minimal solution and ask for approval first; don't restructure the in-memory state without reason.
 
-### Hasznos KPI-k
+### Useful KPIs
 
-- Pageviews útvonalcsoportonként (`/`, `/join`, `/create`, `/room/*`, `/game/*`, `/kartyak*`).
-- Kezdőlapi látogatók aránya, akik **legalább egyszer** megkezdik a csatlakozást vagy szobalétrehozást (jól definiált mérés és nevező).
-- Sikeres room join / room create arány, ahol rendelkezésre áll megbízható számláló.
-- Megkezdett játékok; résztvevők száma/játék; befejezett körök; befejezett játékok aránya.
-- Ország, eszköztípus, forgalmi csatorna szerinti megoszlás (agregáltan).
-- Visszatérés/retention, ha az Umami-verzió és adatvédelmi beállítások ezt megbízhatóan mérik.
+- Page views per path group (`/`, `/join`, `/create`, `/room/*`, `/game/*`, `/kartyak*`).
+- The share of home page visitors who start joining or creating a room **at least once** (well-defined
+  measure and denominator).
+- Successful join / create rates, where a reliable counter exists.
+- Games started; players per game; rounds completed; share of games finished.
+- Country, device type, channel (aggregated).
+- Return/retention, if the Umami version and privacy settings measure it reliably.
 
-### Valós aktivitási idő
+### Real activity time
 
-Ne nevezd a jelenlegi Umami `Visit duration` értékét „átlagos játékidőnek”. A websockets játék akár hosszú ideig ugyanazon a lapon marad. Ha külön aktivitásmérés szükséges, kliensoldali `visibilitychange`/fókusz és *valódi játék-interakciók* alapján csak **összesített, kerekített időtartam-sávokat** továbbíts (pl. 0–5, 5–15, 15–30, 30+ perc), és ne másodpercenkénti heartbeatet. Előbb tisztázd a KPI definícióját, megbízhatóságát és privacy hatását.
+Don't call Umami's `Visit duration` "average play time": a WebSocket game can stay on one page for a long
+time. If activity time is needed, send only **aggregated, rounded duration bands** (e.g. 0–5, 5–15, 15–30,
+30+ min) based on `visibilitychange`/focus and *real game interactions*, no per-second heartbeat. Define the
+KPI, its reliability and its privacy impact first.
 
-## 6. AdSense-kísérlet: előbb megfelelőség, aztán reklámkód
+## 6. The AdSense trial: compliance first, ad code second
 
-### Reklámhelyek whitelistje
+### Ad slot whitelist
 
-**Tervezett engedélyezett útvonalak:** `/`; `/join` **csak ha megfelel a content-value policynek**. Semmilyen egyéb route-on nem töltünk be hirdetési egységet.
+**Planned allowed paths:** `/`; `/join` **only if it meets the content-value policy**. No ad unit is loaded on
+any other route.
 
-### Kötelező megfelelőségi audit
+### Required compliance audit
 
-1. **Webhely- és oldalszintű tartalom:** A Google tiltja a szexuálisan explicit tartalmú oldalak monetizálását, és korlátozhatja a szexuális/sokkoló/trágár tartalom melletti hirdetéseket. A kártyajáték általános témája és az oldalakon ténylegesen megjelenő tartalom is releváns lehet; a reklámmentes játéklapok **nem** jelentenek automatikus jóváhagyást.
-2. **`/join` alacsony tartalmi érték:** A pusztán navigációt, bejelentkezést, kódbevitelt szolgáló oldalak Google-hirdetésre alkalmatlanok lehetnek. Ha problémás, hagyd ki a `/join`-t, és erről világosan tájékoztasd a tulajdonost.
-3. **EEA/UK/Svájc hozzájárulás:** Google által tanúsított, IAB TCF-integrált CMP szükséges a Google vonatkozó hirdetési feltételei szerint. Vizsgáld a Google Privacy & messaging CMP megfelelő beállítását, a hozzájárulás előtti script/betöltés működését és a privacy policy frissítését. A „csak megjelenítésalapú” reklám **nem** mentesít önmagában a privacy kötelezettségek alól.
-4. **Policy és UX:** ne ösztönözzön véletlen kattintásra, ne fedjen navigációt vagy csatlakozási gombokat, ne utánozzon rendszerüzenetet, ne legyen megtévesztő. Mobil safe area, képernyőmagasság, billentyűzet megnyitása és layout shift ellenőrzendő.
-5. **Első körben statikus placeholder** (belső tesztre) az engedélyezett oldalon; valódi reklám csak kifejezett engedéllyel és AdSense jóváhagyás után.
+1. **Site and page content:** Google forbids monetising sexually explicit pages and may restrict ads next to
+   sexual, shocking or profane content. Both the card game's general theme and what actually appears on the
+   pages matter; ad-free game pages are **not** an automatic approval.
+2. **`/join` as low-value content:** pages that only serve navigation, login or code entry may be unsuitable
+   for Google ads. If so, skip `/join` and tell the owner clearly.
+3. **EEA/UK/Switzerland consent:** Google requires a certified, IAB TCF-integrated CMP. Check the Google
+   Privacy & messaging CMP setup, what loads before consent, and the privacy notice update. "Display-only"
+   ads don't remove the privacy obligations.
+4. **Policy and UX:** nothing that invites accidental clicks, covers navigation or join buttons, imitates a
+   system message or misleads. Check mobile safe areas, screen height, the open keyboard and layout shift.
+5. **A static placeholder first** (internal test) on the allowed page; real ads only with explicit permission
+   and after AdSense approval.
 
-**Banner-design:** egyetlen nem tolakodó, reszponzív hirdetéshely az oldal alsó részében / footer fölött. Ne legyen automatikusan sticky vagy teljes képernyőt lefedő. Ha a bannerhez nem görgetnek le, várhatóan kevesebb hirdetés lesz látható; ezt UX-kompromisszumként fogadjuk el, ne próbáljuk kényszerített scrollal vagy mesterséges frissítéssel növelni a számokat.
+**Banner design:** one unobtrusive, responsive slot low on the page / above the footer. Not sticky, never
+covering the screen. Fewer people scroll down to it, so fewer ads will be seen; that's an accepted UX
+trade-off: no forced scrolling or artificial refreshes to raise the numbers.
 
-### Megjelenítések és bevétel mérése
+### Measuring impressions and revenue
 
-- Az AdSense elsősorban **hirdetésmegjelenítések** után fizet; kattintás nélkül is keletkezhet bevétel, de nincs fix összeg minden megjelenésért.
-- **Umami:** becsülhető reklámra elvileg alkalmas oldalmegtekintés és látogatói megoszlás.
-- **AdSense:** az igazolt `ad impressions`, coverage/fill, actual revenue, Page RPM / Impression RPM, policy restriction a hiteles bevételi forrás.
-- Az Umami oldalletöltést **tilos** AdSense-impressionnek vagy bevételnek feltüntetni. Ne készíts mesterséges ad-refresh mechanizmust.
+- AdSense pays mainly for **ad impressions**; revenue can come without clicks, but there's no fixed amount
+  per impression.
+- **Umami:** estimates page views and visitors that could carry an ad.
+- **AdSense:** verified ad impressions, coverage/fill, actual revenue, Page RPM / Impression RPM and policy
+  restrictions are the authoritative revenue data.
+- Never present Umami page loads as AdSense impressions or revenue. No artificial ad refresh.
 
-## 7. Bevételi becslés — forgatókönyv, nem ígéret
+## 7. Revenue estimate: a scenario, not a promise
 
-Korábbi teljes oldalas, pusztán illusztratív Page RPM-számítás a **39 600 Views** alapján:
+An earlier, purely illustrative full-site Page RPM calculation from the **39,600 views**:
 
-| Feltételezett Page RPM | 90 nap, ha minden view monetizálható lenne |
+| Assumed Page RPM | 90 days, if every view could carry an ad |
 |---|---:|
-| 0,50 EUR | 19,80 EUR |
-| 1,00 EUR | 39,60 EUR |
-| 2,00 EUR | 79,20 EUR |
-| 5,00 EUR | 198,00 EUR |
+| EUR 0.50 | EUR 19.80 |
+| EUR 1.00 | EUR 39.60 |
+| EUR 2.00 | EUR 79.20 |
+| EUR 5.00 | EUR 198.00 |
 
-Ez **nem** a valós oldalra adott bevételi előrejelzés: egyetlen banner lenne, csak a `/` és esetleg `/join` útvonalon; a kártyajáték témája és a hozzájárulás/adblocker/policy-korlátozások mind csökkenthetik a tényleges monetizálható forgalmat. Korábban 5–40 EUR / 90 nap nagyságrendi tervezési lehetőségként merült fel, de nincs elég információ az alátámasztásához. **Következő lépés:** először a `/` és `/join` **Views** pontos megmérése, ország és eszköz szerinti bontása; majd sikeres jóváhagyás után AdSense adatokból saját RPM becslése.
+This is **not** a forecast for the real site: there would be one banner, only on `/` and maybe `/join`, and
+the game's theme, consent, ad blockers and policy restrictions all reduce what can be monetised. EUR 5–40 per
+90 days came up earlier as an order of magnitude, without enough data behind it. **Next:** measure the real
+**views** of `/` and `/join`, by country and device; after an approval, estimate RPM from AdSense's own data.
 
-Számítás, **csak azonos definíció mellett**: `eligible_pageviews / 1000 × realized_page_RPM`. Ha a Google-ben már szerepel az oldal szintű Page RPM, ne szorozd még egyszer a hirdetések számával vagy az impression rate-tel. Az impression RPM eltérő nevezőjű mutató.
+Only with matching definitions: `eligible_pageviews / 1000 × realized_page_RPM`. If Google already reports a
+page-level Page RPM, don't multiply again by the number of ads or the impression rate. Impression RPM has a
+different denominator.
 
-## 8. Implementációs sorrend és elfogadási kritériumok
+## 8. Order of work and acceptance criteria
 
-### P0 — Felmérés (először csak olvasás)
+### P0: audit (read only)
 
-- [ ] Git státusz / aktuális fájlok / rendszer- és Umami-verziók vizsgálata.
-- [ ] Tracker, route-ok, analytics eventek, oldalak valós renderelt tartalmának auditja.
-- [ ] Azonos időszakra Views export oldalútvonal-csoportonként; korábbi adatok mentése.
-- [ ] AdSense policy check `/` és `/join` oldalakra, kifejezetten low-value és explicit content szempontból.
-- [ ] Rövid auditjelentés készítése, kockázatokkal.
+- [ ] Git status, current files, system and Umami versions.
+- [ ] Audit of the tracker, routes, analytics events and the pages' real rendered content.
+- [ ] A views export per path group for the same period; save the earlier data.
+- [ ] AdSense policy check for `/` and `/join`, especially low-value and explicit content.
+- [ ] A short audit report with the risks.
 
-### P1 — Umami mérés helyreállítása
+### P1: fix the Umami measurement
 
-- [ ] Route-ok analitikai normalizálása új adatoknál / megfontolt aggregálás a régieknél.
-- [ ] Egyetlen pageview/valós oldalbetöltés; nincs duplikáció.
-- [ ] Játékesemények minimális, privacy-safe bevezetése; pontos event definíciók.
-- [ ] Ellenőrzött dashboard / export: Views, Visitors és események külön, helyes nevezőkkel.
-- [ ] Reconnect, mobil, több játékos, újratöltés, URL query és cookie/consent teszt.
+- [ ] Normalised paths for new data / careful aggregation for old data.
+- [ ] One page view per real page load; no duplicates.
+- [ ] Minimal, privacy-safe game events with exact definitions.
+- [ ] A checked dashboard/export: views, visitors and events separately, with correct denominators.
+- [ ] Tests: reconnect, mobile, several players, reload, URL query, cookie/consent.
 
-### P2 — Reklám előkészítése (aktiválás nélkül)
+### P2: prepare ads (without activating them)
 
-- [ ] Hirdetési route whitelist, alapértelmezetten OFF.
-- [ ] Mobilra optimalizált, egyetlen placeholder reklámhely; játékoldalon soha.
-- [ ] Google CMP / adatkezelési tájékoztató / script-consent sorrend tervének áttekintése.
-- [ ] AdSense regisztráció és review a tulajdonos döntése alapján.
+- [ ] Ad route whitelist, off by default.
+- [ ] One mobile-friendly placeholder slot; never on a game page.
+- [ ] Review the Google CMP / privacy notice / script-consent order.
+- [ ] AdSense sign-up and review, as the owner decides.
 
-### P3 — Külön jóváhagyás után
+### P3: after a separate approval
 
-- [ ] AdSense valódi hirdetési egység + megfelelő CMP integrálása kizárólag engedélyezett oldalon.
-- [ ] Teszt: semmi ad-network request `/game/*`, `/room/*`, `/kartyak*`, `/create` útvonalon.
-- [ ] 2–4 hét valós AdSense adatok követése: impressions, revenue, policy status, UX regresszió, oldalsebesség.
-- [ ] Ha `/join` nem megfelelő, reklam csak `/` oldalon.
+- [ ] A real AdSense unit with a proper CMP, on allowed pages only.
+- [ ] Test: no ad-network request on `/game/*`, `/room/*`, `/kartyak*`, `/create`.
+- [ ] 2–4 weeks of real AdSense data: impressions, revenue, policy status, UX regressions, page speed.
+- [ ] If `/join` doesn't qualify, ads on `/` only.
 
-## 9. Üzemeltetési biztonság — kötelező keretek Claude számára
+## 9. Operational safety: required limits
 
-Projekt: `/opt/emberisegellenes_kartyak/`; AlmaLinux 9; nginx + FastAPI/uvicorn + natív WebSocket; vanilla HTML/CSS/JS; SQLite csak kártyákhoz és feedbackhez; minden aktív játék **memóriában van**.
+Project: `/opt/emberisegellenes_kartyak/`; AlmaLinux 9; nginx + FastAPI/uvicorn + native WebSockets; vanilla
+HTML/CSS/JS; SQLite for cards and feedback; every active game lives **in memory**.
 
-- **Olvass módosítás előtt.** Ne találj ki fájlokat és ne feltételezd, hogy pontosan a régi struktúra fut. Nézd meg a jelenlegi kódot és konfigurációt.
-- **Ne refaktoráld a játékmenetet.** Az analitika kizárólag kiegészítő, hibás tracker soha ne akadályozza a room create/join/game flow-t.
-- **Ne küldj PII-t vagy identitást Umamiba:** session UUID, username, chat/feedback, kártyaszöveg, szobakód, raw WebSocket message kizárva. Ne építs rejtett felhasználókövetést.
-- **Nincs külön staging.** Először biztonságos, visszaállítható és a meglévő felhasználókat nem érintő változtatások; diff és snapshot/backup. Kockázatos szerver- vagy DB-módosításnál mentés.
-- **Szerver restart = aktív játékok elvesztése.** Ne indítsd újra automatikusan a szolgáltatást csúcsidőben vagy kifejezett jóváhagyás nélkül. Frontend-módosítás után hard refresh/cache-verziózás; minden módosítás után működési és logellenőrzés.
-- A hirdetés/CMP új külső függőség; network failure/adblocker esetén az oldalnak és játéknak továbbra is működnie kell.
-- Adj implementáció utáni rövid jegyzőkönyvet: módosított fájlok, tesztek, eredmények, esetleges nyitott kérdések, rollback.
+- **Read before changing.** Don't invent files or assume the old structure; look at the current code and
+  configuration.
+- **Don't refactor the gameplay.** Analytics only add; a broken tracker must never block creating or joining
+  a room or playing.
+- **No personal data or identity in Umami:** no session UUID, username, chat/feedback, card text, room code or
+  raw WebSocket message. No hidden user tracking.
+- **No separate staging (at the time).** Safe, reversible changes that don't affect current players first;
+  diffs and backups. A backup before any risky server or database change.
+- **A server restart ends the active games.** Don't restart automatically at peak time or without explicit
+  approval. After frontend changes: cache versioning; after every change: functional and log checks.
+- Ads and the CMP are a new external dependency; with a network failure or an ad blocker, the site and the
+  game must keep working.
+- After implementing: a short record of changed files, tests, results, open questions, rollback.
 
-## 10. Claude-nak szóló konkrét megbízás
+## 10. The assignment
 
-> Vizsgáld át az Emberiség Ellenes Kártyák jelenlegi forráskódját és Umami-analitikáját a fenti terv alapján. Először **csak olvasás/audit**, majd készíts priorizált, minimális beavatkozású fejlesztési tervet. Az első implementáció célja a helyes Views-riportok, route-normalizálás és privacy-safe game eventek bevezetése a meglévő multiplayer működés megőrzésével. A reklámok tekintetében kizárólag a főoldal (`/`) és – ha tartalmilag megfelel – a csatlakozási oldal (`/join`) jöhet szóba, egyetlen alsó bannerrel. **Semmilyen ad unit nem kerülhet játékra, lobbyba, kártyalistára vagy más oldalra.** AdSense-kód és CMP élesítését külön hagyjuk jóvá. Előbb mutasd meg a megállapításokat, a konkrét fájlokat, a mérési definíciókat, a teszttervet és a lehetséges kockázatokat; a jóváhagyott módosításokat ellenőrizd tényleges adatokkal és alkalmazás-tesztekkel.
+> Review the current source and Umami analytics of Emberiség Ellenes Kártyák along this plan. First **read and
+> audit only**, then make a prioritised, minimal-intervention plan. The first implementation: correct view
+> reports, path normalisation and privacy-safe game events, keeping the multiplayer game working as it is.
+> Ads only on the home page (`/`) and, if its content qualifies, the join page (`/join`), with a single bottom
+> banner. **No ad unit on a game, the lobby, the card list or any other page.** Activating AdSense code and the
+> CMP needs a separate approval. Show the findings, the files, the measurement definitions, the test plan and
+> the risks first; verify approved changes with real data and application tests.
 
 ---
 
-## Hivatalos dokumentáció és szabályzat (ellenőrizve: 2026-10-16)
+## Official documentation and policies (checked 2026-10-16)
 
 - Umami tracker configuration: https://docs.umami.is/docs/tracker-configuration
 - Umami tracker functions / pageviews: https://docs.umami.is/docs/tracker-functions
 - Umami custom events: https://docs.umami.is/docs/track-events
 - Umami metric definitions: https://docs.umami.is/docs/metric-definitions
 - Umami Breakdown insight: https://docs.umami.is/docs/breakdown
-- Google Publisher Policy — no/low-value content: https://support.google.com/publisherpolicies/answer/11112688?hl=en
-- Google Publisher Policy — sexually explicit content: https://support.google.com/publisherpolicies/answer/10438119?hl=en
-- Google Publisher Restrictions — sexual content: https://support.google.com/publisherpolicies/answer/10400657?hl=en
-- Google Publisher Restrictions — shocking/profane content: https://support.google.com/publisherpolicies/answer/10437538?hl=en
+- Google Publisher Policy, no/low-value content: https://support.google.com/publisherpolicies/answer/11112688?hl=en
+- Google Publisher Policy, sexually explicit content: https://support.google.com/publisherpolicies/answer/10438119?hl=en
+- Google Publisher Restrictions, sexual content: https://support.google.com/publisherpolicies/answer/10400657?hl=en
+- Google Publisher Restrictions, shocking/profane content: https://support.google.com/publisherpolicies/answer/10437538?hl=en
 - AdSense CMP rules for EEA/UK/CH: https://support.google.com/adsense/answer/13554116?hl=en
 - Google AdSense impression-based payment FAQs: https://support.google.com/adsense/answer/14129646?hl=en
 
-*Ez technikai/üzleti előkészítési terv, nem jogi tanács és nem Google-jóváhagyási garancia.*
+*A technical and business preparation plan, not legal advice and not a guarantee of Google's approval.*
