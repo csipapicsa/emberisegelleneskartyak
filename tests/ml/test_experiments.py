@@ -36,7 +36,7 @@ def test_fill_blank(black, white, filled):
 
 def test_load_splits_like_the_training_cycle(data):
     _, tables = export.read_snapshot(data.snapshot)
-    expected = evaluate.split_by_game(evaluate.pick_examples(tables), tables["games"])
+    expected = evaluate.make_splits(tables, "A")
     assert data.splits == expected
     assert data.sizes()["n_train_picks"] == len(expected["train"])
     assert np.array_equal(data.targets["test"], [e.target for e in expected["test"]])

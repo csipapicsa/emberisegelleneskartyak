@@ -91,3 +91,115 @@ def test_popularity_prefers_cards_played_before():
     assert probs[0].argmax() == 4 and probs[1].argmax() == 0
     assert len(set(np.round(probs[1, 1:], 9))) == 1, "unseen cards share the prior"
     assert probs[0, 4] < 0.5, "smoothed: five plays aren't certainty"
+
+
+# --- Vote winners, data variants, paired bootstrap ---
+
+ONE_BLANK = [{"text_id": 1, "black": True, "pick": 1}]
+
+
+def vote_round(game_id=1, round_no=1, shown=(0, 1, 2), outcome=0):
+    return {"game_id": game_id, "round_no": round_no, "black": 1, "outcome": outcome, "shown": list(shown)}
+
+
+def submission(game_id, round_no, seat, card, is_model=False):
+    hand = [card, *[c for c in HAND if c != card]][:10]
+    return {"game_id": game_id, "round_no": round_no, "seat": seat, "is_model": is_model, "hand": hand,
+            "picks": [card]}
+
+
+def vote(game_id, round_no, voter, target, voter_is_model=False):
+    return {"game_id": game_id, "round_no": round_no, "voter": voter, "target": target,
+            "voter_is_model": voter_is_model}
+
+
+def vote_tables(votes, rounds=None, model_seats=None):
+    rounds = rounds or [vote_round()]
+    decisions = [submission(r["game_id"], r["round_no"], seat, 200 + seat, is_model=seat in (model_seats or []))
+                 for r in rounds for seat in r["shown"]]
+    games = [{"game_id": g, "day": 1, "model_seats": list(model_seats or [])} for g in {r["game_id"] for r in rounds}]
+    return {"card_texts": ONE_BLANK, "rounds": rounds, "decisions": decisions, "votes": votes, "games": games}
+
+
+def test_the_human_vote_winner_is_the_target():
+    (e,) = evaluate.vote_examples(vote_tables([vote(1, 1, 0, 2), vote(1, 1, 1, 2), vote(1, 1, 2, 0)]))
+    assert e.source == "vote" and e.hand == (200, 201, 202) and e.target == 2
+
+
+def test_the_computer_players_vote_doesnt_count_but_its_card_may_win():
+    # Seat 2 is the computer player. Its own vote (for itself) would make a tie; without it seat 2 wins on
+    # the two human votes: humans chose the model's card, which is a human judgment.
+    t = vote_tables([vote(1, 1, 0, 2), vote(1, 1, 1, 2), vote(1, 1, 2, 0, voter_is_model=True)], model_seats=[2])
+    (e,) = evaluate.vote_examples(t)
+    assert e.target == 2 and e.bot_game
+
+
+def test_ties_undecided_rounds_and_rounds_without_a_human_vote_are_skipped():
+    assert evaluate.vote_examples(vote_tables([vote(1, 1, 0, 1), vote(1, 1, 1, 0)])) == [], "a tie"
+    assert evaluate.vote_examples(vote_tables([vote(1, 1, 0, 1)], rounds=[vote_round(outcome=2)])) == []
+    bot_czar = vote_tables([vote(1, 1, 2, 0, voter_is_model=True)], model_seats=[2])
+    assert evaluate.vote_examples(bot_czar) == [], "the computer player was the czar: no human judged"
+    assert evaluate.vote_examples(vote_tables([vote(1, 1, 0, 1)], rounds=[vote_round(shown=(1,))])) == []
+
+
+def split_tables():
+    """Ten games in time order; games 3 and 9 had a computer player (seat 9); every game has picks and a
+    decided vote round."""
+    rounds, decisions, votes, games = [], [], [], []
+    for g in range(1, 11):
+        bot = g in (3, 9)
+        games.append({"game_id": g, "day": g, "model_seats": [9] if bot else []})
+        rounds.append({"game_id": g, "round_no": 1, "black": 1, "outcome": 0, "shown": [0, 1]})
+        decisions += [submission(g, 1, 0, 105), submission(g, 1, 1, 106)]
+        votes.append(vote(g, 1, 0, 1))
+    return {"card_texts": ONE_BLANK, "rounds": rounds, "decisions": decisions, "votes": votes, "games": games}
+
+
+def test_variants_share_validation_and_test_without_computer_player_games():
+    t = split_tables()
+    by = {v: evaluate.make_splits(t, v) for v in evaluate.VARIANTS}
+    for s in ("val", "test"):
+        assert by["A"][s] == by["B"][s] == by["C"][s], "every variant is measured on the same picks"
+        assert by["A"][s] and not any(e.bot_game for e in by["A"][s])
+    assert {e.game_id for e in by["A"]["test"]} == {10}, "game 9 (newest but one, with a bot) is dropped"
+    assert not any(e.bot_game for e in by["A"]["train"])
+    assert {e.game_id for e in by["B"]["train"] if e.bot_game} == {3}, "B adds human picks from bot games"
+    votes_c = [e for e in by["C"]["train"] if e.source == "vote"]
+    assert {e.game_id for e in votes_c} == {e.game_id for e in by["B"]["train"]}, "votes from training games only"
+    assert len(by["C"]["train"]) == len(by["B"]["train"]) + len(votes_c)
+    with pytest.raises(ValueError, match="unknown data variant"):
+        evaluate.make_splits(t, "D")
+
+
+def test_short_hands_get_zero_probability_on_the_padding():
+    short = Example(1, 1, -1, 1, (101, 102, 103), 0, source="vote")
+    full = Example(1, 1, 0, 1, tuple(HAND), 0)
+    r = evaluate.random_probs([short, full])
+    assert r[0].tolist() == [1 / 3] * 3 + [0.0] * 7 and r[1].sum() == pytest.approx(1)
+    p = evaluate.popularity_probs([full], [short, full])
+    assert p[0, 3:].sum() == 0 and p[0].sum() == pytest.approx(1)
+    assert evaluate.metrics(r[:1], np.array([0]))["mrr"] == pytest.approx(np.mean([1, 1 / 2, 1 / 3]))
+
+
+def test_reciprocal_ranks_average_to_the_mrr():
+    rng = np.random.default_rng(1)
+    probs = rng.dirichlet(np.ones(10), size=50)
+    targets = rng.integers(0, 10, 50)
+    assert evaluate.reciprocal_ranks(probs, targets).mean() == pytest.approx(evaluate.metrics(probs, targets)["mrr"])
+
+
+def test_paired_bootstrap_by_game():
+    rng = np.random.default_rng(0)
+    games = np.repeat(np.arange(30), 20)
+    a = rng.random(600)
+    same = evaluate.paired_bootstrap(a, a.copy(), games)
+    assert same["delta"] == 0 and same["lo"] == same["hi"] == 0
+    better = evaluate.paired_bootstrap(a, a + 0.05 + rng.normal(0, 0.01, 600), games)
+    assert better["lo"] > 0 and better["p_not_better"] == 0 and better["games"] == 30
+    noisy = evaluate.paired_bootstrap(a, a + rng.normal(0, 0.3, 600), games)
+    assert noisy["lo"] < noisy["delta"] < noisy["hi"] and noisy["lo"] < 0 < noisy["hi"]
+    # Picks in one game move together: the interval over games is wider than over single picks would be.
+    shared = np.repeat(rng.normal(0, 0.2, 30), 20)
+    by_game = evaluate.paired_bootstrap(a, a + shared, games)
+    by_pick = evaluate.paired_bootstrap(a, a + shared, np.arange(600))
+    assert (by_game["hi"] - by_game["lo"]) > 2 * (by_pick["hi"] - by_pick["lo"])

@@ -40,9 +40,11 @@ def cycle(snapshot, tmp_path_factory):
 
 def test_cycle_logs_a_parent_with_baselines_and_models(cycle, snapshot):
     names = [r["name"] for r in cycle["runs"]]
-    assert names == ["baseline random", "baseline popularity", "linear minilm", "mlp minilm"]
+    assert names == ["baseline random", "baseline popularity", "linear minilm", "mlp minilm",
+                     "linear minilm [B]", "mlp minilm [B]", "linear minilm [C]", "mlp minilm [C]"]
     parent = mlflow.get_run(cycle["parent_run_id"])
     assert parent.data.tags["kind"] == "cycle"
+    assert parent.info.run_name.startswith("cycle 20") and parent.info.run_name.endswith(f"· data to {snapshot.name}")
     assert parent.data.tags["snapshot"] == snapshot.name
     assert parent.data.tags["image"] == "ghcr.io/example/eek-ml-train:sha-abc1234"
     assert parent.data.tags["cloud_run_execution"] == "eek-train-abc12"
@@ -50,7 +52,7 @@ def test_cycle_logs_a_parent_with_baselines_and_models(cycle, snapshot):
     assert parent.inputs.dataset_inputs[0].dataset.name == snapshot.name
     children = mlflow.search_runs(experiment_names=["train-test"], output_format="list",
                                   filter_string=f"tags.mlflow.parentRunId = '{cycle['parent_run_id']}'")
-    assert len(children) == 4
+    assert len(children) == 8  # 2 baselines + 2 structures x 3 data variants
     model_run = mlflow.get_run(next(r["run_id"] for r in cycle["runs"] if r["name"] == "mlp minilm"))
     assert model_run.data.params["embedding_revision"] == features.EMBEDDING_MODELS["minilm"].revision
     for split in evaluate.SPLITS:
@@ -100,6 +102,27 @@ def test_challenger_carries_the_new_hand_cutoffs(cycle):
     assert run.data.metrics["train_best_score_p10"] == pytest.approx(cutoffs["10"])
 
 
+def test_other_variants_are_compared_with_A_and_not_logged_as_models(cycle):
+    by_name = {r["name"]: r for r in cycle["runs"]}
+    for name in ("linear minilm [B]", "mlp minilm [C]"):
+        run = mlflow.get_run(by_name[name]["run_id"])
+        assert run.data.tags["data_variant"] == name[-2]
+        for split in ("val", "test"):
+            lo, delta, hi = (run.data.metrics[f"{split}_mrr_vs_A_{k}"] for k in ("lo", "delta", "hi"))
+            assert lo <= delta <= hi
+        assert "model_uri" not in by_name[name], "only the registered variant logs a model"
+    a = mlflow.get_run(by_name["linear minilm"]["run_id"])
+    assert a.data.tags["data_variant"] == "A" and "model_uri" in by_name["linear minilm"]
+    parent = mlflow.get_run(cycle["parent_run_id"])
+    assert int(parent.data.params["n_train_vote_examples_C"]) > 0, "sample games have decided vote rounds"
+    # This sample (seed 5) has no game with a computer player, so B trains on the same picks as A;
+    # test_evaluate.py covers B with explicit bot games.
+    assert int(parent.data.params["n_train_bot_game_picks_A"]) == 0
+    assert int(parent.data.params["n_train_examples_B"]) == int(parent.data.params["n_train_examples_A"])
+    assert int(parent.data.params["n_human_picks"]) >= sum(int(parent.data.params[f"n_{s}_picks"])
+                                                           for s in ("train", "val", "test"))
+
+
 def test_fit_is_reproducible_and_stops_early(snapshot, tmp_path):
     _, tables = export.read_snapshot(snapshot)
     splits = evaluate.split_by_game(evaluate.pick_examples(tables), tables["games"])
@@ -133,3 +156,20 @@ def test_linear_cap_doubled_for_slow_learners():
     # linear e5 was still improving at 300 epochs in every cycle up to 2026-11-11; early stopping ends the rest.
     assert train.CONFIGS["linear"].max_epochs == 600
     assert train.CONFIGS["mlp"].max_epochs == 300, "the MLP always stopped early (best epoch < 60)"
+
+
+def test_short_hands_are_padded_and_masked(snapshot, tmp_path):
+    torch = pytest.importorskip("torch")
+    short = evaluate.Example(1, 1, -1, 1, (2, 3, 4), 2, source="vote")
+    full = evaluate.Example(1, 1, 0, 1, tuple(range(2, 12)), 0)
+    vectors = np.random.default_rng(0).random((12, 384), dtype=np.float32)
+    row = {i: i for i in range(12)}
+    x, y = train.to_tensors([short, full], row, vectors)
+    mask = train.hand_mask([short, full])
+    assert x.shape == (2, 11, 384) and mask[0].tolist() == [True] * 3 + [False] * 7 and mask[1].all()
+    assert train.hand_mask([full]) is None
+    config = train.TrainConfig(lr=0.05, weight_decay=0, max_epochs=30, patience=5)
+    model, _, _ = train.fit((x, y, mask), (x, y, mask), 384, config)
+    probs = train.predict_probs(model, x, mask)
+    assert np.allclose(probs[0, 3:], 0) and np.allclose(probs.sum(axis=1), 1)
+    assert torch.isfinite(torch.tensor(probs)).all()
