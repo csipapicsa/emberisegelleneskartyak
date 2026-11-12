@@ -19,10 +19,12 @@ Exec=python -m ml.serve
 
 # Staging and the production container reach it on their own networks (http://eek-model:8020; staging and
 # production can't reach each other); production on the host (emberisegellenes.service, until it moves into
-# its container: docs/runbooks/deploy.md) through this port on localhost only.
+# its container: docs/runbooks/deploy.md) through host port 8021 on localhost only.
+# Host ports already taken on this server: 5000 MLflow, 8000, 8001 (another app), 8010 production, 8011 staging,
+# 8020 the ESP32 energy API, 8030. tests/test_deploy_computer_player.py keeps this list.
 Network=eek-staging.network
 Network=eek-prod.network
-PublishPort=127.0.0.1:8020:8020
+PublishPort=127.0.0.1:8021:8020
 
 # /data holds the Hugging Face cache (the embedding model, ~470 MB, downloaded on the first start).
 UserNS=keep-id:uid=10001,gid=10001
