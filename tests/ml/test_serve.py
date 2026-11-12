@@ -86,7 +86,7 @@ def test_cache_stays_within_its_size(registry):
     s = serve.Scorer(URI, encoder_factory=StemEncoder, cache_size=5)
     s.update()
     s.score("Fekete ____.", [f"kártya {i}" for i in range(12)])
-    assert len(s._cache) == 5
+    assert len(s.embeddings) == 5
 
 
 def test_refresh_cutoff_comes_from_the_model_tags(scorer):
@@ -180,3 +180,60 @@ def test_bench_cards_are_all_new():
     cards = [serve_bench.new_card(rng, f"t{i}") for i in range(50)]
     assert len(set(cards)) == 50
     assert "____" in serve_bench.new_card(rng, "b", black=True)
+
+
+def test_parse_models():
+    assert serve.parse_models("challenger=models:/m@challenger, champion=models:/m@champion") == {
+        "challenger": "models:/m@challenger", "champion": "models:/m@champion"}
+    assert serve.parse_models("models:/m@challenger") == {"challenger": "models:/m@challenger"}
+    assert serve.parse_models("models:/m/4") == {"default": "models:/m/4"}
+    for bad in ("", "x=runs:/abc", "bad name=models:/m@a"):
+        with pytest.raises(ValueError):
+            serve.parse_models(bad)
+
+
+def test_one_service_two_models_one_encoder(registry):
+    client = mlflow.MlflowClient()
+    client.set_registered_model_alias(train.REGISTERED_MODEL, "champion", "1")
+    try:
+        _two_models(client)
+    finally:
+        client.delete_registered_model_alias(train.REGISTERED_MODEL, "champion")
+
+
+def _two_models(client):
+    made = []
+
+    def factory(model):
+        made.append(model.key)
+        return StemEncoder(model)
+    shared = serve.Embeddings(factory)
+    scorers = {"challenger": serve.Scorer(URI, embeddings=shared),
+               "champion": serve.Scorer(f"models:/{train.REGISTERED_MODEL}@champion", embeddings=shared)}
+    for s in scorers.values():
+        assert s.update()
+    assert made == ["minilm"], "the embedding model is loaded once for both"
+    app = TestClient(serve.create_app(scorers, poll_seconds=None))
+    body = {"black": "Fekete ____.", "cards": ["egy kecske", "két macska"]}
+    default = app.post("/score", json=body).json()
+    champion = app.post("/score", json={**body, "model": "champion"}).json()
+    assert default["scores"] == champion["scores"] and champion["version"] == "1"
+    assert app.post("/score", json={**body, "model": "nope"}).status_code == 404
+    health = app.get("/healthz").json()
+    assert health["status"] == "ok" and set(health["models"]) == {"challenger", "champion"}
+
+
+def test_a_missing_alias_degrades_but_keeps_serving(registry):
+    shared = serve.Embeddings(StemEncoder)
+    scorers = {"challenger": serve.Scorer(URI, embeddings=shared),
+               "champion": serve.Scorer(f"models:/{train.REGISTERED_MODEL}@champion", embeddings=shared)}
+    for s in scorers.values():
+        s.update()
+    assert scorers["champion"].bundle is None and scorers["champion"].error
+    app = TestClient(serve.create_app(scorers, poll_seconds=None))
+    health = app.get("/healthz")
+    assert health.status_code == 200 and health.json()["status"] == "degraded"
+    assert health.json()["models"]["champion"]["status"] == "error"
+    body = {"black": "Fekete ____.", "cards": ["egy"]}
+    assert app.post("/score", json=body).status_code == 200
+    assert app.post("/score", json={**body, "model": "champion"}).status_code == 503

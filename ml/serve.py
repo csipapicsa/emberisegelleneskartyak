@@ -1,10 +1,15 @@
 """Model service for the computer player: scores white cards against a black card, over HTTP.
 
-    python -m ml.serve                 # 0.0.0.0:8020, the model in EEK_MODEL_URI (default: pick-model@challenger)
+    python -m ml.serve                 # 0.0.0.0:8020, the models in EEK_MODEL_URIS (default: pick-model@challenger)
+    EEK_MODEL_URIS="challenger=models:/pick-model@challenger,champion=models:/pick-model@champion"
 
-    POST /score  {"black": "Mitől ragadok? ____.", "cards": ["A méz.", ...]}
+    POST /score  {"black": "Mitől ragadok? ____.", "cards": ["A méz.", ...], "model": "champion"}
              ->  {"model": "pick-model", "version": "6", "scores": [...], "probs": [...], "refresh_below": 1.23}
-    GET /healthz -> 200 with the loaded model, 503 while it loads or if it can't
+    GET /healthz -> 200 with the loaded models, 503 while none is loaded
+
+One service serves several named models: staging's computer player asks for "challenger", production's for
+"champion" (without "model", the first one answers). They share the embedding model and its cache, so a
+second model costs only its own few megabytes.
 
 The game (server/bot.py) sends card texts, not IDs, so a card the model has never seen works the same as any
 other: its embedding is computed on the spot (~20 ms a card on one CPU thread) and kept in a cache. A score
@@ -50,6 +55,7 @@ _URI = re.compile(r"^models:/(?P<name>[^/@]+)(?:@(?P<alias>[^/@]+)|/(?P<version>
 class ScoreRequest(BaseModel):
     black: str = Field(min_length=1, max_length=MAX_TEXT)
     cards: list[str] = Field(min_length=1, max_length=MAX_CARDS)
+    model: str | None = Field(default=None, max_length=64)  # a served model's name; None: the default
 
 
 @dataclass
@@ -64,22 +70,59 @@ class Bundle:
     loaded_at: float = field(default_factory=time.time)
 
 
+class Embeddings:
+    """Encoders and an LRU cache of card embeddings, shared by every model the service serves: models that
+    use the same embedding model load it once and reuse each other's vectors."""
+
+    def __init__(self, encoder_factory: features.EncoderFactory = features.SentenceTransformerEncoder,
+                 cache_size: int = 20000) -> None:
+        self._factory = encoder_factory
+        self._encoders: dict[features.EmbeddingModel, features.Encoder] = {}
+        self._cache: OrderedDict[str, np.ndarray] = OrderedDict()
+        self._cache_size = cache_size
+        self._lock = threading.Lock()
+
+    def encoder(self, embedding: features.EmbeddingModel) -> features.Encoder:
+        with self._lock:
+            if embedding not in self._encoders:
+                self._encoders[embedding] = self._factory(embedding)
+            return self._encoders[embedding]
+
+    def embed(self, embedding: features.EmbeddingModel, texts: list[str]) -> np.ndarray:
+        keys = [f"{embedding.key}:{embedding.revision}:{features.text_key(embedding, t)}" for t in texts]
+        with self._lock:
+            found = {k: self._cache[k] for k in keys if k in self._cache}
+            for k in found:
+                self._cache.move_to_end(k)  # least recently used goes first
+        missing = {k: t for k, t in zip(keys, texts, strict=True) if k not in found}
+        if missing:
+            vectors = self.encoder(embedding).encode([embedding.prefix + t for t in missing.values()])
+            found.update(zip(missing, vectors, strict=True))
+            with self._lock:
+                for k in missing:
+                    self._cache[k] = found[k]
+                while len(self._cache) > self._cache_size:
+                    self._cache.popitem(last=False)
+        return np.stack([found[k] for k in keys])
+
+    def __len__(self) -> int:
+        return len(self._cache)
+
+
 class Scorer:
     """Loads the model behind a models:/ URI, follows its alias and scores cards."""
 
     def __init__(self, uri: str = DEFAULT_MODEL_URI, refresh_percentile: int = 10,
                  encoder_factory: features.EncoderFactory = features.SentenceTransformerEncoder,
-                 cache_size: int = 20000) -> None:
+                 cache_size: int = 20000, embeddings: Embeddings | None = None) -> None:
         match = _URI.match(uri)
         if not match:
             raise ValueError(f"model URI {uri!r}: expected models:/<name>@<alias> or models:/<name>/<version>")
         self.uri, self.name = uri, match["name"]
         self.alias, self.fixed_version = match["alias"], match["version"]
         self.refresh_percentile = str(refresh_percentile)
-        self._encoder_factory = encoder_factory
-        self._cache: OrderedDict[str, np.ndarray] = OrderedDict()
-        self._cache_size = cache_size
-        self._cache_lock = threading.Lock()
+        # "is not None": an Embeddings with an empty cache has len() 0, so "or" would replace a shared one
+        self.embeddings = embeddings if embeddings is not None else Embeddings(encoder_factory, cache_size)
         self.bundle: Bundle | None = None
         self.error: str | None = None
 
@@ -113,33 +156,15 @@ class Scorer:
                              "player needs a version trained after ml/train.py started logging raw scores")
         embedding = features.EMBEDDING_MODELS[info.tags["embedding"]]
         percentiles = {k: float(v) for k, v in json.loads(info.tags.get("best_score_percentiles", "{}")).items()}
-        old = self.bundle
-        encoder = old.encoder if old is not None and old.embedding == embedding else self._encoder_factory(embedding)
+        encoder = self.embeddings.encoder(embedding)
         model = mlflow.pyfunc.load_model(f"models:/{self.name}/{version}")
         return Bundle(self.name, version, model, embedding, encoder, percentiles)
-
-    def _embed(self, bundle: Bundle, texts: list[str]) -> np.ndarray:
-        keys = [features.text_key(bundle.embedding, t) for t in texts]
-        with self._cache_lock:
-            found = {k: self._cache[k] for k in keys if k in self._cache}
-            for k in found:
-                self._cache.move_to_end(k)  # least recently used goes first
-        missing = {k: t for k, t in zip(keys, texts, strict=True) if k not in found}
-        if missing:
-            vectors = bundle.encoder.encode([bundle.embedding.prefix + t for t in missing.values()])
-            found.update(zip(missing, vectors, strict=True))
-            with self._cache_lock:
-                for k in missing:
-                    self._cache[k] = found[k]
-                while len(self._cache) > self._cache_size:
-                    self._cache.popitem(last=False)
-        return np.stack([found[k] for k in keys])
 
     def score(self, black: str, cards: list[str]) -> dict:
         bundle = self.bundle  # one consistent version for the whole request, even if the poller swaps it
         if bundle is None:
             raise RuntimeError(self.error or "no model loaded yet")
-        vectors = self._embed(bundle, [black, *cards])
+        vectors = self.embeddings.embed(bundle.embedding, [black, *cards])
         black_vec, card_vecs = vectors[0], vectors[1:]
         scores = []
         for start in range(0, len(cards), HAND_SIZE):
@@ -161,23 +186,46 @@ class Scorer:
                       "loaded_at": bundle.loaded_at, "last_error": self.error}
 
 
-def _follow(scorer: Scorer, poll_seconds: float, stop: threading.Event) -> None:
-    """Load the model, then keep checking the alias. Until the first load works, retry every 30 s."""
+def parse_models(spec: str) -> dict[str, str]:
+    """"challenger=models:/m@challenger,champion=models:/m@champion" -> {name: uri}. A bare URI is one model
+    named after its alias (or "default")."""
+    models = {}
+    for part in (p.strip() for p in spec.split(",") if p.strip()):
+        name, sep, uri = part.partition("=")
+        if not sep:
+            name, uri = (_URI.match(part)["alias"] if _URI.match(part) else None) or "default", part
+        if not name.isidentifier() or not _URI.match(uri.strip()):
+            raise ValueError(f"model spec {part!r}: expected name=models:/<name>@<alias>")
+        models[name] = uri.strip()
+    if not models:
+        raise ValueError("no model configured")
+    return models
+
+
+def _follow(scorers: dict[str, Scorer], poll_seconds: float, stop: threading.Event) -> None:
+    """Load the models, then keep checking their aliases. Until all have loaded, retry every 30 s."""
     while not stop.is_set():
-        scorer.update()
-        stop.wait(poll_seconds if scorer.bundle is not None else min(30.0, poll_seconds))
+        for scorer in scorers.values():
+            scorer.update()
+        loaded = all(s.bundle is not None for s in scorers.values())
+        stop.wait(poll_seconds if loaded else min(30.0, poll_seconds))
 
 
-def create_app(scorer: Scorer, poll_seconds: float | None = 300):
-    """The HTTP app. poll_seconds=None: no background loading (the caller loads the scorer, as tests do)."""
+def create_app(scorers: Scorer | dict[str, Scorer], poll_seconds: float | None = 300):
+    """The HTTP app for one or several named models (the first is the default). poll_seconds=None: no
+    background loading (the caller loads the scorers, as tests do)."""
     from fastapi import FastAPI, HTTPException
     from fastapi.responses import JSONResponse
+
+    if isinstance(scorers, Scorer):
+        scorers = {scorers.alias or "default": scorers}
+    default = next(iter(scorers))
 
     @asynccontextmanager
     async def lifespan(app):
         stop = threading.Event()
         if poll_seconds is not None:
-            threading.Thread(target=_follow, args=(scorer, poll_seconds, stop), name="model-follow",
+            threading.Thread(target=_follow, args=(scorers, poll_seconds, stop), name="model-follow",
                              daemon=True).start()
         yield
         stop.set()
@@ -188,6 +236,9 @@ def create_app(scorer: Scorer, poll_seconds: float | None = 300):
     def score(req: ScoreRequest) -> dict:  # a plain def: FastAPI runs it in a worker thread, off the event loop
         if any(not c or len(c) > MAX_TEXT for c in req.cards):
             raise HTTPException(422, f"every card needs 1-{MAX_TEXT} characters")
+        scorer = scorers.get(req.model or default)
+        if scorer is None:
+            raise HTTPException(404, f"no model {req.model!r}; served: {', '.join(scorers)}")
         try:
             return scorer.score(req.black, req.cards)
         except RuntimeError as exc:
@@ -195,8 +246,16 @@ def create_app(scorer: Scorer, poll_seconds: float | None = 300):
 
     @app.get("/healthz")
     def healthz():
-        ok, body = scorer.health()
-        return JSONResponse(body, status_code=200 if ok else 503)
+        """200 while at least one model is loaded ("degraded" if not all are). The default model's details
+        are at the top level, every model's under "models"."""
+        health = {name: s.health() for name, s in scorers.items()}
+        ok_default, body = health[default]
+        body = dict(body)
+        loaded = sum(ok for ok, _ in health.values())
+        if loaded and loaded < len(health):
+            body["status"] = "degraded"
+        body["models"] = {name: h for name, (_, h) in health.items()}
+        return JSONResponse(body, status_code=200 if loaded else 503)
 
     return app
 
@@ -210,9 +269,12 @@ def main(argv: list[str] | None = None) -> int:
     import torch
     import uvicorn
     torch.set_num_threads(int(os.environ.get("EEK_TORCH_THREADS", "1")))
-    scorer = Scorer(os.environ.get("EEK_MODEL_URI", DEFAULT_MODEL_URI),
-                    refresh_percentile=int(os.environ.get("EEK_REFRESH_PERCENTILE", "10")))
-    app = create_app(scorer, poll_seconds=float(os.environ.get("EEK_MODEL_POLL_SECONDS", "300")))
+    shared = Embeddings()
+    spec = os.environ.get("EEK_MODEL_URIS") or os.environ.get("EEK_MODEL_URI") or DEFAULT_MODEL_URI
+    percentile = int(os.environ.get("EEK_REFRESH_PERCENTILE", "10"))
+    scorers = {name: Scorer(uri, refresh_percentile=percentile, embeddings=shared)
+               for name, uri in parse_models(spec).items()}
+    app = create_app(scorers, poll_seconds=float(os.environ.get("EEK_MODEL_POLL_SECONDS", "300")))
     uvicorn.run(app, host=args.host, port=args.port, access_log=False)
     return 0
 

@@ -23,6 +23,10 @@ PublishPort=127.0.0.1:8011:8010
 # computer player still plays, at random (server/bot.py).
 Network=eek-staging.network
 Environment=EEK_MODEL_URL=http://eek-model:8020
+Environment=EEK_MODEL_NAME=challenger
+
+# No gameplay log on staging: its games are tests, and the training data comes from production only.
+Environment=EEK_GAMEPLAY_LOG=0
 
 # The app's output in the system journal (journalctl CONTAINER_NAME=eek-staging).
 LogDriver=journald
