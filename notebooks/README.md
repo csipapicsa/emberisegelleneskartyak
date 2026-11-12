@@ -11,6 +11,12 @@ reported. An idea that wins moves into `ml/train.py`.
 | `02_popularity_residual` | Popularity as an input, the model learns only what it misses. |
 | `03_filled_sentence` | Embed the black card with the answer in its blank, as one sentence. |
 | `04_other_encoder` | Same structures as the pipeline, a different encoder (default: multilingual-e5-base). |
+| `05_huspacy_encoder` | A Hungarian-specific encoder (huSpaCy word/lemma vectors) vs e5. Needs spaCy (install line in the notebook). |
+
+**Results so far** (snapshot 2026-11-11, test MRR difference to the pipeline's e5, 95% interval over games):
+e5-base ±0 (no gain from a bigger multilingual model); huSpaCy −0.021 to −0.043, significantly worse in 3 of 4
+variants. Validation showed no difference for any of them, and the best huSpaCy variant on validation was the
+worst on test: with 22 games per split, picking by small validation differences mostly picks noise.
 
 ## Setup (once)
 
