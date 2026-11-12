@@ -43,5 +43,15 @@ def test_addresses_point_at_the_service():
     assert "ContainerName=eek-model" in (DEPLOY / "containers/eek-model.container").read_text()
 
 
+# Host ports other services already use on the production server (see eek-model.container). 8020 was the model
+# service's first choice and collided with the ESP32 energy API.
+TAKEN_HOST_PORTS = {"5000", "8000", "8001", "8010", "8011", "8020", "8030"}
+
+
+def test_the_model_service_port_is_free_on_the_server():
+    host_port = settings(DEPLOY / "containers/eek-model.container")["PublishPort"].split(":")[1]
+    assert host_port not in TAKEN_HOST_PORTS
+
+
 def test_staging_keeps_no_gameplay_log():
     assert settings(DEPLOY / "containers/eek-staging.container")["EEK_GAMEPLAY_LOG"] == "0"

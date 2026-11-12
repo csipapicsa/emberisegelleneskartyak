@@ -49,7 +49,7 @@ journalctl CONTAINER_NAME=eek-model -n 20     # "loaded pick-model version N"
 ## Release the computer player on production (host service)
 
 Production still runs on the host (`emberisegellenes.service`, from `/opt/emberisegellenes_kartyak`). The
-computer player needs the model service to serve `champion` and to listen on `127.0.0.1:8020`, and the game
+computer player needs the model service to serve `champion` and to listen on `127.0.0.1:8021`, and the game
 needs to know its address. As root, at a quiet time:
 
 ```bash
@@ -61,7 +61,7 @@ install -m 644 deploy/containers/eek-staging.network deploy/containers/eek-prod.
 systemctl --user -M eek@ daemon-reload
 systemctl --user -M eek@ restart eek-model.service && echo "MODEL SERVICE HEALTHY"
 systemctl --user -M eek@ restart eek-staging.service
-curl -s http://127.0.0.1:8020/healthz                   # "models": challenger and champion both "ok"
+curl -s http://127.0.0.1:8021/healthz                   # "models": challenger and champion both "ok"
 
 curl -s http://127.0.0.1:8010/api/rooms                 # wait for []
 install -m 644 deploy/systemd/emberisegellenes.service.d/computer-player.conf /etc/systemd/system/emberisegellenes.service.d/
