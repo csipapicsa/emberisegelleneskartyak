@@ -18,7 +18,8 @@ hand turns the ten scores into probabilities:
 Both are trained the same way: full-batch Adam on the cross-entropy of the played card, with early stopping
 on the validation games. The baselines need no training: random, and card popularity.
 
-MLflow (experiment "pick-model"): a parent run per cycle ("cycle <snapshot>", with the snapshot as its
+MLflow (experiment "pick-model"): a parent run per cycle ("cycle <date> · data to <snapshot>": a snapshot
+is named after its newest game day, so the training date is in the name too; with the snapshot as its
 dataset and its files as artifacts) and one nested run per model with its parameters, train/val/test metrics, learning curves and,
 for the trained ones, the model. The trained model with the best validation MRR is registered as
 "pick-model" and gets the alias "challenger"; moving it to "champion" is a separate, deliberate step
@@ -37,6 +38,7 @@ import argparse
 import json
 import os
 import sys
+import time
 import warnings
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
@@ -255,7 +257,8 @@ def run_cycle(snapshot: Path, embeddings: Sequence[str] = tuple(features.EMBEDDI
         dataset = MetaDataset(resolve_dataset_source(str(snapshot)), name=snapshot.name,
                               digest=manifest["content_hash"][:16])
     runs = []
-    with mlflow.start_run(run_name=f"cycle {snapshot.name}") as parent:
+    trained_on = time.strftime("%Y-%m-%d")
+    with mlflow.start_run(run_name=f"cycle {trained_on} · data to {snapshot.name}") as parent:
         mlflow.set_tags({**tags, "kind": "cycle"})
         mlflow.log_params({**split_sizes, "split": "by game, time order; val/test: games without a computer player",
                            "task": "one-blank picks, humans only", "variants": ",".join(variants),

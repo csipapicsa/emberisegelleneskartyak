@@ -44,6 +44,7 @@ def test_cycle_logs_a_parent_with_baselines_and_models(cycle, snapshot):
                      "linear minilm [B]", "mlp minilm [B]", "linear minilm [C]", "mlp minilm [C]"]
     parent = mlflow.get_run(cycle["parent_run_id"])
     assert parent.data.tags["kind"] == "cycle"
+    assert parent.info.run_name.startswith("cycle 20") and parent.info.run_name.endswith(f"· data to {snapshot.name}")
     assert parent.data.tags["snapshot"] == snapshot.name
     assert parent.data.tags["image"] == "ghcr.io/example/eek-ml-train:sha-abc1234"
     assert parent.data.tags["cloud_run_execution"] == "eek-train-abc12"

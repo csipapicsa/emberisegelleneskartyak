@@ -88,6 +88,19 @@ novelty effect is measured there rather than assumed.
 The vote data matters even before anyone plays the bot: it adds ~1,200 "which card won" examples to ~4,200
 human picks (+29%) from games already played.
 
+**First result** (snapshot 2026-11-11: 67 training, 22 validation and 22 test games; MRR difference to A on
+validation, 95% interval over games):
+
+| | e5 linear | e5 MLP | MiniLM linear | MiniLM MLP | Granite linear | Granite MLP |
+|---|---|---|---|---|---|---|
+| B (+ bot games) | ±0 | ±0 | ±0 | ±0 | ±0 | ±0 |
+| C (+ vote winners) | +0.004 [−0.009, +0.016] | −0.001 [−0.009, +0.009] | −0.008 [−0.018, +0.002] | −0.002 [−0.017, +0.012] | −0.005 [−0.020, +0.010] | **−0.016 [−0.028, −0.004]** |
+
+B equals A because no game with a computer player has been played on production yet. The vote winners don't
+help pick prediction at this data size, and hurt one model significantly: votes measure what a group finds
+funny, picks what one player chooses from their own hand, and the two aren't interchangeable. The default
+stays A, and every nightly cycle repeats the comparison as the data grows.
+
 ## Promotion: challenger → champion
 
 `python -m ml.promote` scores the challenger and the champion on the same, newest test picks, prints both
@@ -126,7 +139,7 @@ service address (`EEK_MODEL_URL`), so code can be deployed before the feature is
 | Step | State |
 |---|---|
 | Model service, computer player, staging container (milestone 4.1–4.3) | ✅ live on staging, playing `challenger` |
-| Data variants A/B/C, clean evaluation, paired bootstrap | in progress |
+| Data variants A/B/C, clean evaluation, paired bootstrap | ✅ in every nightly cycle |
 | Promotion and rollback (4.4) | planned |
 | Production: own container, Promote workflow with approval, computer player on `champion` | planned |
 
