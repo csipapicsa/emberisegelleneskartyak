@@ -54,7 +54,9 @@ class TrainConfig:
 
 
 CONFIGS = {
-    "linear": TrainConfig(lr=1e-2, weight_decay=1e-3),
+    # 600 epochs: linear e5 kept improving until the old 300-epoch cap in every cycle up to 2026-11-11 (best
+    # epoch 297-299). The other models stop early long before either cap.
+    "linear": TrainConfig(lr=1e-2, weight_decay=1e-3, max_epochs=600),
     "mlp": TrainConfig(lr=3e-3, weight_decay=1e-4, hidden=64, dropout=0.2),
 }
 
@@ -111,22 +113,37 @@ def to_tensors(examples: Sequence[Example], row: dict[int, int], vectors: np.nda
 def fit(train, val, dim: int, config: TrainConfig):
     """Train on (inputs, targets) tensors; returns the model at its best validation loss and the
     learning curve [(epoch, train_loss, val_loss)]."""
-    torch = _torch()
-    torch.manual_seed(config.seed)
+    _torch().manual_seed(config.seed)  # before the weights are initialised, so runs are reproducible
     model = make_scorer(dim, config)
+    train_pairs, val_pairs = model.pair_features(train[0]), model.pair_features(val[0])
+    curve, best_epoch = train_loop(model, (train_pairs,), train[1], (val_pairs,), val[1], config, score=model.score)
+    return model, curve, best_epoch
+
+
+def train_loop(model, train_inputs: tuple, train_targets, val_inputs: tuple, val_targets, config: TrainConfig,
+               score=None) -> tuple[list[tuple[int, float, float]], int]:
+    """Full-batch Adam on the cross-entropy of the played card, with early stopping on the validation loss.
+
+    Works for any torch module: score(*inputs) (default: the module itself) must return (n, hand) scores.
+    Leaves the model at its best validation epoch, in eval mode. Returns the learning curve
+    [(epoch, train_loss, val_loss)] and the best epoch. Seed torch (config.seed) before building the model:
+    its initial weights come from the random generator. The experiment notebooks train their models with it
+    too, so they compare with the pipeline's models on equal terms.
+    """
+    torch = _torch()
+    score = score or model
     optimiser = torch.optim.Adam(model.parameters(), lr=config.lr, weight_decay=config.weight_decay)
     loss_fn = torch.nn.CrossEntropyLoss()
-    train_pairs, val_pairs = model.pair_features(train[0]), model.pair_features(val[0])
     best_loss, best_state, best_epoch, curve = float("inf"), None, 0, []
     for epoch in range(1, config.max_epochs + 1):
         model.train()
         optimiser.zero_grad()
-        loss = loss_fn(model.score(train_pairs), train[1])
+        loss = loss_fn(score(*train_inputs), train_targets)
         loss.backward()
         optimiser.step()
         model.eval()
         with torch.no_grad():
-            val_loss = loss_fn(model.score(val_pairs), val[1]).item()
+            val_loss = loss_fn(score(*val_inputs), val_targets).item()
         curve.append((epoch, loss.item(), val_loss))
         if val_loss < best_loss - 1e-6:
             best_loss, best_epoch = val_loss, epoch
@@ -135,7 +152,7 @@ def fit(train, val, dim: int, config: TrainConfig):
             break
     model.load_state_dict(best_state)
     model.eval()
-    return model, curve, best_epoch
+    return curve, best_epoch
 
 
 def predict_probs(model, x) -> np.ndarray:

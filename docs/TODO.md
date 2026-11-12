@@ -102,7 +102,9 @@ Következő lépések, sorrendben (2026-11-06, a projekt-review alapján)
         mostly learn which cards are liked. More data alone won't fix that; keep collecting it for richer models.
         - Score pick-model v1 and v2 on the same (new) test set: the old 2-game test set isn't comparable.
         - Features that combine the black card with each white card, so the model can learn what fits.
-        - Raise max_epochs: linear e5 hit the 300-epoch cap (best epoch 298).
+        - Experiment notebooks (notebooks/, `python -m ml.notebooks`): bilinear, popularity residual,
+          filled-in sentence, other encoder. Move a validation winner into ml/train.py.
+        - [x] Raise max_epochs: linear e5 hit the 300-epoch cap (best epoch 298) -> 600 for the linear model.
 [ ] 3. Konténer-image sérülékenységvizsgálat (Trivy), előbb csak riport. A Dependabot PR-okkal együtt.
 [ ] 4. Metrikák: kérésszám, 5xx arány, p95 válaszidő, aktív WebSocket-kapcsolatok → Prometheus →
        Grafana, egy riasztással. Az MLflow után, nem vele egy időben.

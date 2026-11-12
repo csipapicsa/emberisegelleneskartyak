@@ -109,3 +109,9 @@ def test_main_argument_errors(tmp_path, capsys):
     assert "transformer" in capsys.readouterr().err
     assert train.main(["--snapshot", str(tmp_path / "nope"), "--embeddings", "e5"]) == 1
     assert "Training failed" in capsys.readouterr().err
+
+
+def test_linear_cap_doubled_for_slow_learners():
+    # linear e5 was still improving at 300 epochs in every cycle up to 2026-11-11; early stopping ends the rest.
+    assert train.CONFIGS["linear"].max_epochs == 600
+    assert train.CONFIGS["mlp"].max_epochs == 300, "the MLP always stopped early (best epoch < 60)"

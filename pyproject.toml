@@ -43,3 +43,7 @@ select = [
     "I",               # isort: import order
     "UP",              # pyupgrade: modern syntax for the target Python
 ]
+
+[tool.ruff.lint.per-file-ignores]
+# A notebook puts the repository on sys.path before importing ml (VS Code starts it in notebooks/).
+"notebooks/*.ipynb" = ["E402"]
