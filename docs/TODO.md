@@ -28,8 +28,8 @@ In priority order within each section. Finished work moves to the worklogs.
          (budget 15 s).
    - [x] Data variants A/B/C (human picks / + games with a computer player / + vote winners) with a clean
          evaluation set and a paired bootstrap in every cycle. First result: vote winners don't help yet.
-   - [ ] Release the computer player on production: one drop-in and a restart at a quiet time
-         ([runbook](runbooks/deploy.md#release-the-computer-player-on-production-host-service)).
+   - [x] The computer player is live on production (2026-11-12), playing `champion`; the model service also
+         serves staging's `challenger`.
    - [ ] Milestone 5, monitoring: the computer player's model/random counts and its win rate in blind votes
          per model version (the online metric for promotions).
    - [ ] Multi-blank cards (pick 2–3): the computer player sends its best cards in score order, but the model

@@ -126,6 +126,9 @@ service address (`EEK_MODEL_URL`), so code can be deployed before the feature is
   quietly played at random. The game worked, the browser test passed, and playing it felt fine. The failure
   showed up only because the service used no CPU during a game. Now `/healthz` reports
   `computer_player: {model, random}` decision counts and every fallback is logged.
+- **Check the port map before picking a port.** The model service was first published on a port another
+  service on the server already used, so it couldn't start; it now has its own, and a test keeps the list of
+  the server's taken ports.
 - **Rootless containers and your own domain.** The service reached MLflow through the server's public HTTPS
   name, which resolves to the server's own IP. Rootless Podman's network (pasta) gives the container that
   same IP, so the connection never left the container: "connection refused". Fixed with
@@ -143,7 +146,7 @@ service address (`EEK_MODEL_URL`), so code can be deployed before the feature is
 | Promotion and rollback (4.4) | ✅ `python -m ml.promote` |
 | One model service for both: `challenger` (staging) and `champion` (production) | ✅ v6 is the first champion |
 | Production: own container, Promote workflow with approval | ✅ prepared and rehearsed on a copy of production's data; the cutover needs root and a quiet moment ([runbook](../runbooks/deploy.md)) |
-| Computer player on production | ready: one drop-in and a restart at a quiet time ([runbook](../runbooks/deploy.md#release-the-computer-player-on-production-host-service)) |
+| Computer player on production | ✅ live since 2026-11-12, playing `champion` (v6); first 21 decisions all by the model, none at random |
 
 ## Later
 
