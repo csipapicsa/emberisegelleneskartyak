@@ -149,7 +149,7 @@ server's test MRR to 4 decimals (training is seeded and full-batch).
 
 ## Milestone 4: serving, the computer player, promotion
 
-Status 2026-11-12: 4.1–4.3 built (`ml/serve.py`, `deploy/containers/eek-model.container`, `server/bot.py`); the
+Status 2026-11-12: 4.4 built (`python -m ml.promote`, rollback included). 4.1–4.3 built (`ml/serve.py`, `deploy/containers/eek-model.container`, `server/bot.py`); the
 service follows `challenger` on staging; one computer player per room for now (`max_bots` in config.json).
 
 | # | Task | Who |

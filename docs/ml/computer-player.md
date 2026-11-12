@@ -140,7 +140,7 @@ service address (`EEK_MODEL_URL`), so code can be deployed before the feature is
 |---|---|
 | Model service, computer player, staging container (milestone 4.1–4.3) | ✅ live on staging, playing `challenger` |
 | Data variants A/B/C, clean evaluation, paired bootstrap | ✅ in every nightly cycle |
-| Promotion and rollback (4.4) | planned |
+| Promotion and rollback (4.4) | ✅ `python -m ml.promote` |
 | Production: own container, Promote workflow with approval, computer player on `champion` | planned |
 
 ## Later

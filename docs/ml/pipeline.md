@@ -61,6 +61,21 @@ venv-ml/bin/python -m ml.train                  # latest snapshot, MLflow experi
 | `ml.embedding_benchmark` | a validated snapshot | one MLflow run per embedding model; the embeddings cache in `ml-data/embeddings/` |
 | `ml.train` | a validated snapshot, the embeddings | a parent run with 2 baselines + 6 models nested; the best on validation registered as `pick-model@challenger` |
 
+## Promoting a model
+
+Staging's computer player plays `challenger` (every nightly winner); production's plays `champion`. Moving
+`champion` is a deliberate step:
+
+```bash
+venv-ml/bin/python -m ml.promote --dry-run     # challenger vs champion on the newest test picks
+venv-ml/bin/python -m ml.promote               # the same, then asks before moving the alias
+venv-ml/bin/python -m ml.promote --rollback    # champion <-> previous-champion
+```
+
+Both versions score the same test picks (human picks, games without a computer player); the difference is a
+paired bootstrap over games. A significantly worse challenger is refused (`--force` overrides). The model
+service follows the alias within 5 minutes, without a restart.
+
 ## Experiment notebooks
 
 Model ideas not yet in the cycle live in [notebooks/](../../notebooks/README.md), one notebook per model family,
