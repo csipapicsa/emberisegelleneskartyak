@@ -175,7 +175,7 @@ for u in trainer reader; do
 done; unset A p
 ```
 
-Change a password: `POST /api/2.0/mlflow/users/update-password` with `{"username": ..., "password": ...}`,
+Change a password: `PATCH /api/2.0/mlflow/users/update-password` with `{"username": ..., "password": ...}`,
 as `admin`.
 
 ### Upgrade MLflow
