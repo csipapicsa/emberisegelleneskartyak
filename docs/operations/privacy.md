@@ -1,62 +1,54 @@
-# Adatvédelmi implementációs terv
+# Privacy: implementation plan
 
-## Cél
+## Goal
 
-Az oldal működéséhez szükséges adatkezelés megtartása, a statisztikához és a
-kártyaötlet-szavazáshoz kapcsolódó IP-adatkezelés minimalizálása, valamint egy
-valósághű, könnyen elérhető adatkezelési tájékoztató kiadása.
+Keep the data processing the site needs to work, minimise the IP addresses used for statistics and for
+card-idea voting, and publish an accurate, easy-to-find privacy notice.
 
-## Megvalósítási sorrend
+## Steps
 
-1. **IP-minimalizálás és adatmegőrzés** — elkészült ezen az ágon.
-   - A kártyaötlet-szavazás a nyers IP helyett célhoz kötött HMAC-azonosítót tárol.
-   - Az analitika nem tárol játékosnevet, szobakódot vagy user-agentet; az
-     egyedi látogatói méréshez célhoz kötött HMAC-azonosítót használ.
-   - Az analitikai események megőrzési ideje 90 nap; induláskor a régi,
-     szükségtelen azonosító mezők törlődnek.
-2. **Üzemeltetői konfiguráció** — telepítés előtt kötelező.
-- A szerveren jöjjön létre a `/etc/emberisegellenes/privacy.env` fájl a
-     `deploy/privacy.env.example` alapján, erős, titkos
-     `EEK_PRIVACY_HMAC_SECRET` értékkel.
-   - Ezt a titkot nem szabad commitolni, e-mailben küldeni vagy a nyilvános
-     tájékoztatóba írni.
-   - A meglévő nyers-IP-s szavazatok indításkor ebből képzett HMAC-ra
-     migrálódnak. Titok nélkül a szolgáltatás szándékosan nem indul el, így
-     nem marad észrevétlenül nyers IP-t tároló régi séma.
-3. **Nyilvános adatkezelési tájékoztató** — folyamatban.
-   - Külön `/adatkezeles` oldal és lábléc-link minden nyilvános oldalon.
-   - A szövegben külön cél/jogalap/megőrzés a játékmenetre, chatre,
-     kapcsolatfelvételre, kártyaötletre, szavazásra és belső statisztikára.
-   - A `localStorage`-t (session, név és beállítások) külön, közérthetően fel
-     kell tüntetni. A játékmenethez szükséges session külön hozzájárulás
-     nélkül használható; a kényelmi beállításokat felül kell vizsgálni.
-4. **Dokumentálás és üzemeltetés**.
-   - Egyszerű belső adatkezelési nyilvántartás és a tárhelyszolgáltatóval
-     adatfeldolgozói szerződés.
-   - Nginx hozzáférési/hibanaplók tényleges megőrzési idejének rögzítése.
-   - Hozzáférési jogosultságok, mentések és törlési folyamat ellenőrzése.
+1. **IP minimisation and retention** (done).
+   - Card-idea votes store a purpose-bound HMAC identifier instead of the raw IP.
+   - Analytics store no player names, room codes or user agents; unique visitors are counted with a
+     purpose-bound HMAC identifier.
+   - Analytics events are kept for 90 days; at startup, old identifier columns that are no longer needed are
+     deleted.
+2. **Server configuration** (required before deploying).
+   - Create `/etc/emberisegellenes/privacy.env` from `deploy/privacy.env.example`, with a strong, secret
+     `EEK_PRIVACY_HMAC_SECRET`.
+   - Never commit this secret, email it, or put it in the public notice.
+   - Existing raw-IP votes are migrated to the HMAC at startup. Without the secret the service deliberately
+     refuses to start, so an old schema storing raw IPs can't linger unnoticed.
+3. **Public privacy notice** (in progress).
+   - A separate `/adatkezeles` page and a footer link on every public page.
+   - Purpose, legal basis and retention stated separately for gameplay, chat, contact messages, card ideas,
+     voting and internal statistics.
+   - `localStorage` (session, name and settings) described separately and plainly. The session needed for
+     playing works without separate consent; the convenience settings need a review.
+4. **Records and operations.**
+   - A simple internal record of processing activities, and a data processing agreement with the hosting
+     provider.
+   - The actual retention of the nginx access and error logs written down.
+   - Access rights, backups and the deletion process checked.
 
-## Eldöntött alapértékek
+## Decided defaults
 
-- Adatkezelői kapcsolat: `gergo.gyori.project@gmail.com`.
-- Tárhelyszolgáltató/adatfeldolgozó: Contabo.
-- Kapcsolatfelvételi üzenetek: 12 hónap.
-- Nyilvános üzenőfal: 30 nap; szobán belüli chat: a szoba megszűnéséig.
-- Kártyaötletek: a játékkészlet tartalmaként korlátlan ideig megmaradnak;
-  a beküldő személyéhez nem kapcsoljuk őket.
-- Kártyaötlet-szavazati HMAC: 5 év.
-- Nginx access- és error-logok: 14 nap; a hozzá tartozó logrotate-minta
-  `deploy/logrotate/emberisegellenes` néven szerepel a projektben.
+- Data controller contact: `gergo.gyori.project@gmail.com`.
+- Hosting provider / processor: Contabo.
+- Contact messages: 12 months.
+- Public message board: 30 days; in-room chat: until the room closes.
+- Card ideas: kept indefinitely as game content, not linked to the person who sent them.
+- Card-idea vote HMACs: 5 years.
+- Nginx access and error logs: 14 days (`deploy/logrotate/emberisegellenes`).
 
-## Kiadási ellenőrzőlista
+## Release checklist
 
-- [ ] A titkos HMAC-konfiguráció létrehozva a szerveren.
-- [ ] A `deploy/systemd/emberisegellenes.service.d/privacy.conf` drop-in bemásolva
-  `/etc/systemd/system/emberisegellenes.service.d/privacy.conf` alá; ez nem
-  írja felül a meglévő TURN_SECRET-et.
-- [ ] A systemd és nginx konfiguráció ellenőrizve, majd újratöltve.
-- [ ] A logrotate-minta bemásolva `/etc/logrotate.d/emberisegellenes` alá.
-- [ ] Adatkezelési tájékoztatóban minden fenti döntés kitöltve.
-- [ ] A tájékoztató linkje elérhető a főoldalról, kapcsolatfelvételnél és
-  kártyaötlet/szavazás oldalról.
-- [ ] Adatfeldolgozói szerződés és belső nyilvántartás elkészült.
+- [ ] The secret HMAC configuration exists on the server.
+- [ ] The drop-in `deploy/systemd/emberisegellenes.service.d/privacy.conf` is copied to
+      `/etc/systemd/system/emberisegellenes.service.d/privacy.conf` (it doesn't override an existing
+      TURN_SECRET).
+- [ ] systemd and nginx configuration checked and reloaded.
+- [ ] The logrotate file copied to `/etc/logrotate.d/emberisegellenes`.
+- [ ] Every decision above filled in in the privacy notice.
+- [ ] The notice is linked from the home page, the contact form and the card idea/voting pages.
+- [ ] Data processing agreement and internal record done.
