@@ -1,7 +1,8 @@
-# The model service for staging's computer player (ml/serve.py): scores cards for server/bot.py.
+# The model service for the computer player (ml/serve.py): scores cards for server/bot.py, for staging
+# ("challenger", every nightly winner) and production ("champion", moved by hand with ml.promote).
 # Runs the ML training image (it has PyTorch, the embedding models' code and FastAPI) with a different command,
-# and follows its :main tag like staging does. The model itself comes from MLflow: the version behind the
-# "challenger" alias, re-checked every 5 minutes, so every new nightly winner plays on staging.
+# and follows its :main tag like staging does. The models come from MLflow, by alias, re-checked every
+# 5 minutes; both share one embedding model and its cache.
 #
 # Rootless podman under the `eek` user, like eek-staging.container. Installed root-owned:
 #   /etc/containers/systemd/users/<uid of eek>/eek-model.container
@@ -16,8 +17,10 @@ Image=ghcr.io/csipapicsa/eek-ml-train:main
 AutoUpdate=registry
 Exec=python -m ml.serve
 
-# No published port: only the staging game, on the same network, can reach it.
+# Staging reaches it on the shared network (http://eek-model:8020); production, which runs on the host
+# (emberisegellenes.service), through this port on localhost only.
 Network=eek-staging.network
+PublishPort=127.0.0.1:8020:8020
 
 # /data holds the Hugging Face cache (the embedding model, ~470 MB, downloaded on the first start).
 UserNS=keep-id:uid=10001,gid=10001
@@ -28,7 +31,7 @@ EnvironmentFile=/etc/eek/model.env
 # that same IP, so the connection would stay inside the container: "connection refused". host-gateway is the
 # address pasta maps to the real host (169.254.1.2), where nginx answers; TLS still sees the right name.
 AddHost=mlflow.emberisegelleneskartyak.hu:host-gateway
-Environment=EEK_MODEL_URI=models:/pick-model@challenger
+Environment=EEK_MODEL_URIS=challenger=models:/pick-model@challenger,champion=models:/pick-model@champion
 Environment=EEK_MODEL_POLL_SECONDS=300
 Environment=EEK_REFRESH_PERCENTILE=10
 

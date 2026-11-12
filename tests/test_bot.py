@@ -129,6 +129,15 @@ def test_deadline_is_within_every_timer(timer, budget):
         assert budget <= timer - bot.SAFETY_MARGIN
 
 
+async def test_asks_for_the_configured_model(service, monkeypatch):
+    fake = service()
+    await bot.ask("fekete ____", ["fehér 1"], 5)
+    assert "model" not in fake.calls[-1], "unset: the service's default model"
+    monkeypatch.setenv(bot.MODEL_NAME_ENV, "champion")
+    await bot.ask("fekete ____", ["fehér 1"], 5)
+    assert fake.calls[-1]["model"] == "champion"
+
+
 async def test_ask_rejects_malformed_answers(monkeypatch):
     def answer(data):
         monkeypatch.setattr(bot, "_post", lambda url, body, timeout: data)

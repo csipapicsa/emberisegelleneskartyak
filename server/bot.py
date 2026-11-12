@@ -1,7 +1,8 @@
 """Computer players: a seat in the room that the model service (ml/serve.py) plays.
 
-Off unless EEK_MODEL_URL points at the service (staging only). The room admin adds computer players in the
-lobby, up to config.json's "max_bots" (server/main.py).
+Off unless EEK_MODEL_URL points at the service. EEK_MODEL_NAME picks which of the service's models plays
+(staging: "challenger", production: "champion"; unset: the service's default). The room admin adds computer
+players in the lobby, up to config.json's "max_bots" (server/main.py).
 
 Each round the computer player:
 - submits: it sends the black card and its hand to the service and plays the best-scored card (for a
@@ -43,6 +44,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 MODEL_URL_ENV = "EEK_MODEL_URL"
+MODEL_NAME_ENV = "EEK_MODEL_NAME"
 NAME = "Gép"
 SESSION_PREFIX = "bot-"
 MAX_NEW_HANDS = 3
@@ -104,8 +106,10 @@ async def ask(black: str, cards: list[str], timeout: float) -> Answer | None:
     if not url or timeout < MIN_REQUEST_TIME or not cards:
         return None
     try:
-        data = await asyncio.wait_for(asyncio.to_thread(_post, url, {"black": black, "cards": cards}, timeout),
-                                      timeout)
+        body = {"black": black, "cards": cards}
+        if os.environ.get(MODEL_NAME_ENV):
+            body["model"] = os.environ[MODEL_NAME_ENV]
+        data = await asyncio.wait_for(asyncio.to_thread(_post, url, body, timeout), timeout)
         scores, probs = [float(x) for x in data["scores"]], [float(x) for x in data["probs"]]
         if len(scores) != len(cards) or len(probs) != len(cards) or not all(map(math.isfinite, scores + probs)):
             raise ValueError(f"{len(cards)} cards, got {len(scores)} scores / {len(probs)} probs")
