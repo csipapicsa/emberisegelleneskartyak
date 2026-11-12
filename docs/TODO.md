@@ -32,6 +32,13 @@ In priority order within each section. Finished work moves to the worklogs.
          ([runbook](runbooks/deploy.md#release-the-computer-player-on-production-host-service)).
    - [ ] Milestone 5, monitoring: the computer player's model/random counts and its win rate in blind votes
          per model version (the online metric for promotions).
+   - [ ] Multi-blank cards (pick 2–3): the computer player sends its best cards in score order, but the model
+         doesn't know which blank a card fills (it was trained on one-blank cards only). Measured 2026-11-12 on
+         531 human 2-blank submissions (champion v6): "best card first" reproduces the human order 51.6% of the
+         time (a coin flip); scoring each card against its blank's own sentence reproduces it only 13.2% [10.3,
+         16.1], i.e. strongly reversed. Understand why before using it (likely the model rewards the less
+         obvious card, which fights grammatical fit), then train blank-aware examples from the multi-blank rounds
+         (the log has picks in blank order). Changes the training task, so it's its own step.
    - [ ] Later: several computer players per room (raise `max_bots`), different model versions at one table.
    - [ ] Later: train only in GCP (the nightly timer calls `python -m ml.cloud --register`; the local
          training stays as the CI-tested fallback), then Terraform for the GCP resources
