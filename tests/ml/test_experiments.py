@@ -65,7 +65,8 @@ def test_filled_tensors_embed_each_pair_once_and_resume(data, tmp_path, stem_enc
     inputs, targets = data.filled_tensors("minilm", tmp_path, stem_encoders, chunk=500)
     pairs = {(e.black, c) for split in data.splits.values() for e in split for c in e.hand}
     encoded = [t for enc in stem_encoders.made for call in enc.calls for t in call]
-    assert len(encoded) == len(pairs) and len(stem_encoders.made) > 1, "one encoder per chunk"
+    assert len(encoded) == len(pairs)
+    assert len(stem_encoders.made) == 1 and len(stem_encoders.made[0].calls) > 1, "loaded once, used per chunk"
     e = data.splits["val"][0]
     expected = StemEncoder(features.EMBEDDING_MODELS["minilm"]).encode(
         [ex.fill_blank(data.texts[e.black], data.texts[e.hand[3]])])[0]

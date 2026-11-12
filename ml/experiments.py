@@ -81,10 +81,17 @@ class Data:
         model = _model(model)
         pairs = sorted({(e.black, c) for split in self.splits.values() for e in split for c in e.hand})
         sentences = {i: fill_blank(self.texts[b], self.texts[w]) for i, (b, w) in enumerate(pairs)}
+        factory, loaded = encoder_factory or features.SentenceTransformerEncoder, []
+
+        def encoder_once(m: features.EmbeddingModel):  # embed() asks for an encoder per chunk; load it once
+            if not loaded:
+                loaded.append(factory(m))
+            return loaded[0]
+
         vectors: dict[tuple[int, int], np.ndarray] = {}
         for start in range(0, len(pairs), chunk):
             part = {i: sentences[i] for i in range(start, min(start + chunk, len(pairs)))}
-            ids, matrix = features.embed(part, model, cache_dir, encoder_factory or features.SentenceTransformerEncoder)
+            ids, matrix = features.embed(part, model, cache_dir, encoder_once)
             vectors.update((pairs[int(i)], v) for i, v in zip(ids, matrix, strict=True))
         torch = train._torch()
         inputs, targets = {}, {}
