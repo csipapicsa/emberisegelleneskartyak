@@ -347,3 +347,76 @@ def test_room_state_restores_multi_pick_count():
     )
 
     assert result.returncode == 0, result.stderr
+
+
+def test_a_tie_shows_every_winning_submission():
+    """Round end with a tie: the overlay shows each winner's cards under their name, and every winning pile
+    is highlighted, not only the first one."""
+    result = run_node(
+        """
+        const assert = require('assert');
+        const fs = require('fs');
+        const vm = require('vm');
+
+        const elements = new Map();
+        function element(id) {
+          if (!elements.has(id)) {
+            elements.set(id, { id, style: {}, classList: { add() {}, remove() {}, toggle() {} },
+              addEventListener() {}, querySelectorAll() { return []; }, querySelector() { return null; },
+              getBoundingClientRect() { return { left: 0, top: 0 }; }, textContent: '', innerHTML: '' });
+          }
+          return elements.get(id);
+        }
+        function pile(sid) {
+          const classes = new Set();
+          return { dataset: { sid }, classes, classList: { add(c) { classes.add(c); } }, appendChild() {} };
+        }
+        const piles = [pile('a'), pile('b'), pile('c')];
+        const context = {
+          console, encodeURIComponent, clearTimeout,
+          setTimeout() {},
+          localStorage: { getItem() { return null; }, setItem() {}, removeItem() {} },
+          window: { innerWidth: 480, innerHeight: 800, addEventListener() {} },
+          document: {
+            getElementById: element,
+            querySelector() { return element('query'); },
+            querySelectorAll(sel) { return sel === '.submission-pile' ? piles : []; },
+            createElement() { return { style: {} }; },
+          },
+          location: { replace() {} },
+        };
+        vm.createContext(context);
+        vm.runInContext(fs.readFileSync('static/js/chat.js', 'utf8'), context);
+        vm.runInContext(fs.readFileSync('static/js/game.js', 'utf8'), context);
+        vm.runInContext(`
+          updateScores = () => {};
+          onRoundEnd({
+            winner_session_id: 'a', winners: ['a', 'b'], scores: [],
+            authors: [
+              { session_id: 'a', username: 'Anna',  cards: [{ id: 1, text: 'Első lap' }] },
+              { session_id: 'b', username: 'Bence', cards: [{ id: 2, text: 'Második lap' }] },
+              { session_id: 'c', username: 'Csilla', cards: [{ id: 3, text: 'Vesztes lap' }] },
+            ],
+          });
+        `, context);
+
+        const label = element('winnerLabel').innerHTML;
+        const cards = element('winnerCards').innerHTML;
+        assert.ok(label.includes('Döntetlen') && label.includes('Anna') && label.includes('Bence'), label);
+        assert.ok(cards.includes('Első lap') && cards.includes('Második lap'), cards);
+        assert.ok(!cards.includes('Vesztes lap'), cards);
+        assert.ok(cards.includes('Anna') && cards.includes('Bence'), 'each group is labelled with its author');
+        assert.deepStrictEqual(piles.map(p => p.classes.has('winner-pick')), [true, true, false]);
+
+        // A single winner: just the cards, no group labels.
+        vm.runInContext(`
+          showWinnerOverlay({ winner_session_id: 'c', winners: ['c'],
+            authors: [{ session_id: 'c', username: 'Csilla', cards: [{ id: 3, text: 'Vesztes lap' }] }] });
+        `, context);
+        assert.ok(element('winnerLabel').innerHTML.includes('Győztes: Csilla'));
+        assert.strictEqual(element('winnerCards').innerHTML, '<div class="sub-card">Vesztes lap</div>');
+        console.log('ok');
+        """
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "ok"

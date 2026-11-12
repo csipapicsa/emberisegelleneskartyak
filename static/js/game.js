@@ -255,7 +255,7 @@ function onSubmissionWithdrawn(msg) {
 function onRoundEnd(msg) {
   currentPhase = 'round_ending';
   showCzarHint(false);
-  highlightWinner(msg.winner_session_id);
+  highlightWinners(msg.winners || [msg.winner_session_id]);
   updateScores(msg.scores);
   lastWinnerCardId = getWinnerCardId(msg.winner_session_id);
 
@@ -282,10 +282,15 @@ function showWinnerOverlay(msg) {
     ? `🏆 Döntetlen: ${names.join(', ')}`
     : `🏆 Győztes: ${names[0]}`;
 
-  const winnerAuthor = authors.find(x => x.session_id === winners[0]);
-  cardsEl.innerHTML = winnerAuthor
-    ? winnerAuthor.cards.map(c => `<div class="sub-card">${esc(c.text)}</div>`).join('')
-    : '';
+  // A tie shows every winning submission, each under its author's name.
+  cardsEl.innerHTML = winners.map((sid, i) => {
+    const author = authors.find(x => x.session_id === sid);
+    if (!author) return '';
+    const cards = author.cards.map(c => `<div class="sub-card">${esc(c.text)}</div>`).join('');
+    return winners.length > 1
+      ? `<div class="winner-group"><div class="winner-name">${names[i]}</div>${cards}</div>`
+      : cards;
+  }).join('');
 
   const overlay = document.getElementById('winnerOverlay');
   overlay.classList.remove('hidden');
@@ -420,9 +425,9 @@ function castVote(winnerSessionId) {
   });
 }
 
-function highlightWinner(winnerSid) {
+function highlightWinners(winnerSids) {
   document.querySelectorAll('.submission-pile').forEach(el => {
-    if (el.dataset.sid === winnerSid) el.classList.add('winner-pick');
+    if (winnerSids.includes(el.dataset.sid)) el.classList.add('winner-pick');
   });
 }
 

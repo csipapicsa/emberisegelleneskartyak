@@ -183,7 +183,11 @@
 }
 .winner-cards {
   display: flex; flex-direction: column; gap: 8px;
+  max-height: 60vh; overflow-y: auto;  /* a tie between several players */
 }
+.winner-group { display: flex; flex-direction: column; gap: 6px; }
+.winner-group + .winner-group { margin-top: 8px; }
+.winner-name { font-size: .8rem; font-weight: 700; color: var(--text-muted); text-align: left; }
 .winner-cards .sub-card {
   background: var(--white);
   color: var(--black);

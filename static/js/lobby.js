@@ -9,6 +9,8 @@ let roomState = null;
 let voiceManager = null;
 let usernameChangeRequested = false;
 let roomReplacedHandled = false;
+let editionList = null;          // /api/editions, once it has arrived
+let defaultEditionsSent = false;
 
 async function initLobby(code, sid, uname) {
   currentRoomCode = code;
@@ -146,7 +148,9 @@ function onRoomState(state) {
   if (isAdmin) {
     document.getElementById('adminPanel').classList.remove('hidden');
     document.getElementById('waitingMsg').classList.add('hidden');
-    renderEditions(state.edition_ids);
+    // A new room has no packs yet: show the defaults right away instead of an empty selection.
+    renderEditions(state.edition_ids.length || !editionList ? state.edition_ids : defaultEditionIds());
+    maybeSendDefaultEditions();
     renderConfig(state);
     const hasPending = state.pending.length > 0;
     document.getElementById('startBtn').disabled = state.players.length < 1 || hasPending;
@@ -267,16 +271,32 @@ function renderEditions(selectedIds) {
   });
 }
 
-async function loadEditions(currentIds) {
-  const res  = await fetch('/api/editions');
-  const list = await res.json();
+// Every edition except Bōks.
+function defaultEditionIds() {
+  return (editionList || []).filter(e => e.name !== 'Bōks').map(e => e.id);
+}
+
+// A new room starts with no packs: the admin's page fills in the defaults once it has both the list and the
+// room state (whichever arrives last calls this successfully).
+function maybeSendDefaultEditions() {
+  if (defaultEditionsSent || !editionList?.length || !isAdmin || !roomState || roomState.edition_ids.length) return;
+  defaultEditionsSent = true;
+  socket.send('configure_room', { edition_ids: defaultEditionIds() });
+}
+
+// Started before the session and the socket (room.html): the list doesn't depend on them.
+async function loadEditions() {
+  let list;
+  try {
+    list = await (window.editionsRequest || Promise.reject());
+  } catch {
+    list = await (await fetch('/api/editions')).json();  // the early request failed: ask once more
+  }
+  editionList = list;
   const container = document.getElementById('editionList');
   container._loaded = true;
 
-  // Default: select every edition except Bōks if none are configured yet.
-  const selected = currentIds.length > 0
-    ? currentIds
-    : list.filter(e => e.name !== 'Bōks').map(e => e.id);
+  const selected = roomState?.edition_ids?.length ? roomState.edition_ids : defaultEditionIds();
 
   container.innerHTML = list.map(e => `
     <div class="select-option ${selected.includes(e.id) ? 'selected' : ''}" data-id="${e.id}">
@@ -288,10 +308,7 @@ async function loadEditions(currentIds) {
     </div>
   `).join('');
 
-  // Send initial selection to server
-  if (currentIds.length === 0 && list.length > 0) {
-    socket.send('configure_room', { edition_ids: selected });
-  }
+  maybeSendDefaultEditions();
 
   container.addEventListener('change', () => {
     const ids = [...container.querySelectorAll('input:checked')]
