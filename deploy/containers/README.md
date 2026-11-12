@@ -93,6 +93,14 @@ systemctl --user -M eek@ restart eek-staging.service   # joins the network
 journalctl --user-unit=eek-model.service -n 20         # "loaded pick-model version N (e5)"
 ```
 
+Is the computer player really using the model? Its random fallback keeps games working when the service
+is down, so look at the counts after a game (`random` should stay at 0):
+
+```bash
+curl -s http://127.0.0.1:8011/healthz        # {"status":"ok", ..., "computer_player":{"model":12,"random":0}}
+journalctl CONTAINER_NAME=eek-model -n 20    # the service's own log ("loaded pick-model version N")
+```
+
 Check from the server that a whole worst-case turn stays far inside the shortest timer (15 s), with brand-new
 cards and 5 games at once:
 

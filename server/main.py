@@ -587,7 +587,10 @@ async def healthz():
         ok = False
     if not ok:
         return JSONResponse({"status": "error", "version": VERSION}, status_code=503)
-    return {"status": "ok", "version": VERSION}
+    body = {"status": "ok", "version": VERSION}
+    if bot.enabled():  # how the computer player decided: by the model, or at random because it didn't answer
+        body["computer_player"] = dict(bot.stats)
+    return body
 
 
 # TURN credentials let the holder relay traffic through our coturn server, so only a player in an open room

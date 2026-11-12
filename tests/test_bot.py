@@ -198,6 +198,25 @@ async def test_no_new_hand_without_a_cutoff(service):
     assert len(fake.calls) == 1
 
 
+async def test_healthz_counts_model_answers_and_random_fallbacks(service, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from tests.test_editions import make_master
+    monkeypatch.setattr(main_mod, "get_conn", make_master)  # healthz needs a card database
+    monkeypatch.setattr(bot, "stats", {"model": 0, "random": 0})
+    service()
+    room, _, sid = room_with_bot()
+    await start(room, FakeManager())
+    service(fail=True)
+    room2, _, _ = room_with_bot(code="BP0")
+    await start(room2, FakeManager())
+    assert bot.stats == {"model": 1, "random": 1}
+    body = TestClient(main_mod.app).get("/healthz").json()
+    assert body["computer_player"] == {"model": 1, "random": 1}
+    monkeypatch.delenv(bot.MODEL_URL_ENV)
+    assert "computer_player" not in TestClient(main_mod.app).get("/healthz").json(), "off: not shown"
+
+
 async def test_service_down_means_a_random_card_and_the_seat_stays_a_model_seat(service, glog):
     service(fail=True)
     room, _, sid = room_with_bot()
