@@ -94,6 +94,18 @@ flowchart LR
 
 The full picture is in [docs/architecture.md](docs/architecture.md).
 
+### Observability
+
+- **Product analytics:** self-hosted [Umami](https://umami.is) (no cookies, no raw IP addresses) for traffic,
+  pages and sources, plus an internal statistics page from the app's own event log (games started and
+  finished, players, abandoned rooms), with retention enforced in code.
+- **Health:** every service has a `/healthz` that the container runtime uses for health-gated starts and
+  automatic rollback. The game's reports the running commit and how the computer player decided: by the model,
+  or at random because the model service didn't answer.
+- **Logs:** containers log to the system journal; the nightly training reports to MLflow.
+- **Next:** metrics and alerting (Prometheus + Grafana), and model monitoring per version: how often humans vote
+  for the computer player's card in blind votes.
+
 ### Delivery pipeline
 
 ```mermaid
