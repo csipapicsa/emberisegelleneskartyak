@@ -89,6 +89,7 @@ jobs:
           docker run --rm -v "$PWD/ci-data:/data" -e EXPECTED_SHA="$SHA" \
             -e MLFLOW_TRACKING_URI=file:///data/mlruns -e MLFLOW_ALLOW_FILE_STORE=true \
             eek-ml-train:ci python -c '
+          import json
           import os
           import mlflow
           import numpy as np
@@ -99,9 +100,13 @@ jobs:
           assert tags["git_commit"] == sha, tags["git_commit"]
           assert tags["image"].endswith(f":sha-{sha}"), tags["image"]
           assert len(tags["snapshot_hash"]) == 64
-          probs = np.asarray(mlflow.pyfunc.load_model("models:/pick-model@challenger").predict(
+          # The model returns raw scores (the model service applies the softmax) and carries the new-hand cut-offs.
+          scores = np.asarray(mlflow.pyfunc.load_model("models:/pick-model@challenger").predict(
               np.random.rand(3, 11, 384).astype("float32")))
-          assert probs.shape == (3, 10) and np.allclose(probs.sum(axis=1), 1, atol=1e-4), probs
+          assert scores.shape == (3, 10) and np.isfinite(scores).all(), scores
+          version = mlflow.MlflowClient().get_model_version_by_alias("pick-model", "challenger")
+          assert version.tags["output"] == "scores", version.tags
+          assert "10" in json.loads(version.tags["best_score_percentiles"]), version.tags
           print("cycle", cycle.info.run_id, tags["image"], "challenger OK")
           '
 
