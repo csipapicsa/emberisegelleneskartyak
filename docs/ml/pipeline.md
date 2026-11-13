@@ -63,18 +63,24 @@ venv-ml/bin/python -m ml.train                  # latest snapshot, MLflow experi
 
 ## Promoting a model
 
-Staging's computer player plays `challenger` (every nightly winner); production's plays `champion`. Moving
-`champion` is a deliberate step:
+Staging's computer player plays `challenger` (every nightly winner); production's plays `champion`. The
+nightly pipeline promotes automatically (`[promote] auto = true` in `pipeline.toml`): right after training it
+compares the new challenger with the champion and moves `champion` **only if the challenger is significantly
+better** (the 95% interval of the MRR difference is above zero), or if there is no champion yet. Every version
+has the same architecture and speed, so accuracy is the only question; "a higher number" isn't enough, because
+nightly versions differ by far less than the test set's noise (about ±0.012 MRR with ~700 test picks).
 
 ```bash
 venv-ml/bin/python -m ml.promote --dry-run     # challenger vs champion on the newest test picks
-venv-ml/bin/python -m ml.promote               # the same, then asks before moving the alias
+venv-ml/bin/python -m ml.promote --auto        # what the nightly run does: promote only if significantly better
+venv-ml/bin/python -m ml.promote               # by hand: compare, then ask before moving the alias
 venv-ml/bin/python -m ml.promote --rollback    # champion <-> previous-champion
 ```
 
 Both versions score the same test picks (human picks, games without a computer player); the difference is a
-paired bootstrap over games. A significantly worse challenger is refused (`--force` overrides). The model
-service follows the alias within 5 minutes, without a restart.
+paired bootstrap over games. A significantly worse challenger is refused (`--force` overrides). Each promotion
+tags the new champion in MLflow with its comparison. The model service follows the alias within 5 minutes,
+without a restart.
 
 ## Experiment notebooks
 

@@ -72,6 +72,31 @@ def test_trains_once_then_waits_for_new_data(config, tmp_path, mlflow_dir):
     assert len(cycles) == 3
 
 
+def test_auto_promote_after_training(config, tmp_path, mlflow_dir):
+    """With auto_promote the first model becomes champion at once; later ones only if significantly better."""
+    from ml import promote
+    config.auto_promote = True
+    first = run(config)
+    assert first["promotion"] == {"verdict": "first champion", "promoted": True,
+                                  "champion": str(first["challenger"]["version"]), "previous": None}
+    client = mlflow.MlflowClient()
+    assert str(client.get_model_version_by_alias(train.REGISTERED_MODEL, promote.CHAMPION).version) \
+        == str(first["challenger"]["version"])
+
+    add_games(config, tmp_path, 12)
+    second = run(config)
+    assert second["status"] == "trained"
+    verdict = second["promotion"]["verdict"]
+    champion = str(client.get_model_version_by_alias(train.REGISTERED_MODEL, promote.CHAMPION).version)
+    expected = second["challenger"]["version"] if verdict in promote.AUTO_VERDICTS else first["challenger"]["version"]
+    assert champion == str(expected)
+    assert second["promotion"]["promoted"] is (verdict in promote.AUTO_VERDICTS)
+
+
+def test_without_auto_promote_nothing_is_promoted(config, mlflow_dir):
+    assert run(config)["promotion"] is None
+
+
 def test_last_cycle_reads_mlflow(config, mlflow_dir):
     assert pipeline.last_cycle("pipeline-test") is None
     result = run(config)
@@ -98,12 +123,14 @@ def test_load_config(tmp_path):
     assert shipped.embeddings == ["minilm", "e5", "granite"] and shipped.models == ["linear", "mlp"]
     assert shipped.min_new_picks == 20 and shipped.first_day == 20763 and shipped.register
     assert shipped.db == pipeline.DB_PATH
+    assert shipped.auto_promote, "the nightly run promotes significantly better models"
 
     custom = tmp_path / "c.toml"
     custom.write_text('[export]\ndb = "x/g.db"\n[train]\nmodels = ["mlp"]\nregister = false\n'
                       '[trigger]\nmin_new_picks = 5\n')
     c = pipeline.load_config(custom)
     assert c.db == pipeline.ROOT / "x/g.db" and c.models == ["mlp"] and not c.register and c.min_new_picks == 5
+    assert not c.auto_promote, "off unless the file turns it on"
 
     custom.write_text('[train]\nembeddings = ["bert"]\n')
     with pytest.raises(ValueError, match="bert"):

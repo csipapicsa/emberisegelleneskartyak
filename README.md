@@ -61,9 +61,9 @@ flowchart LR
 - **Keeping its data apart:** the bot's own picks and votes are flagged in the log and never used as labels.
   Validation and test only use games without a bot, so every model is measured against undisturbed human
   behaviour; human picks from bot games and human votes on the bot's cards are separate, measured variants.
-- **Promotion:** `python -m ml.promote` scores challenger and champion on the same newest test games and moves
-  the `champion` alias only after confirmation; a significantly worse model is refused, and rollback is one
-  command. The service follows the aliases without a restart.
+- **Promotion:** the nightly run scores challenger and champion on the same newest test games (paired bootstrap)
+  and moves the `champion` alias automatically, but only when the challenger is significantly better: nightly
+  versions differ by less than the test noise. A worse model is never promoted, and rollback is one command. The service follows the aliases without a restart.
 - **Serving:** card texts go to the service, so new cards are embedded on the fly. The bot plays within a hard
   deadline and falls back to a random choice, which `/healthz` counts. Worst case measured: a full turn with
   brand-new cards, 5 games at once, 3.9 s against the shortest round timer of 15 s.

@@ -10,7 +10,9 @@ Run nightly by deploy/systemd/eek-ml-train.timer. Steps:
 2. validate it; any failed check stops the pipeline with exit code 1;
 3. ask MLflow for the last training cycle: if this snapshot was already trained on, or it has fewer than
    `min_new_picks` new picks, stop here (exit code 0: nothing to do is not an error);
-4. train one cycle (ml/train.py), which logs to MLflow and registers the challenger.
+4. train one cycle (ml/train.py), which logs to MLflow and registers the challenger;
+5. with `[promote] auto`: compare the new challenger with the champion (ml/promote.py) and promote it only if
+   it is significantly better. Production's computer player follows within minutes; nothing restarts.
 
 MLflow is the only state: the last cycle is the newest run tagged kind=cycle in the experiment, and its
 parameters say how many picks it trained on.
@@ -24,7 +26,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
-from ml import evaluate, features, lower_priority, train
+from ml import evaluate, features, lower_priority, promote, train
 from ml.export import DEFAULT_OUT, export, read_snapshot
 from ml.validate import FIRST_LOG_DAY, validate_snapshot
 from server.gameplay_log import DB_PATH
@@ -44,11 +46,12 @@ class Config:
     register: bool = True
     min_new_picks: int = 20
     variants: list[str] = field(default_factory=lambda: list(evaluate.VARIANTS))
+    auto_promote: bool = False
 
 
 def load_config(path: Path = DEFAULT_CONFIG) -> Config:
     raw = tomllib.loads(Path(path).read_text())
-    exp, val, tr, trig = (raw.get(k, {}) for k in ("export", "validate", "train", "trigger"))
+    exp, val, tr, trig, prom = (raw.get(k, {}) for k in ("export", "validate", "train", "trigger", "promote"))
     config = Config()
     if exp.get("db"):
         config.db = ROOT / exp["db"]
@@ -62,6 +65,7 @@ def load_config(path: Path = DEFAULT_CONFIG) -> Config:
     config.register = bool(tr.get("register", config.register))
     config.variants = list(tr.get("variants", config.variants))
     config.min_new_picks = int(trig.get("min_new_picks", config.min_new_picks))
+    config.auto_promote = bool(prom.get("auto", config.auto_promote))
     unknown = [e for e in config.embeddings if e not in features.EMBEDDING_MODELS]
     unknown += [m for m in config.models if m not in train.CONFIGS]
     unknown += [v for v in config.variants if v not in evaluate.VARIANTS]
@@ -106,7 +110,14 @@ def run(config: Config, force: bool = False,
 
     result = train.run_cycle(folder, config.embeddings, config.models, config.experiment, register=config.register,
                              encoder_factory=encoder_factory, variants=config.variants)
+    promotion = None
+    if config.auto_promote and result.get("challenger"):
+        compared = promote.compare(folder, encoder_factory=encoder_factory)
+        promotion = {"verdict": compared["verdict"], "promoted": False, "champion": None}
+        if promote.should_auto_promote(compared):
+            promotion.update(promoted=True, **promote.promote(compared))
     return {"status": "trained", "snapshot": folder, "new_snapshot": new, "picks": picks, **result,
+            "promotion": promotion,
             "reason": "forced" if force else ("first cycle" if previous is None else
                                               f"{picks - previous['picks']} new picks")}
 
@@ -136,6 +147,10 @@ def main(argv: list[str] | None = None) -> int:
     if outcome["challenger"]:
         print(f"Challenger: {outcome['challenger']['name']} -> {train.REGISTERED_MODEL} "
               f"version {outcome['challenger']['version']}")
+    if outcome.get("promotion"):
+        p = outcome["promotion"]
+        print(f"Promoted to champion: version {p['champion']} ({p['verdict']})" if p["promoted"]
+              else f"Champion kept: {p['verdict']}")
     return 0
 
 
