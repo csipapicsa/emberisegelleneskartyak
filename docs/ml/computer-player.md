@@ -29,7 +29,7 @@ flowchart LR
 |---|---|
 | `ml/serve.py` | FastAPI service. Follows MLflow aliases (re-checked every 5 min, swapped without downtime); scores card *texts*, so a card nobody has embedded yet works too (~20 ms to embed, then cached) |
 | `server/bot.py` | The seat in the game. Asks the service with a hard deadline and plays at random when there is no answer, so a slow or broken service can never stall a round |
-| Aliases | Staging plays `challenger` (every nightly winner), production plays `champion` (moved by hand after a comparison) |
+| Aliases | Staging plays `challenger` (every nightly winner), production plays `champion` (moved automatically when a challenger is significantly better) |
 
 ### The rules the computer player follows
 
@@ -103,9 +103,10 @@ stays A, and every nightly cycle repeats the comparison as the data grows.
 
 ## Promotion: challenger → champion
 
-`python -m ml.promote` scores the challenger and the champion on the same, newest test picks, prints both
-with the paired-bootstrap difference, and moves the `champion` alias only after confirmation. It refuses a
-challenger that is significantly worse. The previous champion is kept as `previous-champion`;
+`python -m ml.promote` scores the challenger and the champion on the same, newest test picks with the
+paired-bootstrap difference. The nightly pipeline runs it with `--auto` (since 2026-11-13): the `champion` alias
+moves only when the challenger is significantly better. By hand it asks before moving the alias, and it refuses
+a challenger that is significantly worse. The previous champion is kept as `previous-champion`;
 `python -m ml.promote --rollback` moves the alias back. The model service picks up an alias move within 5
 minutes, with no restart.
 
@@ -114,7 +115,7 @@ minutes, with no restart.
 ```
 code:   PR → CI (unit, ML, browser tests, image build) → merge → :main → staging (automatic)
                                           → Promote workflow (manual approval) → :prod → production
-model:  nightly training → @challenger → staging bot → ml.promote (comparison + confirmation) → @champion → production bot
+model:  nightly training → @challenger → staging bot → ml.promote --auto (only if significantly better) → @champion → production bot
 ```
 
 The computer player ships behind a switch: the game only offers it when it is configured with a model

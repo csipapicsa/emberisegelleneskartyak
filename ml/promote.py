@@ -3,10 +3,15 @@
     python -m ml.promote                 # compare, then ask before moving the alias
     python -m ml.promote --dry-run       # compare only
     python -m ml.promote --yes           # no question (scripts)
+    python -m ml.promote --auto          # promote only a significantly better challenger (the nightly pipeline)
     python -m ml.promote --rollback      # champion <-> previous-champion
 
 Production's computer player plays the version behind the "champion" alias (ml/serve.py), staging's the
-"challenger", which every nightly cycle moves (ml/train.py). This is the deliberate step in between.
+"challenger", which every nightly cycle moves (ml/train.py). This is the step in between. The nightly pipeline
+runs it automatically (`[promote] auto` in ml/pipeline.toml): every version has the same architecture and
+speed, so the only question is accuracy, and a challenger is promoted only when it is significantly better.
+"Higher MRR" alone isn't enough: nightly versions differ by far less than the test set's noise, so promoting
+every slightly higher number would swap models at random.
 
 The comparison: both versions score the test picks of the newest validated snapshot (human picks from games
 without a computer player, ml/evaluate.py). The newest games are in nobody's training data, and both models
@@ -102,6 +107,14 @@ def compare(snapshot: Path | None = None, cache_dir: Path = features.DEFAULT_CAC
     return result
 
 
+# The verdicts that promote without a person: the first model ever, or one that is better beyond the noise.
+AUTO_VERDICTS = ("first champion", "significantly better")
+
+
+def should_auto_promote(result: dict) -> bool:
+    return result["verdict"] in AUTO_VERDICTS
+
+
 def promote(result: dict) -> dict:
     """Move the aliases as compare() found them; returns {"champion": new, "previous": old or None}."""
     import mlflow
@@ -161,6 +174,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--yes", action="store_true", help="promote without asking")
     parser.add_argument("--force", action="store_true", help="promote even a significantly worse challenger")
     parser.add_argument("--rollback", action="store_true", help="swap champion and previous-champion")
+    parser.add_argument("--auto", action="store_true",
+                        help="promote only a significantly better challenger (or the first model), no question")
     args = parser.parse_args(argv)
     lower_priority()
     try:
@@ -174,6 +189,13 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     print(report(result))
     if args.dry_run or result["verdict"] == "already champion":
+        return 0
+    if args.auto:
+        if not should_auto_promote(result):
+            print(f"Champion kept: {result['verdict']}.")
+            return 0
+        moved = promote(result)
+        print(f"Champion: version {moved['champion']} (previous-champion: {moved['previous'] or 'none'})")
         return 0
     if result["verdict"] == "significantly worse" and not args.force:
         print("Not promoted: the challenger is significantly worse (use --force to promote anyway).")

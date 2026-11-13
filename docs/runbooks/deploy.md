@@ -10,7 +10,7 @@ after the root prompt appears, not together with `sudo -i`).
 code:   PR → CI (lint, unit, ML, browser tests against the image) → merge → :main → staging, automatically
                        → Promote workflow, manual approval → :prod → production
 model:  nightly training → @challenger → staging's computer player
-                       → python -m ml.promote (comparison + confirmation) → @champion → production's computer player
+                       → ml.promote --auto in the same nightly run (only if significantly better) → @champion → production's computer player
 ```
 
 - **Staging** (`staging.emberisegelleneskartyak.hu`) follows `:main`: every merged commit that passed CI is
@@ -34,7 +34,7 @@ curl -s http://127.0.0.1:8010/healthz         # {"status":"ok","version":"<the p
 
 **Roll back code:** the same workflow with the previous commit (from the summary of the last run).
 
-**Release a model:** `venv-ml/bin/python -m ml.promote` (see [../ml/pipeline.md](../ml/pipeline.md#promoting-a-model)).
+**Release a model:** automatic: the nightly run promotes a significantly better challenger. By hand: `venv-ml/bin/python -m ml.promote` (see [../ml/pipeline.md](../ml/pipeline.md#promoting-a-model)).
 **Roll back a model:** `venv-ml/bin/python -m ml.promote --rollback`. Both take effect within 5 minutes without a
 restart.
 

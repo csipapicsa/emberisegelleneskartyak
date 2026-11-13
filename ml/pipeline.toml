@@ -23,6 +23,11 @@ variants = ["A", "B", "C"]
 # last cycle in MLflow. Most games are at weekends, so most weekday nights there's nothing to do.
 min_new_picks = 20
 
+[promote]
+# After training, promote the new challenger to champion (production's computer player) without a person,
+# but only if it is significantly better on the newest test picks (ml/promote.py --auto).
+auto = true
+
 [cloud]
 # `python -m ml.cloud`: the same training as a GCP Cloud Run Job (docs/ml/gcp-setup.md).
 project = "emberisegelleneskartya"

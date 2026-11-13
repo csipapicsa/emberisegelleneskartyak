@@ -126,3 +126,26 @@ def test_rollback_without_a_previous_champion_fails(tmp_path, monkeypatch, capsy
         assert "no 'previous-champion'" in capsys.readouterr().err
     finally:
         mlflow.set_tracking_uri(None)
+
+
+@pytest.mark.parametrize("verdict, promoted", [
+    ("first champion", True), ("significantly better", True),
+    ("no significant difference", False), ("significantly worse", False),
+])
+def test_auto_promotes_only_beyond_the_noise(monkeypatch, capsys, verdict, promoted):
+    """--auto (the nightly pipeline) moves the champion only for the first model or a significantly better one."""
+    class S:
+        version = "8"
+        embedding = "e5"
+        metrics = {"mrr": 0.4, "top1": 0.2, "top3": 0.45}
+    result = {"snapshot": "s", "n_test": 700, "n_games": 20, "challenger": S(), "champion": None,
+              "bootstrap": None, "verdict": verdict}
+    calls = []
+    monkeypatch.setattr(promote, "compare", lambda snapshot=None: result)
+    monkeypatch.setattr(promote, "promote", lambda r: calls.append(r) or {"champion": "8", "previous": "7"})
+    monkeypatch.setattr("builtins.input", lambda prompt: pytest.fail("--auto must never ask"))
+
+    assert promote.main(["--auto"]) == 0
+    assert bool(calls) is promoted
+    out = capsys.readouterr().out
+    assert ("Champion: version 8" in out) if promoted else (f"Champion kept: {verdict}." in out)
