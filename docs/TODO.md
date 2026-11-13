@@ -11,10 +11,12 @@ In priority order within each section. Finished work moves to the worklogs.
          environment `production`), runbook: [runbooks/deploy.md](runbooks/deploy.md) (2026-11-12).
    - [x] Rehearsal: the production image on a copy of production's databases served the same editions and
          played a full three-player browser round (2026-11-12).
-   - [ ] The cutover itself: needs root and a quiet moment (runbook, "One-time: move production into its
-         container"). Keep the old service for rollback.
-   - [ ] Rollback drill: the previous image to production and back (the Promote workflow with an older commit).
-   - [ ] Backup restore drill: restore into a temporary folder, `PRAGMA integrity_check`, start the app on it.
+   - [x] The cutover (2026-11-13): production runs as `eek-prod.container`, data in `/srv/eek/prod`, the
+         old host service is disabled but kept for rollback. First release through Promote: e5cd8d4.
+   - [x] Rollback drill (2026-11-13): 5a6e810 and back with Promote; 10 s and 6 s without the site.
+   - [x] Backup restore drill (2026-11-13): `scripts/restore_drill.py` restores the newest backup set into a
+         temporary folder, runs `PRAGMA integrity_check`, starts the image on it and compares the editions.
+         Passed in 5 s on the real backups.
    - [ ] CI deploy check: after a merge, wait until staging's `/healthz` shows the new commit (GitHub
          environment `staging`).
    - [x] Disk: 93% → 84% (local LLM models removed). Still to free: pip caches, old images (~5 GB).

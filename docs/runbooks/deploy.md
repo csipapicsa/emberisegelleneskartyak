@@ -46,6 +46,26 @@ curl -s http://127.0.0.1:8011/healthz         # the same for staging
 journalctl CONTAINER_NAME=eek-model -n 20     # "loaded pick-model version N"
 ```
 
+## Drills
+
+Rehearsals of the two recoveries, so they're routine before they're needed.
+
+**Rollback drill:** promote the previous commit, wait until `/healthz` shows it, promote the current commit
+again. Do it when nobody is playing (each switch restarts production).
+
+**Backup restore drill:** restores the newest backup set into a temporary folder, runs `PRAGMA
+integrity_check` on every database, starts the production image on the copy (port 8012, a throwaway privacy
+secret) and compares its editions with production's. Nothing touches production. As root:
+
+```bash
+sudo -u eek python3 /opt/emberisegellenes_kartyak/scripts/restore_drill.py     # ends with RESTORE DRILL PASSED
+```
+
+| Date | Drill | Result |
+|---|---|---|
+| 2026-11-13 | Rollback e5cd8d4 → 5a6e810 → e5cd8d4 | both switches worked; live 42 s and 2 min after the tag moved (auto-update runs every 5 min); 10 s and 6 s without the site |
+| 2026-11-13 | Restore of the real backup set 20261113T052855Z, as `eek` | passed in 5 s: 6 databases ok, image e5cd8d4 healthy on the copy, same 16 editions |
+
 ## Release the computer player on production (host service)
 
 Production still runs on the host (`emberisegellenes.service`, from `/opt/emberisegellenes_kartyak`). The
