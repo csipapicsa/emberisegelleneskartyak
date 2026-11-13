@@ -17,11 +17,11 @@ from contextlib import asynccontextmanager, suppress
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Request, WebSocket
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 
-from server import bot, card_search, card_seen, chat_db, edition_display, gameplay_log, print_cards
+from server import bot, card_search, card_seen, chat_db, edition_display, gameplay_log, metrics, print_cards
 from server import game as game_logic
 from server.analytics import get_stats, log_event
 from server.db import (
@@ -48,7 +48,7 @@ from server.messages_db import (
 from server.messages_db import ensure_tables as ensure_msg_tables
 from server.messages_db import get_conn as get_msg_conn
 from server.privacy import PrivacyConfigurationError, pseudonymize_ip
-from server.room import Player, create_room, delete_room, get_room, room_of_player
+from server.room import Player, all_rooms, create_room, delete_room, get_room, room_of_player
 from server.session import create_or_get_session
 from server.voice import check_ice_rate, generate_turn_credentials, validate_signal
 
@@ -198,6 +198,20 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 
+@app.middleware("http")
+async def count_requests(request: Request, call_next):
+    """Count and time every HTTP request for /metrics, by route template (WebSockets aren't HTTP requests)."""
+    start = time.perf_counter()
+    status = 500  # an exception escaping the app is answered with a 500
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        return response
+    finally:
+        metrics.observe_request(request.method, metrics.route_of(request.scope), status,
+                                time.perf_counter() - start)
+
+
 @app.get("/api/chat")
 async def api_get_chat():
     conn = get_msg_conn()
@@ -239,6 +253,10 @@ class ConnectionManager:
                 pass
         room_sockets[session_id] = ws
 
+    def count(self) -> int:
+        """Open sockets across all rooms (for /metrics)."""
+        return sum(len(room_sockets) for room_sockets in self._sockets.values())
+
     def disconnect(self, room_code: str, session_id: str) -> None:
         room_sockets = self._sockets.get(room_code)
         if room_sockets:
@@ -278,6 +296,7 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+metrics.register_live_state(all_rooms, manager.count, lambda: bot.stats)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -569,6 +588,16 @@ async def api_config():
 
 # The commit the running code was built from; the container image sets it at build time.
 VERSION = os.environ.get("EEK_VERSION", "dev")
+metrics.BUILD_INFO.labels(VERSION).set(1)
+
+
+@app.get("/metrics", include_in_schema=False)
+async def prometheus_metrics(request: Request):
+    """Prometheus scrapes this on 127.0.0.1. Requests through nginx carry its proxy headers: 404 for them."""
+    if metrics.is_proxied(request.headers):
+        raise HTTPException(404)
+    body, content_type = metrics.exposition()
+    return Response(body, media_type=content_type)
 
 
 @app.api_route("/healthz", methods=["GET", "HEAD"], include_in_schema=False)
