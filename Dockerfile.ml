@@ -12,7 +12,7 @@
 # Data lives in the /data volume: gameplay.db, snapshots/, embeddings/ (cache) and huggingface/ (model
 # downloads). The embedding models are not baked in: the server ships the embeddings cache with the
 # snapshot, so a training job normally never loads them.
-FROM docker.io/library/python:3.11-slim-bookworm@sha256:e8c69d86735f6df3efa06b324694fe51f0422785f83a3bd463052636c2421944 AS train
+FROM docker.io/library/python:3.15-slim-bookworm@sha256:96599df822d0e1c6bb700014a05c7f3c8cabc6e0f7ff3c4f9f69cee033b4b5d9 AS train
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
