@@ -50,7 +50,11 @@ In priority order within each section. Finished work moves to the worklogs.
          features, the black card × white card fit (experiment notebooks: `python -m ml.notebooks`), an LLM
          as a ceiling probe, predicting the vote winner instead of the pick.
 3. Container image vulnerability scan (Trivy), report only at first, together with the Dependabot PRs.
-4. Metrics: requests, 5xx rate, p95 latency, open WebSockets → Prometheus → Grafana, with one alert.
+4. Metrics (2026-11-13): `/metrics` (requests and latency per route, 5xx, rooms, players, WebSockets, games,
+   the computer player and the model service), three alert rules with promtool tests in CI, a Grafana dashboard
+   from a file, runbook [runbooks/monitoring.md](runbooks/monitoring.md). Scraped by the server-wide Prometheus.
+   - [ ] Training freshness alert (no successful nightly cycle in 26 h): the pipeline has to publish a metric.
+   - [ ] The computer player's win rate in blind votes per model version (milestone 5's online metric).
 5. A small WebSocket load test (10 → 25 → 50 clients): where the first bottleneck is.
 6. README: an "Engineering decisions" section (why SQLite, why rooms live in one process, the limits, what CI
    protects and what it doesn't) and an architecture diagram.

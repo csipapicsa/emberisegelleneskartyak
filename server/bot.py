@@ -35,7 +35,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from server import gameplay_log
+from server import gameplay_log, metrics
 
 if TYPE_CHECKING:
     from server.main import ConnectionManager
@@ -105,6 +105,7 @@ async def ask(black: str, cards: list[str], timeout: float) -> Answer | None:
     url = model_url()
     if not url or timeout < MIN_REQUEST_TIME or not cards:
         return None
+    start = time.perf_counter()
     try:
         body = {"black": black, "cards": cards}
         if os.environ.get(MODEL_NAME_ENV):
@@ -114,10 +115,12 @@ async def ask(black: str, cards: list[str], timeout: float) -> Answer | None:
         if len(scores) != len(cards) or len(probs) != len(cards) or not all(map(math.isfinite, scores + probs)):
             raise ValueError(f"{len(cards)} cards, got {len(scores)} scores / {len(probs)} probs")
         cutoff = data.get("refresh_below")
+        metrics.observe_model_request(True, time.perf_counter() - start)
         return Answer(str(data["model"]), str(data["version"]), scores, probs,
                       float(cutoff) if cutoff is not None else None)
     except Exception as exc:  # noqa: BLE001 - any failure means "play at random"
         logger.warning("model service: %s: %s", type(exc).__name__, exc)
+        metrics.observe_model_request(False, time.perf_counter() - start)
         return None
 
 

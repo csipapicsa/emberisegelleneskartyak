@@ -68,6 +68,13 @@ jobs:
       - run: python -m pip install "$(grep -oE '^ruff==[^ ]+' requirements-dev.txt)"
       # "github" format turns findings into annotations on the PR's changed lines.
       - run: python -m ruff check --output-format=github server tests scripts ml notebooks
+      # The game's alert rules (deploy/monitoring): syntax and unit tests, with the same Prometheus version
+      # the server runs.
+      - name: Alert rules (promtool)
+        run: >-
+          docker run --rm --entrypoint promtool -v "$PWD/deploy/monitoring:/w:ro" -w /w/tests
+          quay.io/prometheus/prometheus:v3.15.1@sha256:d445d1806b38f85b5c394a1b87f94113fde0473b45245922c2e8b1bd41fa68ae
+          test rules eek.rules.test.yml
 
   secret-scan:
     # Always runs: a secret pasted into a Markdown file is still a leak.

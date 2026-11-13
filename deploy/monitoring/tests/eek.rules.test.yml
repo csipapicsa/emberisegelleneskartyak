@@ -1,0 +1,107 @@
+# promtool unit tests for eek.rules.yml. Run from deploy/monitoring/tests:
+#   promtool test rules eek.rules.test.yml
+rule_files:
+  - ../eek.rules.yml
+evaluation_interval: 30s
+
+tests:
+  - name: the computer player falling back to random fires; a few fallbacks don't
+    interval: 1m
+    input_series:
+      # prod: 30% random (3 of 10 decisions a minute are random). staging: 1 in 20 random.
+      - series: 'eek_computer_player_decisions_total{env="prod", decision="model"}'
+        values: "0+7x90"
+      - series: 'eek_computer_player_decisions_total{env="prod", decision="random"}'
+        values: "0+3x90"
+      - series: 'eek_computer_player_decisions_total{env="staging", decision="model"}'
+        values: "0+19x90"
+      - series: 'eek_computer_player_decisions_total{env="staging", decision="random"}'
+        values: "0+1x90"
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: EEKBotFallingBack
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: EEKBotFallingBack
+        exp_alerts:
+          - exp_labels: {severity: warning, project: eek, env: prod}
+            exp_annotations:
+              summary: "Computer player on prod: 30% of decisions random in the last hour"
+              runbook: EEKBotFallingBack
+
+  - name: too few decisions to judge never fires
+    interval: 10m
+    input_series:
+      - series: 'eek_computer_player_decisions_total{env="prod", decision="model"}'
+        values: "0x12"
+      - series: 'eek_computer_player_decisions_total{env="prod", decision="random"}'
+        values: "0 1 2 3 4 5 6 7 8 9 9 9 9"
+    alert_rule_test:
+      - eval_time: 2h
+        alertname: EEKBotFallingBack
+        exp_alerts: []
+
+  - name: a restart (counter reset) is not a spike of fallbacks
+    interval: 1m
+    input_series:
+      - series: 'eek_computer_player_decisions_total{env="prod", decision="model"}'
+        values: "0+10x40 0+10x40"
+      - series: 'eek_computer_player_decisions_total{env="prod", decision="random"}'
+        values: "0x40 0x40"
+    alert_rule_test:
+      - eval_time: 75m
+        alertname: EEKBotFallingBack
+        exp_alerts: []
+
+  - name: server errors over 5% with real traffic fire; a lone 500 at night doesn't
+    interval: 1m
+    input_series:
+      - series: 'eek_http_requests_total{env="prod", method="GET", route="/api/editions", status="200"}'
+        values: "0+20x30"
+      - series: 'eek_http_requests_total{env="prod", method="GET", route="/api/editions", status="500"}'
+        values: "0x10 0+5x20"
+      - series: 'eek_http_requests_total{env="staging", method="GET", route="/", status="200"}'
+        values: "0x30"
+      - series: 'eek_http_requests_total{env="staging", method="GET", route="/", status="500"}'
+        values: "0x10 1x20"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: EEKServerErrors
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: EEKServerErrors
+        exp_alerts:
+          - exp_labels: {severity: critical, project: eek, env: prod}
+            exp_annotations:
+              summary: "20% of requests on prod fail with a 5xx"
+              runbook: EEKServerErrors
+
+  - name: slow requests fire, slow printing does not
+    interval: 1m
+    input_series:
+      # /api/print takes 5 s (above every bucket up to 5): ignored. /api/editions: all requests in the 2.5 s bucket.
+      - series: 'eek_http_request_duration_seconds_bucket{env="prod", route="/api/print/{name}", le="5"}'
+        values: "0+10x40"
+      - series: 'eek_http_request_duration_seconds_bucket{env="prod", route="/api/print/{name}", le="+Inf"}'
+        values: "0+10x40"
+      - series: 'eek_http_request_duration_seconds_count{env="prod", route="/api/print/{name}"}'
+        values: "0+10x40"
+      - series: 'eek_http_request_duration_seconds_bucket{env="prod", route="/api/editions", le="1"}'
+        values: "0x40"
+      - series: 'eek_http_request_duration_seconds_bucket{env="prod", route="/api/editions", le="2.5"}'
+        values: "0x5 0+10x35"
+      - series: 'eek_http_request_duration_seconds_bucket{env="prod", route="/api/editions", le="+Inf"}'
+        values: "0x5 0+10x35"
+      - series: 'eek_http_request_duration_seconds_count{env="prod", route="/api/editions"}'
+        values: "0x5 0+10x35"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: EEKSlowRequests
+        exp_alerts: []
+      - eval_time: 35m
+        alertname: EEKSlowRequests
+        exp_alerts:
+          - exp_labels: {severity: warning, project: eek, env: prod}
+            exp_annotations:
+              summary: "95% of requests on prod take up to 2.425s (over 1 s)"
+              runbook: EEKSlowRequests

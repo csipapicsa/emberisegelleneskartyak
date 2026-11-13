@@ -1,0 +1,44 @@
+# Alert rules for the game (EEK). Loaded by the server-wide Prometheus, which scrapes /metrics on production
+# (127.0.0.1:8010, env="prod") and staging (127.0.0.1:8011, env="staging"). What each alert means and what to do
+# first: docs/runbooks/monitoring.md (the `runbook` annotation is the heading there).
+# Tests: tests/eek.rules.test.yml (promtool, run in CI).
+groups:
+  - name: eek
+    rules:
+      # The computer player falls back to random cards when the model service doesn't answer in time. A few
+      # fallbacks are normal (cold start, a slow moment); a fifth of all decisions in an hour is not.
+      - alert: EEKBotFallingBack
+        expr: |
+          sum by (env) (increase(eek_computer_player_decisions_total{decision="random"}[1h]))
+            / sum by (env) (increase(eek_computer_player_decisions_total[1h])) > 0.2
+          and sum by (env) (increase(eek_computer_player_decisions_total[1h])) >= 10
+        for: 10m
+        labels: {severity: warning, project: eek}
+        annotations:
+          summary: "Computer player on {{ $labels.env }}: {{ $value | humanizePercentage }} of decisions random in the last hour"
+          runbook: EEKBotFallingBack
+
+      # Server errors as a share of requests, with a minimum of traffic so one failed request at night
+      # doesn't page anyone.
+      - alert: EEKServerErrors
+        expr: |
+          sum by (env) (rate(eek_http_requests_total{status=~"5.."}[10m]))
+            / sum by (env) (rate(eek_http_requests_total[10m])) > 0.05
+          and sum by (env) (increase(eek_http_requests_total[10m])) >= 20
+        for: 5m
+        labels: {severity: critical, project: eek}
+        annotations:
+          summary: "{{ $value | humanizePercentage }} of requests on {{ $labels.env }} fail with a 5xx"
+          runbook: EEKServerErrors
+
+      # Slow pages and API calls. Printing (PDF generation) is slow by design and left out.
+      - alert: EEKSlowRequests
+        expr: |
+          histogram_quantile(0.95, sum by (env, le) (
+            rate(eek_http_request_duration_seconds_bucket{route!~"/api/print.*|/metrics"}[10m]))) > 1
+          and sum by (env) (increase(eek_http_request_duration_seconds_count{route!~"/api/print.*|/metrics"}[10m])) >= 20
+        for: 15m
+        labels: {severity: warning, project: eek}
+        annotations:
+          summary: "95% of requests on {{ $labels.env }} take up to {{ $value | humanizeDuration }} (over 1 s)"
+          runbook: EEKSlowRequests

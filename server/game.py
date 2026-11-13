@@ -8,7 +8,7 @@ import time
 from collections import Counter
 from typing import TYPE_CHECKING
 
-from server import bot, card_seen, gameplay_log
+from server import bot, card_seen, gameplay_log, metrics
 from server.analytics import log_event
 from server.deck import build_deck, deal_hand, draw_black, draw_card, reshuffle_into_deck
 from server.room import Room
@@ -121,6 +121,7 @@ async def start_game(room: Room, black_cards: list[dict], white_cards: list[dict
         player.hand = deal_hand(room.white_deck, 10, record=not player.is_bot)
 
     gameplay_log.game_started(room)
+    metrics.GAMES_STARTED.inc()
     await manager.broadcast(room.code, {"event": "game_started"})
     await start_round(room, manager)
 
