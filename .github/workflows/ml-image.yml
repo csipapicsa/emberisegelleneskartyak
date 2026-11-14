@@ -42,7 +42,7 @@ jobs:
       REPO_IMAGE: ghcr.io/csipapicsa/eek-ml-train
       GCP_IMAGE: europe-west4-docker.pkg.dev/emberisegelleneskartya/eek/eek-ml-train
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Commit
         run: echo "SHA=${GITHUB_SHA::7}" >> "$GITHUB_ENV"
