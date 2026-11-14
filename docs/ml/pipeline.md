@@ -45,6 +45,12 @@ systemctl start eek-ml-train.service            # a first run by hand
 journalctl -u eek-ml-train.service -n 20        # what it did: trained, or why it skipped
 ```
 
+After each run the unit records how it ended for Prometheus
+([scripts/record_unit_result.sh](../../scripts/record_unit_result.sh)), which alerts on a failed run and on no
+run for 26 hours ([runbook](../runbooks/monitoring.md#eektrainingfailed)). It needs the `metrics` group and
+node_exporter's textfile directory, both created by the monitoring stack's `install.sh`: run that first, or the
+unit won't start.
+
 ## Single steps
 
 ```bash

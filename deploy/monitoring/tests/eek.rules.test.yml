@@ -105,3 +105,40 @@ tests:
             exp_annotations:
               summary: "95% of requests on prod take up to 2.425s (over 1 s)"
               runbook: EEKSlowRequests
+
+  - name: a failed training run fires with systemd's result; a successful one doesn't
+    interval: 1m
+    input_series:
+      - series: 'eek_ml_train_last_run_success{job="node", result="exit-code"}'
+        values: "0x10"
+      - series: 'eek_ml_train_last_run_success{job="node", result="success"}'
+        values: "_x10 1x10"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: EEKTrainingFailed
+        exp_alerts:
+          - exp_labels: {severity: warning, project: eek, job: node, result: exit-code}
+            exp_annotations:
+              summary: "Nightly training failed (exit-code)"
+              runbook: EEKTrainingFailed
+      - eval_time: 15m
+        alertname: EEKTrainingFailed
+        exp_alerts: []
+
+  - name: training that hasn't run for over 26 hours fires
+    interval: 1h
+    input_series:
+      # The last run ended at t=0 (timestamp 0); nothing ran after it.
+      - series: 'eek_ml_train_last_run_timestamp_seconds{job="node"}'
+        values: "0x30"
+    alert_rule_test:
+      - eval_time: 25h
+        alertname: EEKTrainingMissing
+        exp_alerts: []
+      - eval_time: 27h
+        alertname: EEKTrainingMissing
+        exp_alerts:
+          - exp_labels: {severity: warning, project: eek, job: node}
+            exp_annotations:
+              summary: "Nightly training last ran 1d 3h 0m 0s ago"
+              runbook: EEKTrainingMissing

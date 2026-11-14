@@ -39,6 +39,10 @@ curl -s 127.0.0.1:8011/metrics | grep ^eek_      # staging
 | `eek_model_requests_total{outcome}`, `eek_model_request_duration_seconds` | counter, histogram | calls to the model service as the game sees them |
 | `eek_build_info{version}` | gauge | the running commit |
 | `process_*`, `python_*` | | memory, CPU, open files, garbage collection of the game process |
+| `eek_ml_train_last_run_success{result}`, `eek_ml_train_last_run_timestamp_seconds`, `eek_ml_train_last_success_timestamp_seconds` | gauge | how the last nightly training ended (`result`: systemd's `SERVICE_RESULT`); not from `/metrics`, see below |
+
+The training metrics come from node_exporter's textfile collector: after every run, `eek-ml-train.service`
+writes `/var/lib/node_exporter/textfile/eek_ml_train*.prom` (`scripts/record_unit_result.sh`).
 
 Rooms, players, sockets and the computer player's counts are read when Prometheus scrapes, not counted
 separately, so they can't drift from the real state. Counters start from zero when the container restarts
@@ -82,3 +86,25 @@ requests in 10 minutes).
    radio's text-to-speech and the nightly training.
 3. The game process itself: dashboard *Game process CPU / memory*. Many rooms at once? A WebSocket load test
    (TODO) will tell where the limit is.
+
+### EEKTrainingFailed
+
+The last nightly training run (04:00) failed. The alert names systemd's result: `exit-code` (the pipeline
+stopped: a failed validation check, MLflow down, an exception), `timeout` (over 1 hour), `oom-kill` (over its
+3 GB), `signal`. It stays on until the next run succeeds. The game isn't affected: the computer player keeps
+the current champion.
+
+1. Why: `journalctl -u eek-ml-train -n 30`. A failed check prints the snapshot's `validation.json` path; its
+   `examples` name the game, round and seat.
+2. A failed check is usually a check that is too strict for a real game situation, not bad data (PR #41,
+   PR #67): look at those rows, fix the check with a test, and add the situation to
+   `tests/ml/test_validate.py`.
+3. Run it again after the fix, without waiting for the night: `systemctl start eek-ml-train` (as root).
+
+### EEKTrainingMissing
+
+No training run has ended for over 26 hours: the timer is off or the run hangs.
+
+1. `systemctl list-timers eek-ml-train.timer`: enabled, and when is the next run?
+2. `systemctl status eek-ml-train`: still running (stuck)? The unit's 1 hour timeout should end it.
+3. Re-enable: `systemctl enable --now eek-ml-train.timer` (as root).
