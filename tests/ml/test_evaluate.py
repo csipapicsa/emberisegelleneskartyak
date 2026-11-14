@@ -203,3 +203,27 @@ def test_paired_bootstrap_by_game():
     by_game = evaluate.paired_bootstrap(a, a + shared, games)
     by_pick = evaluate.paired_bootstrap(a, a + shared, np.arange(600))
     assert (by_game["hi"] - by_game["lo"]) > 2 * (by_pick["hi"] - by_pick["lo"])
+
+
+def test_random_split_shuffles_whole_games_reproducibly():
+    games = [{"game_id": g, "day": g} for g in range(1, 21)]
+    examples = [ex(g) for g in range(1, 21) for _ in range(3)]
+    first = evaluate.split_by_game(examples, games, shuffle_seed=0)
+    by_split = {s: {e.game_id for e in first[s]} for s in evaluate.SPLITS}
+    assert sorted(len(v) for v in by_split.values()) == [4, 4, 12]
+    assert set.union(*by_split.values()) == set(range(1, 21)) and sum(len(v) for v in by_split.values()) == 20
+    assert by_split["test"] != {17, 18, 19, 20}, "not the newest games"
+    assert evaluate.split_by_game(examples, games, shuffle_seed=0) == first
+    assert evaluate.split_by_game(examples, games, shuffle_seed=1) != first
+
+
+def test_random_split_trains_on_every_computer_player_game():
+    t = split_tables()
+    by = {v: evaluate.make_splits(t, v, split="random", seed=0) for v in evaluate.VARIANTS}
+    for s in ("val", "test"):
+        assert by["A"][s] == by["B"][s] == by["C"][s]
+        assert by["A"][s] and not any(e.bot_game for e in by["A"][s])
+    assert not any(e.bot_game for e in by["A"]["train"])
+    assert {e.game_id for e in by["B"]["train"] if e.bot_game} == {3, 9}, "both bot games, not only older ones"
+    with pytest.raises(ValueError, match="unknown split"):
+        evaluate.make_splits(t, "A", split="day")

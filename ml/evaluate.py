@@ -8,6 +8,9 @@ play? A model gives every card in the hand a probability.
 - Split: by game, in time order (game day, then game ID, which grows with time): the oldest games train,
   the next ones validate (model choice, early stopping), the newest ones test. No game is in two splits,
   so a model is always tested on games it has never seen.
+- Random split (split="random", make_splits): games are shuffled instead (fixed seed), still whole. A few
+  weeks of data have no real "future": players come and go, so time order mostly measures who played last
+  weekend. Games with a computer player always train (validation and test take none), so B and C use them.
 - Data variants (make_splits): validation and test are always human picks from games *without* a computer
   player, so every variant is measured on the same, undisturbed human behaviour. Only training differs:
     A  human picks from games without a computer player (the default, and what gets registered);
@@ -31,6 +34,7 @@ import numpy as np
 HAND_SIZE = 10
 SPLITS = ("train", "val", "test")
 VARIANTS = ("A", "B", "C")
+SPLIT_METHODS = ("time", "random")
 
 
 @dataclass(frozen=True)
@@ -93,14 +97,22 @@ def vote_examples(tables: dict[str, list[dict]]) -> list[Example]:
 
 
 def make_splits(tables: dict[str, list[dict]], variant: str = "A", val_share: float = 0.2,
-                test_share: float = 0.2) -> dict[str, list[Example]]:
-    """The training cycle's split for one data variant (see the module docstring). Games are split in time
-    order as by split_by_game, over every game with human picks; validation and test then keep only games
-    without a computer player, so they are the same for every variant."""
+                test_share: float = 0.2, split: str = "time", seed: int = 0) -> dict[str, list[Example]]:
+    """The training cycle's split for one data variant (see the module docstring). split="time": games are
+    split in time order as by split_by_game, over every game with human picks; validation and test then keep
+    only games without a computer player, so they are the same for every variant. split="random": the games
+    without a computer player are shuffled (seed) into train, validation and test; the others all train."""
     if variant not in VARIANTS:
         raise ValueError(f"unknown data variant {variant!r}; choose from {', '.join(VARIANTS)}")
+    if split not in SPLIT_METHODS:
+        raise ValueError(f"unknown split {split!r}; choose from {', '.join(SPLIT_METHODS)}")
     picks = pick_examples(tables)
-    periods = split_by_game(picks, tables["games"], val_share, test_share)
+    if split == "time":
+        periods = split_by_game(picks, tables["games"], val_share, test_share)
+    else:
+        human = split_by_game([e for e in picks if not e.bot_game], tables["games"], val_share, test_share,
+                              shuffle_seed=seed)
+        periods = {**human, "train": human["train"] + [e for e in picks if e.bot_game]}
     period_of = {e.game_id: s for s in SPLITS for e in periods[s]}
     out = {s: [e for e in periods[s] if not e.bot_game] for s in ("val", "test")}
     out["train"] = [e for e in periods["train"] if variant != "A" or not e.bot_game]
@@ -112,10 +124,13 @@ def make_splits(tables: dict[str, list[dict]], variant: str = "A", val_share: fl
 
 
 def split_by_game(examples: Sequence[Example], games: Sequence[dict], val_share: float = 0.2,
-                  test_share: float = 0.2) -> dict[str, list[Example]]:
-    """Oldest games train, newer validate, newest test; at least one game each."""
+                  test_share: float = 0.2, shuffle_seed: int | None = None) -> dict[str, list[Example]]:
+    """Oldest games train, newer validate, newest test; at least one game each. With shuffle_seed the games
+    are shuffled first (the same seed gives the same split)."""
     day = {g["game_id"]: g["day"] for g in games}
     ordered = sorted({e.game_id for e in examples}, key=lambda g: (day[g], g))
+    if shuffle_seed is not None:
+        ordered = [ordered[i] for i in np.random.default_rng(shuffle_seed).permutation(len(ordered))]
     n_test = max(1, round(len(ordered) * test_share))
     n_val = max(1, round(len(ordered) * val_share))
     if len(ordered) - n_test - n_val < 1:
