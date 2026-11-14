@@ -238,7 +238,11 @@ def _hand_changes(d: _Data) -> Iterator[str]:
             yield f"{_where(last)}: hand change without a decision"
             continue
         hand = set(decision["hand"])
-        if len(last["removed"]) != len(last["added"]) or not set(last["added"]) <= hand or set(last["removed"]) & hand:
+        # A new hand can deal back cards from the old one: the old hand goes to the discard pile first, and a
+        # small deck runs out and reshuffles it (server/game.py deal_new_hand). Only cards removed and not
+        # added again must be gone.
+        gone = set(last["removed"]) - set(last["added"])
+        if len(last["removed"]) != len(last["added"]) or not set(last["added"]) <= hand or gone & hand:
             yield f"{_where(last)}: last change doesn't end in the logged hand"
 
 
