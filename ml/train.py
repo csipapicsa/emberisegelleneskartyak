@@ -219,7 +219,8 @@ def run_cycle(snapshot: Path, embeddings: Sequence[str] = tuple(features.EMBEDDI
               model_types: Sequence[str] = MODEL_TYPES, experiment: str = EXPERIMENT, register: bool = True,
               cache_dir: Path = features.DEFAULT_CACHE,
               encoder_factory: features.EncoderFactory = features.SentenceTransformerEncoder,
-              variants: Sequence[str] = VARIANTS, register_variant: str = "A") -> dict:
+              variants: Sequence[str] = VARIANTS, register_variant: str = "A", split: str = "time",
+              seed: int = 0) -> dict:
     """Train and log one cycle: every embedding x structure x data variant (ml/evaluate.py). Only the
     register_variant's models are logged as models (the others log metrics, to keep the store small), and
     the challenger comes from them; the other variants are compared with it on the same validation and
@@ -231,7 +232,7 @@ def run_cycle(snapshot: Path, embeddings: Sequence[str] = tuple(features.EMBEDDI
     variants = [register_variant, *[v for v in variants if v != register_variant]]
     manifest = require_valid(snapshot)
     _, tables = read_snapshot(snapshot)
-    splits_of = {v: evaluate.make_splits(tables, v) for v in variants}
+    splits_of = {v: evaluate.make_splits(tables, v, split=split, seed=seed) for v in variants}
     splits = splits_of[register_variant]
     targets = {s: np.array([e.target for e in splits[s]]) for s in evaluate.SPLITS}
     games = {s: [e.game_id for e in splits[s]] for s in ("val", "test")}
@@ -258,9 +259,12 @@ def run_cycle(snapshot: Path, embeddings: Sequence[str] = tuple(features.EMBEDDI
                               digest=manifest["content_hash"][:16])
     runs = []
     trained_on = time.strftime("%Y-%m-%d")
-    with mlflow.start_run(run_name=f"cycle {trained_on} · data to {snapshot.name}") as parent:
-        mlflow.set_tags({**tags, "kind": "cycle"})
-        mlflow.log_params({**split_sizes, "split": "by game, time order; val/test: games without a computer player",
+    split_desc = ("by game, time order; val/test: games without a computer player" if split == "time" else
+                  f"by game, shuffled (seed {seed}); val/test: games without a computer player")
+    run_name = f"cycle {trained_on} · data to {snapshot.name}" + ("" if split == "time" else f" · random split, seed {seed}")
+    with mlflow.start_run(run_name=run_name) as parent:
+        mlflow.set_tags({**tags, "kind": "cycle", "split": split})
+        mlflow.log_params({**split_sizes, "split": split_desc, "split_seed": seed if split == "random" else "",
                            "task": "one-blank picks, humans only", "variants": ",".join(variants),
                            "register_variant": register_variant})
         mlflow.log_input(dataset, context="training")
@@ -368,6 +372,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--experiment", default=EXPERIMENT, help=f"MLflow experiment (default: {EXPERIMENT})")
     parser.add_argument("--no-register", action="store_true", help="don't register the best model as challenger")
     parser.add_argument("--variants", default=",".join(VARIANTS), help=f"comma-separated, from: {', '.join(VARIANTS)}")
+    parser.add_argument("--split", choices=evaluate.SPLIT_METHODS, default="time",
+                        help="games in time order (default) or shuffled; see ml/evaluate.py")
+    parser.add_argument("--seed", type=int, default=0, help="shuffle seed for --split random (default: 0)")
     args = parser.parse_args(argv)
     variants = [v.strip() for v in args.variants.split(",") if v.strip()]
     embeddings = [e.strip() for e in args.embeddings.split(",") if e.strip()]
@@ -381,7 +388,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         snapshot = args.snapshot or latest_snapshot(DEFAULT_OUT)
         result = run_cycle(snapshot, embeddings, model_types, args.experiment, register=not args.no_register,
-                           variants=variants)
+                           variants=variants, split=args.split, seed=args.seed)
     except (OSError, ValueError) as exc:
         print(f"Training failed: {exc}", file=sys.stderr)
         return 1
