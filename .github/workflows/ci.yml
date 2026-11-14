@@ -141,8 +141,9 @@ jobs:
   test:
     needs: changes
     if: needs.changes.outputs.code == 'true'
-    # Production is a Linux server, so the tests run on Linux.
-    runs-on: ubuntu-latest
+    # Production is a Linux server, so the tests run on Linux. Pinned: setup-python has no 3.9 (below)
+    # for Ubuntu 26.04, which ubuntu-latest became on 2026-11-14.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
