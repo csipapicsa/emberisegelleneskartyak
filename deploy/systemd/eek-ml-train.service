@@ -13,6 +13,11 @@ Environment=MLFLOW_TRACKING_URI=http://127.0.0.1:5000
 Environment=HF_HUB_DISABLE_PROGRESS_BARS=1 TOKENIZERS_PARALLELISM=false
 Environment=MLFLOW_DISABLE_AGENT_HINT=1 GIT_PYTHON_REFRESH=quiet
 ExecStart=/opt/emberisegellenes_kartyak/venv-ml/bin/python -m ml.pipeline
+# How the run ended (success, exit-code, timeout, oom-kill, ...) as a metric: the EEKTrainingFailed and
+# EEKTrainingMissing alerts (docs/runbooks/monitoring.md). The metrics group may write node_exporter's textfile
+# directory (created by the monitoring stack's install.sh). "-": a failure here doesn't fail the run.
+SupplementaryGroups=metrics
+ExecStopPost=-/opt/emberisegellenes_kartyak/scripts/record_unit_result.sh eek_ml_train
 
 # The live game always comes first: CPU and disk only when nothing else wants them (the pipeline also
 # lowers its own priority), and a memory ceiling so it can never push the game out of RAM.

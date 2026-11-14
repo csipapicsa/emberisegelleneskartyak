@@ -42,3 +42,20 @@ groups:
         annotations:
           summary: "95% of requests on {{ $labels.env }} take up to {{ $value | humanizeDuration }} (over 1 s)"
           runbook: EEKSlowRequests
+
+      # The nightly training (eek-ml-train.service, 04:00) records how each run ended in node_exporter's
+      # textfile directory (scripts/record_unit_result.sh). A failure stays visible until the next run.
+      - alert: EEKTrainingFailed
+        expr: eek_ml_train_last_run_success == 0
+        labels: {severity: warning, project: eek}
+        annotations:
+          summary: "Nightly training failed ({{ $labels.result }})"
+          runbook: EEKTrainingFailed
+
+      # No run at all: the timer is off or broken. 26 hours leaves room for a slow run after the 04:00 start.
+      - alert: EEKTrainingMissing
+        expr: time() - eek_ml_train_last_run_timestamp_seconds > 26 * 3600
+        labels: {severity: warning, project: eek}
+        annotations:
+          summary: "Nightly training last ran {{ $value | humanizeDuration }} ago"
+          runbook: EEKTrainingMissing
