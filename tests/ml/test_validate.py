@@ -223,3 +223,32 @@ def test_the_czar_may_pick_their_own_card_with_self_voting_on(tables):
     next(g for g in t["games"] if g["game_id"] == r["game_id"])["self_vote"] = True
     _round_votes(t, r)[0]["target"] = r["czar"]
     assert run(t)["czar"].ok
+
+
+def _new_hand_change(t):
+    """Replace one submission's hand changes with a single new hand; returns (change, hand)."""
+    d = _submission(t)
+    key = (d["game_id"], d["round_no"], d["seat"])
+    t["hand_changes"] = [c for c in t["hand_changes"] if (c["game_id"], c["round_no"], c["seat"]) != key]
+    others = [c["text_id"] for c in t["card_texts"] if not c["black"] and c["text_id"] not in d["hand"]]
+    change = {"game_id": d["game_id"], "round_no": d["round_no"], "seat": d["seat"], "seq": 0,
+              "removed": others[:10], "added": list(d["hand"])}
+    t["hand_changes"].append(change)
+    return change, d["hand"]
+
+
+def test_a_new_hand_may_deal_back_cards_from_the_old_one(tables):
+    # Game 205 (2026-11-13), 55 white cards: the deck ran out mid-deal and the reshuffled discard pile
+    # held the hand being replaced, so the new hand repeated some old cards.
+    t = copy.deepcopy(tables)
+    change, hand = _new_hand_change(t)
+    assert run(t)["hand_changes"].ok
+    change["removed"][:3] = hand[:3]
+    assert run(t)["hand_changes"].ok
+
+
+def test_a_removed_card_still_in_the_hand_is_caught(tables):
+    t = copy.deepcopy(tables)
+    change, hand = _new_hand_change(t)
+    change["removed"], change["added"] = [hand[0]], [hand[1]]  # a swap whose old card is still in the hand
+    assert not run(t)["hand_changes"].ok
