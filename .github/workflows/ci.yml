@@ -249,7 +249,7 @@ jobs:
       - name: Save the tested image for publishing
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: docker save "$IMAGE" | gzip > image.tar.gz
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         with:
           name: image
