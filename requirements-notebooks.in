@@ -6,5 +6,5 @@
 #   venv-ml/bin/pip install --require-hashes -r requirements-notebooks.txt
 -c requirements-dev.txt
 -c requirements-ml.txt
-ipykernel==7.1.0       # the Jupyter kernel (VS Code's notebook editor runs venv-ml through it)
-papermill==2.6.0       # runs a notebook from the command line with parameters (python -m ml.notebooks)
+ipykernel==7.4.0       # the Jupyter kernel (VS Code's notebook editor runs venv-ml through it)
+papermill==2.7.0       # runs a notebook from the command line with parameters (python -m ml.notebooks)
