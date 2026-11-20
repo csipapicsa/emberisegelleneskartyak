@@ -11,12 +11,18 @@ snapshots = ""
 first_day = "2026-11-06"
 
 [train]
-embeddings = ["minilm", "e5", "granite"]
-models = ["linear", "mlp"]
+# Slimmed on 2026-11-20 after 8 comparable cycles (2026-11-12 .. 11-19, MLflow "pick-model"): minilm and granite
+# scored ~0.01-0.02 test MRR below e5 in every cycle and haven't been the challenger since version 1; mlp e5 equals
+# linear e5 (0.393 vs 0.394 mean) with 64x the parameters. linear e5 stays as the champion's structure, the
+# reference new structures are measured against. All of them can still be trained by hand (python -m ml.train).
+embeddings = ["e5"]
+models = ["linear"]
 experiment = "pick-model"
 register = true
 # Data variants (ml/evaluate.py): A human picks (registered), B + games with a computer player, C + vote winners.
-variants = ["A", "B", "C"]
+# Only A since 2026-11-20: in 96 comparisons with A (8 cycles x 6 models x B/C), B or C was significantly better
+# 3 times and significantly worse 3 times, which is what chance gives at 95%.
+variants = ["A"]
 
 [trigger]
 # Train only when at least this many new training picks (one-blank human submissions) arrived since the

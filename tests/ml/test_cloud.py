@@ -134,7 +134,7 @@ def test_wait_for_reports_failures_and_timeouts():
 def test_load_config_reads_the_cloud_and_train_sections(tmp_path):
     config = cloud.load_config()  # the real ml/pipeline.toml
     assert config.job == "eek-train" and config.region == "europe-west4"
-    assert config.embeddings == ["minilm", "e5", "granite"]
+    assert config.embeddings == ["e5"]
     assert not str(config.key_file).startswith("~")
     broken = tmp_path / "p.toml"
     broken.write_text('[cloud]\nproject = "p"\n')
