@@ -8,7 +8,7 @@ import mlflow
 import numpy as np
 import pytest
 
-from ml import export, serve, serve_bench, train, validate
+from ml import export, features, serve, serve_bench, train, validate
 from scripts import make_sample_gameplay_db as sample
 
 from .conftest import StemEncoder
@@ -237,3 +237,39 @@ def test_a_missing_alias_degrades_but_keeps_serving(registry):
     body = {"black": "Fekete ____.", "cards": ["egy"]}
     assert app.post("/score", json=body).status_code == 200
     assert app.post("/score", json={**body, "model": "champion"}).status_code == 503
+
+
+def _register_popwhite(cycle_folder_runs) -> str:
+    """Register a popwhite cycle's model as a new version without moving any alias."""
+    entry = next(r for r in cycle_folder_runs if r.get("model_type") == "popwhite" and "model_uri" in r)
+    tags = {"model_type": "popwhite", "embedding": entry["embedding"], "output": "scores",
+            "best_score_percentiles": json.dumps(entry["best_score_percentiles"]), **entry["register_tags"]}
+    return str(mlflow.register_model(entry["model_uri"], train.REGISTERED_MODEL, tags=tags).version)
+
+
+def test_serves_a_model_with_popularity_input(registry, tmp_path):
+    from ml import popularity
+    db = tmp_path / "gameplay.db"
+    sample.generate(db, games=24, seed=5)
+    snap, _ = export.export(db, tmp_path / "snapshots")
+    assert all(r.ok for r in validate.validate_snapshot(snap, first_day=sample.FIRST_DAY))
+    result = train.run_cycle(snap, embeddings=["minilm"], model_types=["popwhite"], experiment="serve-test-pop",
+                             cache_dir=tmp_path / "emb", encoder_factory=StemEncoder, variants=["A"], register=False)
+    version = _register_popwhite(result["runs"])
+    s = serve.Scorer(f"models:/{train.REGISTERED_MODEL}/{version}", encoder_factory=StemEncoder)
+    assert s.update() and s.bundle.popularity is not None
+    pop = s.bundle.popularity
+    _, tables = export.read_snapshot(snap)
+    texts = {c["text_id"]: c["text"] for c in tables["card_texts"]}
+    played = max(pop.played, key=pop.played.get)
+    favourite = next(t for t in texts.values() if popularity.text_key(t) == played)
+    cards = [favourite, "egy soha nem látott kártya", *[t for t in texts.values() if not t.endswith("____.")][:9]]
+    out = s.score("Fekete ____.", cards)
+    assert len(out["scores"]) == len(cards) == 11, "two hands, the second padded"
+    # The same numbers by hand: embeddings + log popularity (the prior for the unseen card) into the model.
+    vectors = StemEncoder(features.EMBEDDING_MODELS["minilm"]).encode(["Fekete ____.", *cards[:10]])
+    rates = pop.log_rates(cards[:10])
+    assert rates[1] == pytest.approx(np.log(popularity.PRIOR))
+    x = popularity.with_popularity(vectors[None], rates[None])
+    assert np.allclose(np.asarray(s.bundle.model.predict(x))[0], out["scores"][:10], atol=1e-5)
+    assert s.health()[1]["popularity"] is True

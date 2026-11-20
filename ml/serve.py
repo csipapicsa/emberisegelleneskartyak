@@ -16,6 +16,10 @@ other: its embedding is computed on the spot (~20 ms a card on one CPU thread) a
 depends only on the black card and that one white card, so any number of cards can be scored: they're split
 into hands of ten and the last hand is padded.
 
+A model that takes card popularity as an input (version tag inputs=embedding+log_popularity, the popwhite
+structure in ml/train.py) comes with the play counts it was trained with (ml/popularity.py); the service looks
+each card up by its text, and a card that wasn't in the training data gets the prior, 1 in 10.
+
 "refresh_below" is the new-hand cut-off: the best card's score in the EEK_REFRESH_PERCENTILE-th percentile
 (default 10) of training hands. A hand whose best card scores lower is worse than 90% of the hands the model
 learned from. It comes from the model version's tags (ml/train.py), so it moves with the model.
@@ -42,6 +46,7 @@ from pydantic import BaseModel, Field
 
 from ml import features
 from ml.evaluate import HAND_SIZE
+from ml.popularity import Popularity, for_version, with_popularity
 
 logger = logging.getLogger("ml.serve")
 
@@ -67,6 +72,7 @@ class Bundle:
     embedding: features.EmbeddingModel
     encoder: features.Encoder
     percentiles: dict[str, float]
+    popularity: Popularity | None = None  # the model's input includes log popularity (ml/popularity.py)
     loaded_at: float = field(default_factory=time.time)
 
 
@@ -158,7 +164,7 @@ class Scorer:
         percentiles = {k: float(v) for k, v in json.loads(info.tags.get("best_score_percentiles", "{}")).items()}
         encoder = self.embeddings.encoder(embedding)
         model = mlflow.pyfunc.load_model(f"models:/{self.name}/{version}")
-        return Bundle(self.name, version, model, embedding, encoder, percentiles)
+        return Bundle(self.name, version, model, embedding, encoder, percentiles, for_version(info))
 
     def score(self, black: str, cards: list[str]) -> dict:
         bundle = self.bundle  # one consistent version for the whole request, even if the poller swaps it
@@ -166,11 +172,16 @@ class Scorer:
             raise RuntimeError(self.error or "no model loaded yet")
         vectors = self.embeddings.embed(bundle.embedding, [black, *cards])
         black_vec, card_vecs = vectors[0], vectors[1:]
+        rates = bundle.popularity.log_rates(cards) if bundle.popularity is not None else None
         scores = []
         for start in range(0, len(cards), HAND_SIZE):
             chunk = card_vecs[start:start + HAND_SIZE]
-            padded = np.concatenate([chunk, np.repeat(chunk[-1:], HAND_SIZE - len(chunk), axis=0)])
+            pad = HAND_SIZE - len(chunk)
+            padded = np.concatenate([chunk, np.repeat(chunk[-1:], pad, axis=0)])
             x = np.concatenate([black_vec[None], padded])[None].astype(np.float32)
+            if rates is not None:
+                part = rates[start:start + HAND_SIZE]
+                x = with_popularity(x, np.concatenate([part, np.repeat(part[-1:], pad)])[None])
             scores.extend(np.asarray(bundle.model.predict(x), dtype=np.float64)[0][:len(chunk)].tolist())
         exp = np.exp(np.asarray(scores) - max(scores))
         return {"model": bundle.name, "version": bundle.version, "scores": scores,
@@ -181,7 +192,8 @@ class Scorer:
         if bundle is None:
             return False, {"status": "error" if self.error else "loading", "uri": self.uri, "error": self.error}
         return True, {"status": "ok", "uri": self.uri, "model": bundle.name, "version": bundle.version,
-                      "embedding": bundle.embedding.key, "refresh_percentile": self.refresh_percentile,
+                      "embedding": bundle.embedding.key, "popularity": bundle.popularity is not None,
+                      "refresh_percentile": self.refresh_percentile,
                       "refresh_below": bundle.percentiles.get(self.refresh_percentile),
                       "loaded_at": bundle.loaded_at, "last_error": self.error}
 

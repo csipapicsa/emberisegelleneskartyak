@@ -27,7 +27,7 @@ flowchart LR
 
 | Piece | What it does |
 |---|---|
-| `ml/serve.py` | FastAPI service. Follows MLflow aliases (re-checked every 5 min, swapped without downtime); scores card *texts*, so a card nobody has embedded yet works too (~20 ms to embed, then cached) |
+| `ml/serve.py` | FastAPI service. Follows MLflow aliases (re-checked every 5 min, swapped without downtime); scores card *texts*, so a card nobody has embedded yet works too (~20 ms to embed, then cached). A model that takes popularity as an input (`popwhite`) comes with its play counts; a card that wasn't in its training data gets the prior, 1 in 10 |
 | `server/bot.py` | The seat in the game. Asks the service with a hard deadline and plays at random when there is no answer, so a slow or broken service can never stall a round |
 | Aliases | Staging plays `challenger` (every nightly winner), production plays `champion` (moved automatically when a challenger is significantly better) |
 

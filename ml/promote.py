@@ -8,8 +8,8 @@
 
 Production's computer player plays the version behind the "champion" alias (ml/serve.py), staging's the
 "challenger", which every nightly cycle moves (ml/train.py). This is the step in between. The nightly pipeline
-runs it automatically (`[promote] auto` in ml/pipeline.toml): every version has the same architecture and
-speed, so the only question is accuracy, and a challenger is promoted only when it is significantly better.
+runs it automatically (`[promote] auto` in ml/pipeline.toml): versions differ in accuracy, not in speed
+(embedding the cards is the cost, the same for every structure), so the only question is accuracy, and a challenger is promoted only when it is significantly better.
 "Higher MRR" alone isn't enough: nightly versions differ by far less than the test set's noise, so promoting
 every slightly higher number would swap models at random.
 
@@ -33,7 +33,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ml import evaluate, features, lower_priority, train
+from ml import evaluate, features, lower_priority, popularity, train
 from ml.export import DEFAULT_OUT, latest_snapshot, read_snapshot
 from ml.validate import require_valid
 
@@ -65,10 +65,14 @@ def score_version(version, examples: list[evaluate.Example], texts: dict[int, st
     ids, vectors = features.embed(texts, embedding, cache_dir, encoder_factory)
     row = {int(t): i for i, t in enumerate(ids)}
     x, y = train.to_tensors(examples, row, vectors)
+    x = x.numpy()
+    pop = popularity.for_version(version)
+    if pop is not None:  # the version's own play counts, from its training data
+        x = popularity.with_popularity(x, pop.matrix(examples, texts))
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         model = mlflow.pyfunc.load_model(f"models:/{MODEL}/{version.version}")
-    out = np.asarray(model.predict(x.numpy()), dtype=np.float64)
+    out = np.asarray(model.predict(x), dtype=np.float64)
     if version.tags.get("output") == "scores":
         out = np.exp(out - out.max(axis=1, keepdims=True))
         out /= out.sum(axis=1, keepdims=True)

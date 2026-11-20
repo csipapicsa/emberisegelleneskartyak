@@ -45,10 +45,18 @@ In priority order within each section. Finished work moves to the worklogs.
    - [ ] Later: train only in GCP (the nightly timer calls `python -m ml.cloud --register`; the local
          training stays as the CI-tested fallback), then Terraform for the GCP resources
          ([ml/gcp-setup.md](ml/gcp-setup.md) lists them).
-   - [ ] Later: improve the pick model. It only matches the popularity baseline (test MRR 0.399 vs 0.392,
-         difference not significant). Ideas: learning curve (does more data help?), position and recency
-         features, the black card × white card fit (experiment notebooks: `python -m ml.notebooks`), an LLM
-         as a ceiling probe, predicting the vote winner instead of the pick.
+   - [ ] Improve the pick model ([ml/model-report.md](ml/model-report.md), 2026-11-20). More data helps only
+         through card identity, which the embedding-only models can't use; popularity + text (`popwhite`) beats
+         them significantly (test MRR 0.425 vs 0.402).
+         - [ ] `popwhite` in the training code, the model service and promotion; then in the nightly grid
+               (after the new model service is live on staging and production).
+         - [ ] Fixed research test set, black-card shuffle test (a model must get worse with a random black
+               card), notebook 06 (learning curve).
+         - [ ] LightGBM ranker over engineered features (popularity, slot, card age in hand, text features).
+         - [ ] Cross-encoder (black + white read together), CPU only: e5-small first, huBERT only as a comparison.
+         - [ ] Hand position: training-only nuisance term (the hand fan's UI bias), never used by the bot.
+         - [ ] Vote-winner model (soft vote distributions), rejected hands as a weak signal.
+         - Not doing: an LLM ceiling probe (paid API calls), GPU training.
 3. Container image vulnerability scan (Trivy), report only at first, together with the Dependabot PRs.
 4. Metrics (2026-11-13): `/metrics` (requests and latency per route, 5xx, rooms, players, WebSockets, games,
    the computer player and the model service), three alert rules with promtool tests in CI, a Grafana dashboard

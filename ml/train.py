@@ -13,7 +13,15 @@ from the two embeddings, their element-wise product and their absolute differenc
 hand turns the ten scores into probabilities:
 
 - linear: one linear layer on those features (logistic regression over the hand, a "conditional logit");
-- mlp: a small hidden layer (ReLU, dropout) in between, so it can learn interactions the linear one can't.
+- mlp: a small hidden layer (ReLU, dropout) in between, so it can learn interactions the linear one can't;
+- popwhite: score = a * log popularity(card) + v . card embedding (centred). Popularity is the card's
+  smoothed play rate (ml/popularity.py), an input instead of something the model has to rebuild from the
+  text, so the text only has to explain what popularity misses. It ignores the black card: no structure has
+  found a black x white signal in frozen embeddings (docs/ml/model-report.md). It is the only structure that
+  beat the popularity baseline significantly (+0.018 test MRR, and +0.024 over linear, on the 2026-11-19
+  snapshot). Its input carries log popularity as a last channel, (n, 11, 385); the counts are logged with the
+  model as `popularity.json` and the version is tagged inputs=embedding+log_popularity, so the model service
+  and ml/promote.py can build that input. Training picks get leave-one-out rates.
 
 Both are trained the same way: full-batch Adam on the cross-entropy of the played card, with early stopping
 on the validation games. The baselines need no training: random, and card popularity.
@@ -46,7 +54,7 @@ from pathlib import Path
 
 import numpy as np
 
-from ml import evaluate, features, lower_priority
+from ml import evaluate, features, lower_priority, popularity
 from ml.evaluate import HAND_SIZE, VARIANTS, Example
 from ml.export import DEFAULT_OUT, latest_snapshot, read_snapshot
 from ml.export import _git_commit as git_commit
@@ -56,7 +64,7 @@ EXPERIMENT = "pick-model"
 # Percentiles of the best card's score per training hand, registered with the model (see the docstring).
 REFRESH_PERCENTILES = (5, 10, 20, 30, 50)
 REGISTERED_MODEL = "pick-model"
-MODEL_TYPES = ("linear", "mlp")
+MODEL_TYPES = ("linear", "mlp")  # the default grid; "popwhite" is trained when asked for
 
 
 @dataclass(frozen=True)
@@ -75,6 +83,7 @@ CONFIGS = {
     # epoch 297-299). The other models stop early long before either cap.
     "linear": TrainConfig(lr=1e-2, weight_decay=1e-3, max_epochs=600),
     "mlp": TrainConfig(lr=3e-3, weight_decay=1e-4, hidden=64, dropout=0.2),
+    "popwhite": TrainConfig(lr=1e-2, weight_decay=1e-3, max_epochs=600),
 }
 
 
@@ -116,6 +125,40 @@ def make_scorer(dim: int, config: TrainConfig):
             return self.score(self.pair_features(x))
 
     return PairScorer()
+
+
+def make_popwhite(dim: int, mean):
+    """score = a * log popularity + v . (card embedding - training mean). Input (batch, 1 + hand, dim + 1):
+    embeddings with the log popularity as a last channel (0 for the black card, which it doesn't use).
+    The mean is part of the model (a buffer), so whoever calls it passes raw embeddings."""
+    torch = _torch()
+    nn = torch.nn
+
+    class PopWhite(nn.Module):
+        def __init__(self) -> None:
+            super().__init__()
+            self.register_buffer("mean", torch.as_tensor(mean, dtype=torch.float32).reshape(dim))
+            self.scale = nn.Parameter(torch.ones(()))
+            self.white = nn.Linear(dim, 1)
+
+        def forward(self, x):
+            hand = x[:, 1:, :dim] - self.mean
+            return self.scale * x[:, 1:, dim] + self.white(hand).squeeze(-1)
+
+    return PopWhite()
+
+
+def fit_popwhite(train, val, dim: int, config: TrainConfig):
+    """fit() for popwhite: (inputs (n, 11, dim + 1), targets[, mask]) tensors. The centring mean comes from the
+    training hands' embeddings."""
+    torch = _torch()
+    torch.manual_seed(config.seed)
+    mean = train[0][:, 1:, :dim].reshape(-1, dim).mean(dim=0)
+    model = make_popwhite(dim, mean)
+    curve, best_epoch = train_loop(model, (train[0],), train[1], (val[0],), val[1], config,
+                                   train_mask=train[2] if len(train) > 2 else None,
+                                   val_mask=val[2] if len(val) > 2 else None)
+    return model, curve, best_epoch
 
 
 def to_tensors(examples: Sequence[Example], row: dict[int, int], vectors: np.ndarray):
@@ -284,11 +327,20 @@ def run_cycle(snapshot: Path, embeddings: Sequence[str] = tuple(features.EMBEDDI
             for variant in variants:
                 split_v = splits_of[variant]
                 data = {s: (*to_tensors(split_v[s], row, vectors), hand_mask(split_v[s])) for s in evaluate.SPLITS}
+                pop = pop_data = None
+                if "popwhite" in model_types:
+                    pop, pop_data = popularity_inputs(split_v, texts, data)
                 for model_type in model_types:
                     config = CONFIGS[model_type]
-                    model, curve, best_epoch = fit(data["train"], data["val"], embedding.dim, config)
-                    probs = {s: predict_probs(model, data[s][0], data[s][2]) for s in evaluate.SPLITS}
-                    scores = {s: evaluate.metrics(probs[s], data[s][1].numpy()) for s in evaluate.SPLITS}
+                    if model_type == "popwhite":
+                        model, curve, best_epoch = fit_popwhite(pop_data["train"], pop_data["val"], embedding.dim,
+                                                                config)
+                        model_data = pop_data
+                    else:
+                        model, curve, best_epoch = fit(data["train"], data["val"], embedding.dim, config)
+                        model_data = data
+                    probs = {s: predict_probs(model, model_data[s][0], model_data[s][2]) for s in evaluate.SPLITS}
+                    scores = {s: evaluate.metrics(probs[s], model_data[s][1].numpy()) for s in evaluate.SPLITS}
                     ranks = {s: evaluate.reciprocal_ranks(probs[s], targets[s]) for s in ("val", "test")}
                     registrable = variant == register_variant
                     run_name = f"{model_type} {key}" if registrable else f"{model_type} {key} [{variant}]"
@@ -307,10 +359,20 @@ def run_cycle(snapshot: Path, embeddings: Sequence[str] = tuple(features.EMBEDDI
                                  "embedding": key, "variant": variant, **scores}
                         if registrable:
                             reference[model_type] = ranks
-                            percentiles = best_score_percentiles(model, data["train"][0])
+                            extra_tags = {}
+                            if model_type == "popwhite":
+                                # The new-hand cut-offs from the rates the model service will use (no
+                                # leave-one-out), and the counts it needs, logged with the model.
+                                served = popularity.with_popularity(data["train"][0].numpy(),
+                                                                    pop.matrix(split_v["train"], texts))
+                                percentiles = best_score_percentiles(model, _torch().from_numpy(served))
+                                mlflow.log_dict(pop.to_dict(), popularity.ARTIFACT)
+                                extra_tags = {popularity.INPUTS_TAG: popularity.INPUTS}
+                            else:
+                                percentiles = best_score_percentiles(model, data["train"][0])
                             mlflow.log_metrics({f"train_best_score_p{q}": v for q, v in percentiles.items()})
-                            entry |= {"model_uri": _log_model(model, data["train"]),
-                                      "best_score_percentiles": percentiles}
+                            entry |= {"model_uri": _log_model(model, model_data["train"]),
+                                      "best_score_percentiles": percentiles, "register_tags": extra_tags}
                         elif model_type in reference:
                             entry["vs_reference"] = {s: evaluate.paired_bootstrap(reference[model_type][s], ranks[s],
                                                                                   games[s]) for s in ("val", "test")}
@@ -325,8 +387,21 @@ def run_cycle(snapshot: Path, embeddings: Sequence[str] = tuple(features.EMBEDDI
     return {"parent_run_id": parent.info.run_id, "runs": runs, "challenger": challenger}
 
 
+def popularity_inputs(split: dict, texts: dict[int, str], data: dict):
+    """(popularity counts from the training picks, per split (inputs with log popularity, targets, mask)).
+    Training picks get leave-one-out rates (popularity.Popularity.matrix)."""
+    torch = _torch()
+    pop = popularity.Popularity.from_examples(split["train"], texts)
+    out = {}
+    for s in evaluate.SPLITS:
+        rates = pop.matrix(split[s], texts, leave_one_out=s == "train")
+        out[s] = (torch.from_numpy(popularity.with_popularity(data[s][0].numpy(), rates)), data[s][1], data[s][2])
+    return pop, out
+
+
 def _log_model(model, train) -> str:
-    """The scorer: input (n, 11, 384), the black card's embedding then the hand's; output (n, 10) raw
+    """The scorer: input (n, 11, 384), the black card's embedding then the hand's (popwhite: (n, 11, 385),
+    with log popularity as a last channel, see make_popwhite); output (n, 10) raw
     scores (apply a softmax for probabilities). Each card's score depends only on the black card and that
     card, so a hand of fewer cards can be padded. Saved in MLflow's "pt2" format, a traced graph
     (torch.export) that loads without this module. The example input (two training picks) also gives the
@@ -352,7 +427,7 @@ def _register_best(runs: list[dict], tags: dict) -> dict | None:
         warnings.simplefilter("ignore")
         version = mlflow.register_model(best["model_uri"], REGISTERED_MODEL,
                                         tags={**tags, "model_type": best["model_type"], "embedding": best["embedding"],
-                                              "output": "scores",
+                                              "output": "scores", **best.get("register_tags", {}),
                                               "best_score_percentiles": json.dumps(best["best_score_percentiles"])})
     client = mlflow.MlflowClient()
     client.set_registered_model_alias(REGISTERED_MODEL, "challenger", version.version)
@@ -364,7 +439,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--snapshot", type=Path, default=None, help="snapshot folder (default: the latest)")
     parser.add_argument("--embeddings", default=",".join(features.EMBEDDING_MODELS),
                         help=f"comma-separated, from: {', '.join(features.EMBEDDING_MODELS)}")
-    parser.add_argument("--models", default=",".join(MODEL_TYPES), help=f"comma-separated, from: {', '.join(MODEL_TYPES)}")
+    parser.add_argument("--models", default=",".join(MODEL_TYPES), help=f"comma-separated, from: {', '.join(CONFIGS)}")
     parser.add_argument("--experiment", default=EXPERIMENT, help=f"MLflow experiment (default: {EXPERIMENT})")
     parser.add_argument("--no-register", action="store_true", help="don't register the best model as challenger")
     parser.add_argument("--variants", default=",".join(VARIANTS), help=f"comma-separated, from: {', '.join(VARIANTS)}")

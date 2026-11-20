@@ -65,15 +65,16 @@ venv-ml/bin/python -m ml.train                  # latest snapshot, MLflow experi
 | `ml.export` | `gameplay.db` (a consistent copy) | Parquet tables + `manifest.json` with the content hash; nothing if the data is unchanged |
 | `ml.validate` | a snapshot | `validation.json`; exit 1 if any of the 13 checks fails |
 | `ml.embedding_benchmark` | a validated snapshot | one MLflow run per embedding model; the embeddings cache in `ml-data/embeddings/` |
-| `ml.train` | a validated snapshot, the embeddings | a parent run with 2 baselines + 6 models nested; the best on validation registered as `pick-model@challenger` |
+| `ml.train` | a validated snapshot, the embeddings | a parent run with 2 baselines + one nested run per model; the best on validation registered as `pick-model@challenger` |
 
 ## Promoting a model
 
 Staging's computer player plays `challenger` (every nightly winner); production's plays `champion`. The
 nightly pipeline promotes automatically (`[promote] auto = true` in `pipeline.toml`): right after training it
 compares the new challenger with the champion and moves `champion` **only if the challenger is significantly
-better** (the 95% interval of the MRR difference is above zero), or if there is no champion yet. Every version
-has the same architecture and speed, so accuracy is the only question; "a higher number" isn't enough, because
+better** (the 95% interval of the MRR difference is above zero), or if there is no champion yet. Versions differ
+in accuracy, not in speed (embedding the cards is the cost, the same for every structure), so accuracy is the
+only question; "a higher number" isn't enough, because
 nightly versions differ by far less than the test set's noise (about ±0.012 MRR with ~700 test picks).
 
 ```bash
@@ -87,6 +88,17 @@ Both versions score the same test picks (human picks, games without a computer p
 paired bootstrap over games. A significantly worse challenger is refused (`--force` overrides). Each promotion
 tags the new champion in MLflow with its comparison. The model service follows the alias within 5 minutes,
 without a restart.
+
+## Model structures
+
+`linear` and `mlp` score each hand card from the black card's and the card's embeddings. `popwhite` adds the
+card's popularity (its smoothed play rate in the training picks, [ml/popularity.py](../../ml/popularity.py)) as
+an input and learns from the text only what popularity misses; it ignores the black card. It is the first
+structure that beat the popularity baseline significantly
+([model-report.md](model-report.md#7-learning-curve-and-feature-test-run-for-this-report)). Its version
+carries the play counts as the artifact `popularity.json` and the tag `inputs=embedding+log_popularity`;
+the model service and `ml.promote` read both. `--models popwhite` trains it; the nightly grid is
+`[train] models` in `pipeline.toml`.
 
 ## Experiment notebooks
 
