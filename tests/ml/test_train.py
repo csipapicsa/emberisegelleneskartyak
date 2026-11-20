@@ -173,3 +173,66 @@ def test_short_hands_are_padded_and_masked(snapshot, tmp_path):
     probs = train.predict_probs(model, x, mask)
     assert np.allclose(probs[0, 3:], 0) and np.allclose(probs.sum(axis=1), 1)
     assert torch.isfinite(torch.tensor(probs)).all()
+
+
+@pytest.fixture(scope="module")
+def popwhite_cycle(snapshot, tmp_path_factory):
+    """A cycle with only the popwhite structure, so its model is the challenger; variant C exercises vote
+    examples (shorter hands, no leave-one-out)."""
+    mp = pytest.MonkeyPatch()
+    mp.setenv("MLFLOW_ALLOW_FILE_STORE", "true")
+    mlflow.set_tracking_uri((tmp_path_factory.mktemp("mlflow") / "mlruns").as_uri())
+    try:
+        yield train.run_cycle(snapshot, embeddings=["minilm"], model_types=["popwhite"], experiment="popwhite-test",
+                              cache_dir=tmp_path_factory.mktemp("emb"), encoder_factory=StemEncoder,
+                              variants=["A", "C"])
+    finally:
+        mlflow.set_tracking_uri(None)
+        mp.undo()
+
+
+def test_popwhite_is_registered_with_its_popularity(popwhite_cycle, snapshot):
+    from ml import popularity
+    by_name = {r["name"]: r for r in popwhite_cycle["runs"]}
+    assert set(by_name) == {"baseline random", "baseline popularity", "popwhite minilm", "popwhite minilm [C]"}
+    assert by_name["popwhite minilm"]["test"]["mrr"] > 0.32 and by_name["popwhite minilm"]["test"]["top1"] > 0.15
+    assert popwhite_cycle["challenger"]["name"] == "popwhite minilm"
+    version = mlflow.MlflowClient().get_model_version_by_alias(train.REGISTERED_MODEL, "challenger")
+    assert version.tags[popularity.INPUTS_TAG] == popularity.INPUTS and version.tags["model_type"] == "popwhite"
+    pop = popularity.for_version(version)
+    _, tables = export.read_snapshot(snapshot)
+    texts = {c["text_id"]: c["text"] for c in tables["card_texts"]}
+    expected = popularity.Popularity.from_examples(evaluate.make_splits(tables, "A")["train"], texts)
+    assert pop == expected, "the counts of the registered variant's training picks"
+    assert json.loads(version.tags["best_score_percentiles"])
+
+
+def test_popwhite_model_reads_popularity_and_ignores_the_black_card(popwhite_cycle):
+    model = mlflow.pyfunc.load_model(f"models:/{train.REGISTERED_MODEL}@challenger")
+    assert tuple(model.metadata.signature.inputs.inputs[0].shape) == (-1, 11, 385)
+    rng = np.random.default_rng(1)
+    x = rng.random((3, 11, 385), dtype=np.float32)
+    x[:, 0, 384] = 0
+    scores = np.asarray(model.predict(x))
+    other_black = x.copy()
+    other_black[:, 0, :384] = rng.random((3, 384), dtype=np.float32)
+    assert np.allclose(np.asarray(model.predict(other_black)), scores, atol=1e-5)
+    more_popular = x.copy()
+    more_popular[:, 1, 384] += 1.0
+    raised = np.asarray(model.predict(more_popular))
+    assert np.all(raised[:, 0] > scores[:, 0]), "a more popular card scores higher"
+    assert np.allclose(raised[:, 1:], scores[:, 1:], atol=1e-5)
+
+
+def test_popwhite_beats_nothing_it_shouldnt_know(snapshot, tmp_path):
+    """Leave-one-out: on its own training picks, popularity can't see the pick it is predicting."""
+    from ml import popularity
+    _, tables = export.read_snapshot(snapshot)
+    texts = {c["text_id"]: c["text"] for c in tables["card_texts"]}
+    train_picks = evaluate.make_splits(tables, "A")["train"]
+    pop = popularity.Popularity.from_examples(train_picks, texts)
+    with_own = pop.matrix(train_picks, texts)
+    loo = pop.matrix(train_picks, texts, leave_one_out=True)
+    targets = np.array([e.target for e in train_picks])
+    rows = np.arange(len(train_picks))
+    assert np.all(loo[rows, targets] <= with_own[rows, targets] + 1e-6), "the own pick only ever raised its rate"

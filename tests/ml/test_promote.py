@@ -118,6 +118,24 @@ def test_promotion_rollback_and_refusal(world, monkeypatch, capsys):
     assert bad not in (aliases()[promote.CHAMPION], aliases()[promote.PREVIOUS])
 
 
+def test_compares_a_popularity_model_with_an_embedding_only_champion(world):
+    """A popwhite challenger needs its play counts to score the test picks; the champion doesn't."""
+    from ml import popularity
+    result = train.run_cycle(world["snapshot"], embeddings=["minilm"], model_types=["popwhite"],
+                             experiment="promote-test-pop", cache_dir=world["cache"], encoder_factory=StemEncoder,
+                             variants=["A"], register=False)
+    entry = next(r for r in result["runs"] if r.get("model_type") == "popwhite")
+    tags = {"model_type": "popwhite", "embedding": "minilm", "output": "scores", **entry["register_tags"]}
+    version = mlflow.register_model(entry["model_uri"], MODEL, tags=tags)
+    client = mlflow.MlflowClient()
+    client.set_registered_model_alias(MODEL, promote.CHALLENGER, str(version.version))
+    assert popularity.for_version(client.get_model_version(MODEL, str(version.version))) is not None
+    out = compare(world)
+    assert out["champion"] is not None and out["bootstrap"] is not None
+    assert out["challenger"].metrics["mrr"] == pytest.approx(entry["test"]["mrr"], abs=1e-6), \
+        "promotion scores the test picks exactly as training did"
+
+
 def test_rollback_without_a_previous_champion_fails(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("MLFLOW_ALLOW_FILE_STORE", "true")
     mlflow.set_tracking_uri((tmp_path / "mlruns").as_uri())
@@ -149,3 +167,4 @@ def test_auto_promotes_only_beyond_the_noise(monkeypatch, capsys, verdict, promo
     assert bool(calls) is promoted
     out = capsys.readouterr().out
     assert ("Champion: version 8" in out) if promoted else (f"Champion kept: {verdict}." in out)
+
