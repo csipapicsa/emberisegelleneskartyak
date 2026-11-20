@@ -75,8 +75,8 @@ novelty effect is measured there rather than assumed.
 - **One yardstick for every variant.** Games are split in time order (oldest train, newer validate, newest
   test); validation and test keep only games *without* a computer player. Every variant is scored on the
   same, undisturbed human picks.
-- **Every nightly cycle trains every variant** (3 embeddings × 2 model structures × 3 data variants). The
-  challenger always comes from A; B and C are reported as a difference in MRR to A with a 95% interval
+- **Every nightly cycle trained every variant** (3 embeddings × 2 model structures × 3 data variants) until
+  2026-11-20; since then only A (see `ml/pipeline.toml` for the evidence). The challenger always comes from A; B and C are reported as a difference in MRR to A with a 95% interval
   from a **paired bootstrap over games**: picks within a game share players and cards, so resampling single
   picks would make the interval too narrow.
 - **A variant becomes the default only on evidence:** the interval excludes zero, ideally in two cycles in a
