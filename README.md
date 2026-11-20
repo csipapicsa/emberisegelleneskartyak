@@ -43,7 +43,7 @@ Personal project, designed, built and operated end to end by one developer on a 
 ```mermaid
 flowchart LR
     G[(gameplay log<br>anonymous decisions)] --> X[export + validation<br>versioned snapshot]
-    X --> T[nightly training<br>e5 embeddings, linear model<br>vs popularity and random baselines]
+    X --> T[nightly training<br>popularity + e5 text, linear e5<br>vs popularity and random baselines]
     T --> MF[(MLflow<br>tracking + registry)]
     MF -- "@challenger" --> MS[model service<br>FastAPI]
     MF -- "@champion, after ml.promote" --> MS

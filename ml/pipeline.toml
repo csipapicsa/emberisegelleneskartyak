@@ -15,8 +15,10 @@ first_day = "2026-11-06"
 # scored ~0.01-0.02 test MRR below e5 in every cycle and haven't been the challenger since version 1; mlp e5 equals
 # linear e5 (0.393 vs 0.394 mean) with 64x the parameters. linear e5 stays as the champion's structure, the
 # reference new structures are measured against. All of them can still be trained by hand (python -m ml.train).
+# popwhite (card popularity as an input, ml/train.py) since 2026-11-20: +0.024 test MRR over linear e5 on the
+# 2026-11-19 snapshot, interval [+0.011, +0.037]. The model service reads its play counts (PR #70).
 embeddings = ["e5"]
-models = ["linear"]
+models = ["linear", "popwhite"]
 experiment = "pick-model"
 register = true
 # Data variants (ml/evaluate.py): A human picks (registered), B + games with a computer player, C + vote winners.
