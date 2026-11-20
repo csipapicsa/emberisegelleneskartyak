@@ -120,7 +120,7 @@ def test_invalid_data_stops_before_training(config, mlflow_dir):
 
 def test_load_config(tmp_path):
     shipped = pipeline.load_config()
-    assert shipped.embeddings == ["e5"] and shipped.models == ["linear"] and shipped.variants == ["A"]
+    assert shipped.embeddings == ["e5"] and shipped.models == ["linear", "popwhite"] and shipped.variants == ["A"]
     assert shipped.min_new_picks == 20 and shipped.first_day == 20763 and shipped.register
     assert shipped.db == pipeline.DB_PATH
     assert shipped.auto_promote, "the nightly run promotes significantly better models"
