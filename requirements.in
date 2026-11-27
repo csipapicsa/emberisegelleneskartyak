@@ -3,6 +3,6 @@
 #   pip-compile --generate-hashes --allow-unsafe requirements.in
 fastapi==0.136.0
 uvicorn[standard]==0.44.0
-reportlab==5.1.0           # printable card PDFs (server/print_cards.py)
+reportlab==5.1.1           # printable card PDFs (server/print_cards.py)
 pyphen==0.18.1             # Hungarian hyphenation on printed cards
 prometheus-client==0.26.0  # /metrics for Prometheus (server/metrics.py)
