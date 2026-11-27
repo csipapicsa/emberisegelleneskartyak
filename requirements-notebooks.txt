@@ -4,10 +4,6 @@
 #
 #    pip-compile --allow-unsafe --generate-hashes --no-emit-index-url --output-file=requirements-notebooks.txt --strip-extras requirements-notebooks.in
 #
-ansicolors==1.1.8 \
-    --hash=sha256:00d2dde5a675579325902536738dd27e4fac1fd68f773fe36c21044eb559e187 \
-    --hash=sha256:99f94f5e3348a0bcd43c82e5fc4414013ccc19d70bd939ad71e0133ce9c372e0
-    # via papermill
 asttokens==3.0.2 \
     --hash=sha256:3ecdbd8f2cc195f53ccada3a613538bb5f9ef6f6869129f13e03c30a677b8fe2 \
     --hash=sha256:9da13157f5b28becde0bd374fc677dcd3c290614264eff096f167c469cd9f933
@@ -264,9 +260,9 @@ idna==3.20 \
     #   -c requirements-dev.txt
     #   -c requirements-ml.txt
     #   requests
-ipykernel==7.1.0 \
-    --hash=sha256:58a3fc88533d5930c3546dc7eac66c6d288acde4f801e2001e65edc5dc9cf0db \
-    --hash=sha256:763b5ec6c5b7776f6a8d7ce09b267693b4e5ce75cb50ae696aaefb3c85e1ea4c
+ipykernel==7.4.0 \
+    --hash=sha256:4330114d22b9b33575b2c7c68753fc8faabbbcfbc60b0cdff9f14dd4ce63742f \
+    --hash=sha256:a6757f790ddc5a6006b813d82da1a9dbb65b3a00f2b6607df776418c6566ec1c
     # via -r requirements-notebooks.in
 ipython==9.18.1 \
     --hash=sha256:6319c0f5372c196397899479e6db1783dd7937abae06815d1317e8d5d51aaaaf \
@@ -318,9 +314,9 @@ nbformat==5.11.1 \
     # via
     #   nbclient
     #   papermill
-nest-asyncio==1.6.0 \
-    --hash=sha256:6f172d5449aca15afd6c646851f4e31e02c598d553a667e38cafa997cfec55fe \
-    --hash=sha256:87af6efd6b5e897c81050477ef65c62e2b2f35d51703cae01aff2905b1852e1c
+nest-asyncio2==1.7.4 \
+    --hash=sha256:86e77b52c3d1496b294af3c944b44213b9b82a12a5ee590c0acc4ca4692ef6c7 \
+    --hash=sha256:995b1409d926ec55e0876ea39a69bffdd8852cf1db3652c177e8c8ffdbcaf3cc
     # via ipykernel
 packaging==26.3 \
     --hash=sha256:94edc256424af38762eb31306eed28beb9f0efc50a8837492c9d6fd6004aed79 \
@@ -329,9 +325,9 @@ packaging==26.3 \
     #   -c requirements-dev.txt
     #   -c requirements-ml.txt
     #   ipykernel
-papermill==2.6.0 \
-    --hash=sha256:0f09da6ef709f3f14dde77cb1af052d05b14019189869affff374c9e612f2dd5 \
-    --hash=sha256:9fe2a91912fd578f391b4cc8d6d105e73124dcd0cde2a43c3c4a1c77ac88ea24
+papermill==2.7.0 \
+    --hash=sha256:e1855e6670100a02bb4f8a6870484a5c10b84a8d2e49c49921c90209940c7514 \
+    --hash=sha256:ec10b37594a060662f57269e1ebd108c209d204450f00fdfeb70a1c7cfb7fbc8
     # via -r requirements-notebooks.in
 parso==0.8.7 \
     --hash=sha256:a8926eb2a1b915486941fdbd31e86a4baf88fe8c210f25f2f35ecec5b574ca1c \
@@ -373,9 +369,7 @@ psutil==7.2.2 \
     --hash=sha256:ed0cace939114f62738d808fdcecd4c869222507e266e574799e9c0faa17d486 \
     --hash=sha256:eed63d3b4d62449571547b60578c5b2c4bcccc5387148db46e0c2313dad0ee00 \
     --hash=sha256:fd04ef36b4a6d599bbdb225dd1d3f51e00105f6d48a28f006da7f9822f2606d8
-    # via
-    #   ipykernel
-    #   ipython
+    # via ipython
 ptyprocess==0.7.0 \
     --hash=sha256:4b41f3967fce3af57cc7e94b888626c18bf37a083e3651ca8feeb66d492fef35 \
     --hash=sha256:5c5d0a3b48ceee0b48485e0c26037c0acd7d29765ca3fbb5cb3831d347423220
